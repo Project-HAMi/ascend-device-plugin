@@ -23,15 +23,15 @@ import (
 	"net"
 	"os"
 	"path"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Project-HAMi/HAMi/pkg/api"
+	"github.com/Project-HAMi/HAMi/pkg/device/ascend"
 	"github.com/Project-HAMi/HAMi/pkg/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/klog/v2"
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
@@ -187,9 +187,10 @@ func (ps *PluginServer) registerKubelet() error {
 func (ps *PluginServer) registerHAMi() error {
 	devs := ps.mgr.GetDevices()
 	apiDevices := make([]*api.DeviceInfo, 0, len(devs))
-	for _, dev := range devs {
+	// hami currently believes that the index starts from 0 and is continuous.
+	for i, dev := range devs {
 		apiDevices = append(apiDevices, &api.DeviceInfo{
-			Index:   int(dev.PhyID),
+			Index:   i,
 			ID:      dev.UUID,
 			Count:   1,
 			Devmem:  int32(dev.Memory),
@@ -248,25 +249,20 @@ func (ps *PluginServer) parsePodAnnotation(pod *v1.Pod) ([]int32, []string, erro
 	if !ok {
 		return nil, nil, fmt.Errorf("annotation %s not set", "huawei.com/Ascend")
 	}
+	var rtInfo []ascend.RuntimeInfo
+	err := json.Unmarshal([]byte(anno), &rtInfo)
+	if err != nil {
+		return nil, nil, fmt.Errorf("annotation %s value %s invalid", ps.allocAnno, anno)
+	}
 	var IDs []int32
 	var temps []string
-	ss := strings.Split(anno, ",")
-	for _, s := range ss {
-		if s == "" {
-			continue
+	for _, info := range rtInfo {
+		d := ps.mgr.GetDeviceByUUID(info.UUID)
+		if d == nil {
+			return nil, nil, fmt.Errorf("unknown uuid: %s", info.UUID)
 		}
-		is := strings.Split(s, "-")
-		phyID := 0
-		temp := ""
-		phyID, err := strconv.Atoi(is[0])
-		if err != nil {
-			return nil, nil, fmt.Errorf("annotation %s value %s invalid", ps.allocAnno, anno)
-		}
-		if len(is) == 2 {
-			temp = is[1]
-		}
-		IDs = append(IDs, int32(phyID))
-		temps = append(temps, temp)
+		IDs = append(IDs, d.PhyID)
+		temps = append(temps, info.Temp)
 	}
 	if len(IDs) == 0 {
 		return nil, nil, fmt.Errorf("annotation %s value %s invalid", ps.allocAnno, anno)
@@ -343,7 +339,9 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 	}
 	resp.Envs = make(map[string]string)
 	resp.Envs["ASCEND_VISIBLE_DEVICES"] = ascendVisibleDevices
-	resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
+	if ascendVNPUSpec != "" {
+		resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
+	}
 	klog.V(5).Infof("allocate response: %v", resp)
 	return &v1beta1.AllocateResponse{ContainerResponses: []*v1beta1.ContainerAllocateResponse{&resp}}, nil
 }

@@ -7,7 +7,7 @@ all: ascend-device-plugin
 tidy:
 	$(GO) mod tidy
 
-lint:
+lint: tidy
 	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0
 	golangci-lint run
 

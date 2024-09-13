@@ -66,6 +66,6 @@ require (
 )
 
 replace (
-	github.com/Project-HAMi/HAMi v0.0.0 => github.com/zoyopei/HAMi v0.0.0-20240911093519-601839823f68
+	github.com/Project-HAMi/HAMi v0.0.0 => github.com/zoyopei/HAMi v0.0.0-20240913070807-899199680605
 	huawei.com/npu-exporter/v6 => gitee.com/ascend/ascend-npu-exporter/v6 v6.0.0-RC2.b001
 )

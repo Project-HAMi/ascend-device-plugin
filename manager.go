@@ -123,7 +123,7 @@ func (am *AscendManager) UpdateDevice() error {
 			return err
 		}
 		am.devs = append(am.devs, &Device{
-			UUID:     fmt.Sprintf("%s-%d", am.config.CommonWord, ID),
+			UUID:     fmt.Sprintf("%s-%d", am.config.CommonWord, phyID),
 			LogicID:  ID,
 			PhyID:    phyID,
 			CardID:   cardID,
