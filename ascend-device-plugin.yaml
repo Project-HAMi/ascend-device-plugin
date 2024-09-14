@@ -23,6 +23,14 @@ roleRef:
   name: hami-ascend
   apiGroup: rbac.authorization.k8s.io
 ----
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hami-ascend
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/component: "hami-ascend"
+----
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
