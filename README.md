@@ -8,7 +8,7 @@ Memory slicing is supported based on virtualization template, lease available te
 
 ## Prequisites
 
-[ascend-docker-runtime](https://gitee.com/ascend/ascend-docker-runtime)。
+[ascend-docker-runtime](https://gitee.com/ascend/ascend-docker-runtime)
 
 ## Compile
 
