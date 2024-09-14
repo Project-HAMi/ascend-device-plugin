@@ -1,30 +1,30 @@
 # Ascend Device Plugin
 
-## Introduction
+## 说明
 
-This Ascend device plugin is implemented for [HAMi](https://github.com/Project-HAMi/HAMi) scheduling.
+基于[HAMi](https://github.com/Project-HAMi/HAMi)调度机制的ascend device plugin。
 
-Memory slicing is supported based on virtualization template, lease available template is automatically used. For detailed information, check [templeate](./config.yaml)
+支持基于显存调度，显存是基于昇腾的虚拟化模板来切分的，会找到满足显存需求的最小模板来作为容器的显存。
 
-## Prequisites
+启动容器依赖[ascend-docker-runtime](https://gitee.com/ascend/ascend-docker-runtime)。
 
-[ascend-docker-runtime](https://gitee.com/ascend/ascend-docker-runtime)。
+## 编译
 
-## Compile
+### 编译二进制文件
 
 ```bash
 make all
 ```
 
-### Build
+### 编译镜像
 
 ```bash
 docker buildx build -t $IMAGE_NAME .
 ```
 
-## Deployment
+## 部署
 
-Due to dependencies with HAMi, the deployment is integrated into the HAMi deployment, you need to set 'devices.ascend.enabled=true'. The device-plugin is automaticaly deployed. For more details ,see 'devices' section in values.yaml.
+由于和HAMi的一些依赖关系，部署集成在HAMi的部署中，修改HAMi chart values中的以下部分即可。
 
 ```yaml
 devices:
@@ -45,8 +45,7 @@ devices:
       - huawei.com/Ascend310P-memory
 ```
 
-
-## Usage
+## 使用
 
 ```yaml
 ...
