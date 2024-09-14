@@ -4,7 +4,7 @@
 
 This Ascend device plugin is implemented for [HAMi](https://github.com/Project-HAMi/HAMi) scheduling.
 
-Memory slicing is supported based on virtualization template, lease available template is automatically used. For detailed information, check [templeate](https://github.com/Project-HAMi/HAMi/blob/master/charts/hami/device-spec/ascend-config.yaml)
+Memory slicing is supported based on virtualization template, lease available template is automatically used. For detailed information, check [templeate](./config.yaml)
 
 ## Prequisites
 
