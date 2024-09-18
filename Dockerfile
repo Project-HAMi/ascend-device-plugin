@@ -1,10 +1,11 @@
 ARG BASE_IMAGE=ubuntu:20.04
 
 FROM $BASE_IMAGE AS build
-RUN apt update -y && apt install -y gcc make wget
-ARG GO_VERSION=1.22.5
-RUN wget https://golang.google.cn/dl/go$GO_VERSION.linux-arm64.tar.gz
-RUN rm -rf /usr/local/go && tar -C /usr/local -xzf go$GO_VERSION.linux-arm64.tar.gz
+RUN add-apt-repository ppa:longsleep/golang-backports
+RUN apt update -y && apt install -y gcc make wget golang-1.22
+#ARG GO_VERSION=1.22.5
+#RUN wget https://golang.google.cn/dl/go$GO_VERSION.linux-arm64.tar.gz
+#RUN rm -rf /usr/local/go && tar -C /usr/local -xzf go$GO_VERSION.linux-arm64.tar.gz
 ENV PATH=/usr/local/go/bin:/root/go/bin:$PATH
 ARG GOPROXY
 ARG VERSION
