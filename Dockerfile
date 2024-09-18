@@ -4,7 +4,7 @@ FROM $BASE_IMAGE AS build
 RUN apt update -y && apt install -y gcc make wget software-properties-common
 RUN add-apt-repository ppa:longsleep/golang-backports
 RUN apt update
-RUN apt install -y golang1.22-go
+RUN apt install -y golang-1.22
 #ARG GO_VERSION=1.22.5
 #RUN wget https://golang.google.cn/dl/go$GO_VERSION.linux-arm64.tar.gz
 #RUN rm -rf /usr/local/go && tar -C /usr/local -xzf go$GO_VERSION.linux-arm64.tar.gz
