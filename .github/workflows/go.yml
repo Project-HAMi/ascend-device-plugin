@@ -56,8 +56,7 @@ jobs:
     - name: Build and push
       uses: docker/build-push-action@v6
       with:
-#        platforms: linux/amd64,linux/arm64
-        platforms: linux/arm64
+        platforms: linux/amd64,linux/arm64
         push: true
         build-args: |
           BASE_IMAGE=ubuntu:20.04
