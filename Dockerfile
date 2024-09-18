@@ -1,6 +1,7 @@
 ARG BASE_IMAGE=ubuntu:20.04
-
 FROM $BASE_IMAGE AS build
+
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update -y && apt install -y gcc make wget software-properties-common
 RUN add-apt-repository ppa:longsleep/golang-backports
 RUN apt update
