@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=ubuntu:20.04
 
 FROM $BASE_IMAGE AS build
-RUN apt update -y && apt install -y gcc make wget software-properties-commo
+RUN apt update -y && apt install -y gcc make wget software-properties-common
 RUN add-apt-repository ppa:longsleep/golang-backports
 RUN apt update
 RUN apt install -y golang1.22-go
