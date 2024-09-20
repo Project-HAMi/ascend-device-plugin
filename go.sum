@@ -2,6 +2,8 @@ gitee.com/ascend/ascend-npu-exporter/v6 v6.0.0-RC2.b001 h1:blv6AabFPyeBpWcRQgjMP
 gitee.com/ascend/ascend-npu-exporter/v6 v6.0.0-RC2.b001/go.mod h1:tQw2ukw5YzlXWJa5cDfY8TNcTiBieor69lsdHFEiMZ8=
 github.com/NVIDIA/k8s-device-plugin v0.15.0 h1:QKfAo6Xpl5M4Y9hltlYrzHjwGR+vfeAuiiNNyFN4DoE=
 github.com/NVIDIA/k8s-device-plugin v0.15.0/go.mod h1:s6DHR9QG5+xAbWG7NniWTnrZI7wUojl1/hxeZClXm/U=
+github.com/Project-HAMi/HAMi v0.0.0-20240918061141-dd1a97603c68 h1:b+U/ha3Ph7OrtgAzQKJBIUtQ+mkoMkOapqB9qZo5UP8=
+github.com/Project-HAMi/HAMi v0.0.0-20240918061141-dd1a97603c68/go.mod h1:lY4bmpcPiKWg0bVPCJFRH6xDW8p5PouIk/nIIU1I2d8=
 github.com/agiledragon/gomonkey/v2 v2.8.0 h1:u2K2nNGyk0ippzklz1CWalllEB9ptD+DtSXeCX5O000=
 github.com/agiledragon/gomonkey/v2 v2.8.0/go.mod h1:ap1AmDzcVOAz1YpeJ3TCzIgstoaWLA6jbbgxfB4w2iY=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=
@@ -125,8 +127,6 @@ github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673/go.mod h1:N3UwUGtsr
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
-github.com/zoyopei/HAMi v0.0.0-20240913070807-899199680605 h1:5Zf/OYHoYhEQlaIs3/mtso6wlH3bAp5cFrpw2X+PZsc=
-github.com/zoyopei/HAMi v0.0.0-20240913070807-899199680605/go.mod h1:lY4bmpcPiKWg0bVPCJFRH6xDW8p5PouIk/nIIU1I2d8=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
 golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
