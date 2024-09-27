@@ -24,7 +24,13 @@ docker buildx build -t $IMAGE_NAME .
 
 ## Deployment
 
-Due to dependencies with HAMi, you need to set 'devices.ascend.enabled=true' during HAMi installation. For more details ,see 'devices' section in values.yaml.
+Due to dependencies with HAMi, you need to set 
+
+```
+devices.ascend.enabled=true
+``` 
+
+during HAMi installation. For more details, see 'devices' section in values.yaml.
 
 ```yaml
 devices:
