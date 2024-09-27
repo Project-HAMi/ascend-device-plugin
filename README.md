@@ -24,7 +24,7 @@ docker buildx build -t $IMAGE_NAME .
 
 ## Deployment
 
-Due to dependencies with HAMi, the deployment is integrated into the HAMi deployment, you need to set 'devices.ascend.enabled=true'. The device-plugin is automaticaly deployed. For more details ,see 'devices' section in values.yaml.
+Due to dependencies with HAMi, you need to set 'devices.ascend.enabled=true' during HAMi installation. For more details ,see 'devices' section in values.yaml.
 
 ```yaml
 devices:
@@ -45,8 +45,18 @@ devices:
       - huawei.com/Ascend310P-memory
 ```
 
+Note that resources here(hawei.com/Ascend910A,huawei.com/Ascend910B,...) is managed in hami-scheduler-device configMap. It defines three different templates(910A,910B,310P).
+
+Deploy ascend-device-plugin by running
+
+```bash
+kubectl apply -f ascend-device-plugin.yaml
+```
+
 
 ## Usage
+
+You can allocate a slice of NPU by specifying both resource number and resource memory. For more examples, see [examples](./examples/)
 
 ```yaml
 ...
@@ -56,6 +66,6 @@ devices:
       resources:
         limits:
           huawei.com/Ascend910B: "1"
-          # 不填写显存默认使用整张卡
+          # if you don't specify Asend910B-memory, it will use a whole NPU. 
           huawei.com/Ascend910B-memory: "4096"
 ```

@@ -1,3 +1,4 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -9,7 +10,7 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get", "patch"]
-----
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -22,7 +23,7 @@ roleRef:
   kind: ClusterRole
   name: hami-ascend
   apiGroup: rbac.authorization.k8s.io
-----
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -30,7 +31,7 @@ metadata:
   namespace: kube-system
   labels:
     app.kubernetes.io/component: "hami-ascend"
-----
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
