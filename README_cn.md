@@ -51,6 +51,12 @@ devices:
       - huawei.com/Ascend310P-memory
 ```
 
+将集群中的NPU节点打上如下标签：
+
+```
+kubectl label node {ascend-node} ascend=on
+```
+
 最后使用以下指令部署ascend-device-plugin
 
 ```bash

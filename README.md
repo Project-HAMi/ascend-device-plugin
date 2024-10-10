@@ -53,6 +53,12 @@ devices:
 
 Note that resources here(hawei.com/Ascend910A,huawei.com/Ascend910B,...) is managed in hami-scheduler-device configMap. It defines three different templates(910A,910B,310P).
 
+label your NPU nodes with 'ascend=on'
+
+```
+kubectl label node {ascend-node} ascend=on
+```
+
 Deploy ascend-device-plugin by running
 
 ```bash
