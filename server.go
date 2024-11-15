@@ -192,7 +192,7 @@ func (ps *PluginServer) registerHAMi() error {
 		apiDevices = append(apiDevices, &api.DeviceInfo{
 			Index:   i,
 			ID:      dev.UUID,
-			Count:   1,
+			Count:   int32(ps.mgr.VDeviceCount()),
 			Devmem:  int32(dev.Memory),
 			Devcore: dev.AICore,
 			Type:    ps.mgr.CommonWord(),
