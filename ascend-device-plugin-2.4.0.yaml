@@ -81,7 +81,7 @@ spec:
               mountPath: /var/log/mindx-dl/devicePlugin
             - name: tmp
               mountPath: /tmp
-            - name: device-config
+            - name: ascend-config
               mountPath: /ascend-config.yaml
               subPath: ascend-config.yaml
               readOnly: true
@@ -107,7 +107,7 @@ spec:
         - name: tmp
           hostPath:
             path: /tmp
-        - name: device-config
+        - name: ascend-config
           configMap:
             name: hami-scheduler-device
       nodeSelector:

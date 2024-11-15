@@ -1,0 +1,114 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hami-ascend
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "update", "watch", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hami-ascend
+subjects:
+  - kind: ServiceAccount
+    name: hami-ascend
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: hami-ascend
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hami-ascend
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/component: "hami-ascend"
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hami-ascend-device-plugin
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/component: hami-ascend-device-plugin
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: hami-ascend-device-plugin
+      hami.io/webhook: ignore
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: hami-ascend-device-plugin
+        hami.io/webhook: ignore
+    spec:
+      priorityClassName: "system-node-critical"
+      serviceAccountName: hami-ascend
+      containers:
+        - image: projecthami/ascend-device-plugin:main
+          imagePullPolicy: IfNotPresent
+          name: device-plugin
+          resources:
+            requests:
+              memory: 500Mi
+              cpu: 500m
+            limits:
+              memory: 500Mi
+              cpu: 500m
+          args:
+            - --config_file
+            - /device-config.yaml
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: false
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: pod-resource
+              mountPath: /var/lib/kubelet/pod-resources
+            - name: hiai-driver
+              mountPath: /usr/local/Ascend/driver
+              readOnly: true
+            - name: log-path
+              mountPath: /var/log/mindx-dl/devicePlugin
+            - name: tmp
+              mountPath: /tmp
+            - name: ascend-config
+              mountPath: /device-config.yaml
+              subPath: device-config.yaml
+              readOnly: true
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+        - name: pod-resource
+          hostPath:
+            path: /var/lib/kubelet/pod-resources
+        - name: hiai-driver
+          hostPath:
+            path: /usr/local/Ascend/driver
+        - name: log-path
+          hostPath:
+            path: /var/log/mindx-dl/devicePlugin
+            type: Directory
+        - name: tmp
+          hostPath:
+            path: /tmp
+        - name: ascend-config
+          configMap:
+            name: hami-scheduler-device
+      nodeSelector:
+        ascend: "on"
