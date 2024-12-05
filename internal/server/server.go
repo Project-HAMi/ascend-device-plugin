@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package main
+package server
 
 import (
 	"context"
@@ -28,6 +28,7 @@ import (
 	"github.com/Project-HAMi/HAMi/pkg/api"
 	"github.com/Project-HAMi/HAMi/pkg/device/ascend"
 	"github.com/Project-HAMi/HAMi/pkg/util"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	v1 "k8s.io/api/core/v1"
@@ -51,13 +52,13 @@ type PluginServer struct {
 	handshakeAnno string
 	allocAnno     string
 	grpcServer    *grpc.Server
-	mgr           *AscendManager
+	mgr           *manager.AscendManager
 	socket        string
 	stopCh        chan interface{}
 	healthCh      chan int32
 }
 
-func NewPluginServer(mgr *AscendManager, nodeName string) (*PluginServer, error) {
+func NewPluginServer(mgr *manager.AscendManager, nodeName string) (*PluginServer, error) {
 	return &PluginServer{
 		nodeName:      nodeName,
 		registerAnno:  fmt.Sprintf("hami.io/node-register-%s", mgr.CommonWord()),

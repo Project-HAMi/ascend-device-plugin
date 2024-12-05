@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-package main
+package manager
 
 import (
 	"fmt"
 	"sort"
 
+	"github.com/Project-HAMi/ascend-device-plugin/internal"
 	"huawei.com/npu-exporter/v6/devmanager"
 	"k8s.io/klog/v2"
 )
@@ -38,7 +39,7 @@ type Device struct {
 type AscendManager struct {
 	mgr *devmanager.DeviceManager
 	//nodeName string
-	config VNPUConfig
+	config internal.VNPUConfig
 	devs   []*Device
 }
 
@@ -54,7 +55,7 @@ func NewAscendManager() (*AscendManager, error) {
 }
 
 func (am *AscendManager) LoadConfig(path string) error {
-	config, err := LoadConfig(path)
+	config, err := internal.LoadConfig(path)
 	if err != nil {
 		return err
 	}
