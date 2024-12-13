@@ -28,6 +28,7 @@ import (
 	"github.com/Project-HAMi/HAMi/pkg/api"
 	"github.com/Project-HAMi/HAMi/pkg/device/ascend"
 	"github.com/Project-HAMi/HAMi/pkg/util"
+	"github.com/Project-HAMi/HAMi/pkg/util/nodelock"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -38,8 +39,9 @@ import (
 )
 
 const (
-// RegisterAnnos = "hami.io/node-register-ascend"
-// PodAllocAnno = "huawei.com/AscendDevices"
+	// RegisterAnnos = "hami.io/node-register-ascend"
+	// PodAllocAnno = "huawei.com/AscendDevices"
+	NodeLockAscend = "hami.io/mutex.lock"
 )
 
 var (
@@ -317,14 +319,17 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 	pod, err := util.GetPendingPod(ctx, ps.nodeName)
 	if err != nil {
 		klog.Errorf("get pending pod error: %v", err)
+		nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend)
 		return nil, fmt.Errorf("get pending pod error: %v", err)
 	}
 	resp := v1beta1.ContainerAllocateResponse{}
 	IDs, temps, err := ps.parsePodAnnotation(pod)
 	if err != nil {
+		nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend)
 		return nil, fmt.Errorf("parse pod annotation error: %v", err)
 	}
 	if len(IDs) == 0 {
+		nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend)
 		return nil, fmt.Errorf("empty id from pod annotation")
 	}
 	ascendVisibleDevices := fmt.Sprintf("%d", IDs[0])
@@ -344,6 +349,7 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 		resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
 	}
 	klog.V(5).Infof("allocate response: %v", resp)
+	nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend)
 	return &v1beta1.AllocateResponse{ContainerResponses: []*v1beta1.ContainerAllocateResponse{&resp}}, nil
 }
 
