@@ -260,6 +260,9 @@ func (ps *PluginServer) parsePodAnnotation(pod *v1.Pod) ([]int32, []string, erro
 	var IDs []int32
 	var temps []string
 	for _, info := range rtInfo {
+		if info.UUID == "" {
+			continue
+		}
 		d := ps.mgr.GetDeviceByUUID(info.UUID)
 		if d == nil {
 			return nil, nil, fmt.Errorf("unknown uuid: %s", info.UUID)
