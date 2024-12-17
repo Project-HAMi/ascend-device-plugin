@@ -12,7 +12,7 @@ lint: tidy
 	golangci-lint run
 
 ascend-device-plugin: tidy
-	$(GO) build $(BUILDARGS) -o ./ascend-device-plugin
+	$(GO) build $(BUILDARGS) -o ./ascend-device-plugin ./cmd/main.go
 
 clean:
 	rm -rf ./ascend-device-plugin
