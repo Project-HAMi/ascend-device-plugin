@@ -25,7 +25,6 @@ import (
 	"path"
 	"time"
 
-	"github.com/Project-HAMi/HAMi/pkg/api"
 	"github.com/Project-HAMi/HAMi/pkg/device/ascend"
 	"github.com/Project-HAMi/HAMi/pkg/util"
 	"github.com/Project-HAMi/HAMi/pkg/util/nodelock"
@@ -189,11 +188,11 @@ func (ps *PluginServer) registerKubelet() error {
 
 func (ps *PluginServer) registerHAMi() error {
 	devs := ps.mgr.GetDevices()
-	apiDevices := make([]*api.DeviceInfo, 0, len(devs))
+	apiDevices := make([]*util.DeviceInfo, 0, len(devs))
 	// hami currently believes that the index starts from 0 and is continuous.
 	for i, dev := range devs {
-		apiDevices = append(apiDevices, &api.DeviceInfo{
-			Index:   i,
+		apiDevices = append(apiDevices, &util.DeviceInfo{
+			Index:   uint(i),
 			ID:      dev.UUID,
 			Count:   int32(ps.mgr.VDeviceCount()),
 			Devmem:  int32(dev.Memory),
@@ -319,7 +318,7 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 	pod, err := util.GetPendingPod(ctx, ps.nodeName)
 	if err != nil {
 		klog.Errorf("get pending pod error: %v", err)
-		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend)
+		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, false)
 		if lockerr != nil {
 			klog.Errorf("failed to release lock:%s", err.Error())
 		}
@@ -328,14 +327,14 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 	resp := v1beta1.ContainerAllocateResponse{}
 	IDs, temps, err := ps.parsePodAnnotation(pod)
 	if err != nil {
-		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend)
+		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, false)
 		if lockerr != nil {
 			klog.Errorf("failed to release lock:%s", err.Error())
 		}
 		return nil, fmt.Errorf("parse pod annotation error: %v", err)
 	}
 	if len(IDs) == 0 {
-		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend)
+		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, false)
 		if lockerr != nil {
 			klog.Errorf("failed to release lock:%s", err.Error())
 		}
@@ -358,7 +357,7 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 		resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
 	}
 	klog.V(5).Infof("allocate response: %v", resp)
-	lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend)
+	lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, true)
 	if lockerr != nil {
 		klog.Errorf("failed to release lock:%s", err.Error())
 	}
