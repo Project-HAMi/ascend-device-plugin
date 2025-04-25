@@ -68,6 +68,8 @@ func NewPluginServer(mgr *manager.AscendManager, nodeName string) (*PluginServer
 		grpcServer:    grpc.NewServer(),
 		mgr:           mgr,
 		socket:        path.Join(v1beta1.DevicePluginPath, fmt.Sprintf("%s.sock", mgr.CommonWord())),
+		stopCh:        make(chan interface{}),
+		healthCh:      make(chan int32),
 	}, nil
 }
 
