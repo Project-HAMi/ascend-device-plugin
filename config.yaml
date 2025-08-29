@@ -22,7 +22,7 @@ vnpus:
 - chipName: 910B3
   commonWord: Ascend910B3
   resourceName: huawei.com/Ascend910B3
-  resourceMemoryName: huawei.com/Ascend910B-memory
+  resourceMemoryName: huawei.com/Ascend910B3-memory
   memoryAllocatable: 65536
   memoryCapacity: 65536
   aiCore: 20
