@@ -188,11 +188,22 @@ func (ps *PluginServer) registerKubelet() error {
 	return nil
 }
 
+func (ps *PluginServer) getNumaInformation(idx int) (int, error) {
+	if idx > 3 {
+		return 1, nil
+	}
+	return 0, nil
+}
+
 func (ps *PluginServer) registerHAMi() error {
 	devs := ps.mgr.GetDevices()
 	apiDevices := make([]*util.DeviceInfo, 0, len(devs))
 	// hami currently believes that the index starts from 0 and is continuous.
 	for i, dev := range devs {
+		numa, err := ps.getNumaInformation(i)
+		if err != nil {
+			return fmt.Errorf("get numa information error: %v", err)
+		}
 		apiDevices = append(apiDevices, &util.DeviceInfo{
 			Index:   uint(i),
 			ID:      dev.UUID,
@@ -200,7 +211,7 @@ func (ps *PluginServer) registerHAMi() error {
 			Devmem:  int32(dev.Memory),
 			Devcore: dev.AICore,
 			Type:    ps.mgr.CommonWord(),
-			Numa:    0,
+			Numa:    numa,
 			Health:  dev.Health,
 		})
 	}
