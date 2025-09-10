@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/Project-HAMi/HAMi/pkg/device/ascend"
@@ -40,7 +41,8 @@ import (
 const (
 	// RegisterAnnos = "hami.io/node-register-ascend"
 	// PodAllocAnno = "huawei.com/AscendDevices"
-	NodeLockAscend = "hami.io/mutex.lock"
+	NodeLockAscend  = "hami.io/mutex.lock"
+	Ascend910Prefix = "Ascend910"
 )
 
 var (
@@ -188,7 +190,7 @@ func (ps *PluginServer) registerKubelet() error {
 	return nil
 }
 
-func (ps *PluginServer) getNumaInformation(idx int) (int, error) {
+func (ps *PluginServer) getDeviceNetworkID(idx int) (int, error) {
 	if idx > 3 {
 		return 1, nil
 	}
@@ -200,20 +202,26 @@ func (ps *PluginServer) registerHAMi() error {
 	apiDevices := make([]*util.DeviceInfo, 0, len(devs))
 	// hami currently believes that the index starts from 0 and is continuous.
 	for i, dev := range devs {
-		numa, err := ps.getNumaInformation(i)
-		if err != nil {
-			return fmt.Errorf("get numa information error: %v", err)
-		}
-		apiDevices = append(apiDevices, &util.DeviceInfo{
+		device := &util.DeviceInfo{
 			Index:   uint(i),
 			ID:      dev.UUID,
 			Count:   int32(ps.mgr.VDeviceCount()),
 			Devmem:  int32(dev.Memory),
 			Devcore: dev.AICore,
 			Type:    ps.mgr.CommonWord(),
-			Numa:    numa,
+			Numa:    0,
 			Health:  dev.Health,
-		})
+		}
+		if strings.HasPrefix(device.Type, Ascend910Prefix) {
+			networkID, err := ps.getDeviceNetworkID(i)
+			if err != nil {
+				return fmt.Errorf("get networkID error: %v", err)
+			}
+			device.CustomInfo = map[string]any{
+				"networkID": networkID,
+			}
+		}
+		apiDevices = append(apiDevices, device)
 	}
 	annos := make(map[string]string)
 	annos[ps.registerAnno] = util.MarshalNodeDevices(apiDevices)
