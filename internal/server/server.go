@@ -213,12 +213,12 @@ func (ps *PluginServer) registerHAMi() error {
 			Health:  dev.Health,
 		}
 		if strings.HasPrefix(device.Type, Ascend910Prefix) {
-			networkID, err := ps.getDeviceNetworkID(i)
+			NetworkID, err := ps.getDeviceNetworkID(i)
 			if err != nil {
 				return fmt.Errorf("get networkID error: %v", err)
 			}
 			device.CustomInfo = map[string]any{
-				"networkID": networkID,
+				"NetworkID": NetworkID,
 			}
 		}
 		apiDevices = append(apiDevices, device)
