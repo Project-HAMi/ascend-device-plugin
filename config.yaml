@@ -57,3 +57,23 @@ vnpus:
       memory: 12288
       aiCore: 4
       aiCPU: 4
+- chipName: 910ProB
+  commonWord: Ascend910ProB
+  resourceName: huawei.com/Ascend910ProB
+  resourceMemoryName: huawei.com/Ascend910ProB-memory
+  memoryAllocatable: 32768
+  memoryCapacity: 32768
+  aiCore: 30
+  templates:
+    - name: vir02
+      memory: 2184
+      aiCore: 2
+    - name: vir04
+      memory: 4369
+      aiCore: 4
+    - name: vir08
+      memory: 8738
+      aiCore: 8
+    - name: vir16
+      memory: 17476
+      aiCore: 16

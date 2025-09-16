@@ -27,6 +27,7 @@ import (
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/server"
 	"github.com/Project-HAMi/ascend-device-plugin/version"
+	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/fsnotify/fsnotify"
 	"huawei.com/npu-exporter/v6/common-utils/hwlog"
 	"k8s.io/klog/v2"
@@ -136,6 +137,7 @@ func main() {
 	if err != nil {
 		klog.Fatalf("init PluginServer failed, error is %v", err)
 	}
+	client.InitGlobalClient()
 
 	err = start(server)
 	if err != nil {
