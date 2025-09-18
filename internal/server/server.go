@@ -205,7 +205,7 @@ func (ps *PluginServer) registerHAMi() error {
 	for i, dev := range devs {
 		device := &device.DeviceInfo{
 			Index:   uint(i),
-			ID:      ps.nodeName + "-" + dev.UUID,
+			ID:      dev.UUID,
 			Count:   int32(ps.mgr.VDeviceCount()),
 			Devmem:  int32(dev.Memory),
 			Devcore: dev.AICore,
