@@ -23,6 +23,7 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/server"
@@ -136,6 +137,7 @@ func main() {
 	if err != nil {
 		klog.Fatalf("init PluginServer failed, error is %v", err)
 	}
+	client.InitGlobalClient()
 
 	err = start(server)
 	if err != nil {

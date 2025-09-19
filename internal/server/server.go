@@ -23,8 +23,10 @@ import (
 	"net"
 	"os"
 	"path"
+	"strings"
 	"time"
 
+	"github.com/Project-HAMi/HAMi/pkg/device"
 	"github.com/Project-HAMi/HAMi/pkg/device/ascend"
 	"github.com/Project-HAMi/HAMi/pkg/util"
 	"github.com/Project-HAMi/HAMi/pkg/util/nodelock"
@@ -40,7 +42,8 @@ import (
 const (
 	// RegisterAnnos = "hami.io/node-register-ascend"
 	// PodAllocAnno = "huawei.com/AscendDevices"
-	NodeLockAscend = "hami.io/mutex.lock"
+	NodeLockAscend  = "hami.io/mutex.lock"
+	Ascend910Prefix = "Ascend910"
 )
 
 var (
@@ -188,12 +191,19 @@ func (ps *PluginServer) registerKubelet() error {
 	return nil
 }
 
+func (ps *PluginServer) getDeviceNetworkID(idx int) (int, error) {
+	if idx > 3 {
+		return 1, nil
+	}
+	return 0, nil
+}
+
 func (ps *PluginServer) registerHAMi() error {
 	devs := ps.mgr.GetDevices()
-	apiDevices := make([]*util.DeviceInfo, 0, len(devs))
+	apiDevices := make([]*device.DeviceInfo, 0, len(devs))
 	// hami currently believes that the index starts from 0 and is continuous.
 	for i, dev := range devs {
-		apiDevices = append(apiDevices, &util.DeviceInfo{
+		device := &device.DeviceInfo{
 			Index:   uint(i),
 			ID:      dev.UUID,
 			Count:   int32(ps.mgr.VDeviceCount()),
@@ -202,10 +212,20 @@ func (ps *PluginServer) registerHAMi() error {
 			Type:    ps.mgr.CommonWord(),
 			Numa:    0,
 			Health:  dev.Health,
-		})
+		}
+		if strings.HasPrefix(device.Type, Ascend910Prefix) {
+			NetworkID, err := ps.getDeviceNetworkID(i)
+			if err != nil {
+				return fmt.Errorf("get networkID error: %v", err)
+			}
+			device.CustomInfo = map[string]any{
+				"NetworkID": NetworkID,
+			}
+		}
+		apiDevices = append(apiDevices, device)
 	}
 	annos := make(map[string]string)
-	annos[ps.registerAnno] = util.MarshalNodeDevices(apiDevices)
+	annos[ps.registerAnno] = device.MarshalNodeDevices(apiDevices)
 	annos[ps.handshakeAnno] = "Reported_" + time.Now().Add(time.Duration(*reportTimeOffset)*time.Second).Format("2006.01.02 15:04:05")
 	node, err := util.GetNode(ps.nodeName)
 	if err != nil {
