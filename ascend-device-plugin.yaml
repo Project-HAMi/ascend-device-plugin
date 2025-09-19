@@ -53,7 +53,7 @@ spec:
       priorityClassName: "system-node-critical"
       serviceAccountName: hami-ascend
       containers:
-        - image: projecthami/ascend-device-plugin:main
+        - image: projecthami/ascend-device-plugin:v1.1.0
           imagePullPolicy: IfNotPresent
           name: device-plugin
           resources:
@@ -65,7 +65,7 @@ spec:
               cpu: 500m
           args:
             - --config_file
-            - /ascend-config.yaml
+            - /device-config.yaml
           securityContext:
             privileged: true
             readOnlyRootFilesystem: false
@@ -82,8 +82,8 @@ spec:
             - name: tmp
               mountPath: /tmp
             - name: ascend-config
-              mountPath: /ascend-config.yaml
-              subPath: ascend-config.yaml
+              mountPath: /device-config.yaml
+              subPath: device-config.yaml
               readOnly: true
           env:
             - name: NODE_NAME
