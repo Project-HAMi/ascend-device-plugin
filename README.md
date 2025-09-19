@@ -1,4 +1,6 @@
 # Ascend Device Plugin
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_shield)
+
 
 ## Introduction
 
@@ -81,3 +83,7 @@ You can allocate a slice of NPU by specifying both resource number and resource 
           # if you don't specify Asend910B-memory, it will use a whole NPU. 
           huawei.com/Ascend910B-memory: "4096"
 ```
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_large)
