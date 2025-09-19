@@ -23,11 +23,11 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/server"
 	"github.com/Project-HAMi/ascend-device-plugin/version"
-	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/fsnotify/fsnotify"
 	"huawei.com/npu-exporter/v6/common-utils/hwlog"
 	"k8s.io/klog/v2"
