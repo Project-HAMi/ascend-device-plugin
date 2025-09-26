@@ -340,19 +340,20 @@ func (ps *PluginServer) GetPreferredAllocation(context.Context, *v1beta1.Preferr
 
 func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequest) (*v1beta1.AllocateResponse, error) {
 	klog.V(5).Infof("Allocate: %v", reqs)
+	success := false
+	var pod *v1.Pod
+	defer func() {
+		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, success)
+		if lockerr != nil {
+			klog.Errorf("failed to release lock:%s", lockerr.Error())
+		}
+	}()
 	pod, err := util.GetPendingPod(ctx, ps.nodeName)
 	if err != nil {
 		klog.Errorf("get pending pod error: %v", err)
 		return nil, fmt.Errorf("get pending pod error: %v", err)
 	}
 
-	success := false
-	defer func() {
-		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, success)
-		if lockerr != nil {
-			klog.Errorf("failed to release lock:%s", err.Error())
-		}
-	}()
 	resp := v1beta1.ContainerAllocateResponse{}
 	IDs, temps, err := ps.parsePodAnnotation(pod)
 	if err != nil {
