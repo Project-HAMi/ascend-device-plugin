@@ -353,7 +353,6 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 		klog.Errorf("get pending pod error: %v", err)
 		return nil, fmt.Errorf("get pending pod error: %v", err)
 	}
-
 	resp := v1beta1.ContainerAllocateResponse{}
 	IDs, temps, err := ps.parsePodAnnotation(pod)
 	if err != nil {
