@@ -343,26 +343,22 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 	pod, err := util.GetPendingPod(ctx, ps.nodeName)
 	if err != nil {
 		klog.Errorf("get pending pod error: %v", err)
-		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, false)
+		return nil, fmt.Errorf("get pending pod error: %v", err)
+	}
+
+	success := false
+	defer func() {
+		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, success)
 		if lockerr != nil {
 			klog.Errorf("failed to release lock:%s", err.Error())
 		}
-		return nil, fmt.Errorf("get pending pod error: %v", err)
-	}
+	}()
 	resp := v1beta1.ContainerAllocateResponse{}
 	IDs, temps, err := ps.parsePodAnnotation(pod)
 	if err != nil {
-		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, false)
-		if lockerr != nil {
-			klog.Errorf("failed to release lock:%s", err.Error())
-		}
 		return nil, fmt.Errorf("parse pod annotation error: %v", err)
 	}
 	if len(IDs) == 0 {
-		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, false)
-		if lockerr != nil {
-			klog.Errorf("failed to release lock:%s", err.Error())
-		}
 		return nil, fmt.Errorf("empty id from pod annotation")
 	}
 	ascendVisibleDevices := fmt.Sprintf("%d", IDs[0])
@@ -382,10 +378,7 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 		resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
 	}
 	klog.V(5).Infof("allocate response: %v", resp)
-	lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, true)
-	if lockerr != nil {
-		klog.Errorf("failed to release lock:%s", err.Error())
-	}
+	success = true
 	return &v1beta1.AllocateResponse{ContainerResponses: []*v1beta1.ContainerAllocateResponse{&resp}}, nil
 }
 
