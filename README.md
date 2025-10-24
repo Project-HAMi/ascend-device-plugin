@@ -6,7 +6,7 @@ This Ascend device plugin is implemented for [HAMi](https://github.com/Project-H
 
 Memory slicing is supported based on virtualization template, lease available template is automatically used. For detailed information, check [templeate](./config.yaml)
 
-## Prequisites
+## Prerequisites
 
 [ascend-docker-runtime](https://gitee.com/ascend/ascend-docker-runtime)
 
@@ -78,6 +78,6 @@ You can allocate a slice of NPU by specifying both resource number and resource 
       resources:
         limits:
           huawei.com/Ascend910B: "1"
-          # if you don't specify Asend910B-memory, it will use a whole NPU. 
+          # if you don't specify Ascend910B-memory, it will use a whole NPU.
           huawei.com/Ascend910B-memory: "4096"
 ```
