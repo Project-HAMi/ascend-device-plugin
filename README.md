@@ -24,14 +24,14 @@ docker buildx build -t $IMAGE_NAME .
 
 ## Deployment
 
-### Label Ascend Node
+### Label the Node with `ascend=on`
 
 
 ```
 kubectl label node {ascend-node} ascend=on
 ``` 
 
-### Deploy Configmap
+### Deploy ConfigMap
 
 ```
 kubectl apply -f ascend-device-configmap.yaml
@@ -43,7 +43,7 @@ kubectl apply -f ascend-device-configmap.yaml
 kubectl apply -f ascend-device-plugin.yaml
 ```
 
-If scheduling Ascend devices in HAMi, simply set `devices.ascend.enabled` to true when deploying HAMi, and the ConfigMap and Ascend Device Plugin will be automatically deployed. refer https://github.com/Project-HAMi/HAMi/blob/master/charts/hami/README.md#huawei-ascend
+If scheduling Ascend devices in HAMi, simply set `devices.ascend.enabled` to true when deploying HAMi, and the ConfigMap and `ascend-device-plugin` will be automatically deployed. refer https://github.com/Project-HAMi/HAMi/blob/master/charts/hami/README.md#huawei-ascend
 
 ## Usage
 
