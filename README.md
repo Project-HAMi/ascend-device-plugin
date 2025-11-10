@@ -47,7 +47,7 @@ If scheduling Ascend devices in HAMi, simply set `devices.ascend.enabled` to tru
 
 ## Usage
 
-You can allocate a slice of NPU by specifying both resource number and resource memory. If multiple tasks need to share the same NPU, you need to set the corresponding resource request to 1 and configure the appropriate ResourceMemoryName.
+To exclusively use an entire card or request multiple cards, you only need to set the corresponding resourceName. If multiple tasks need to share the same NPU, you need to set the corresponding resource request to 1 and configure the appropriate ResourceMemoryName.
 
 ### Usage in HAMi
 
