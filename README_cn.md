@@ -59,7 +59,7 @@ kubectl apply -f ascend-device-plugin.yaml
       resources:
         limits:
           huawei.com/Ascend910B: "1"
-          # if you don't specify Ascend910B-memory, it will use a whole NPU.
+          # 如果不指定显存大小, 就会使用整张卡
           huawei.com/Ascend910B-memory: "4096"
 ```
  For more examples, see [examples](./examples/)
