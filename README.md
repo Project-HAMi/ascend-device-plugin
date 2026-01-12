@@ -1,4 +1,6 @@
 # Ascend Device Plugin
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_shield)
+
 
 ## Introduction
 
@@ -62,6 +64,10 @@ To exclusively use an entire card or request multiple cards, you only need to se
           # if you don't specify Ascend910B-memory, it will use a whole NPU.
           huawei.com/Ascend910B-memory: "4096"
 ```
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_large)
  For more examples, see [examples](./examples/)
 
  ### Usage in volcano
