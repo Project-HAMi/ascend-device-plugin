@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package main
+package server
 
 import (
 	"context"
@@ -23,11 +23,14 @@ import (
 	"net"
 	"os"
 	"path"
+	"strings"
 	"time"
 
-	"github.com/Project-HAMi/HAMi/pkg/api"
+	"github.com/Project-HAMi/HAMi/pkg/device"
 	"github.com/Project-HAMi/HAMi/pkg/device/ascend"
 	"github.com/Project-HAMi/HAMi/pkg/util"
+	"github.com/Project-HAMi/HAMi/pkg/util/nodelock"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	v1 "k8s.io/api/core/v1"
@@ -37,8 +40,10 @@ import (
 )
 
 const (
-// RegisterAnnos = "hami.io/node-register-ascend"
-// PodAllocAnno = "huawei.com/AscendDevices"
+	// RegisterAnnos = "hami.io/node-register-ascend"
+	// PodAllocAnno = "huawei.com/AscendDevices"
+	NodeLockAscend  = "hami.io/mutex.lock"
+	Ascend910Prefix = "Ascend910"
 )
 
 var (
@@ -51,13 +56,13 @@ type PluginServer struct {
 	handshakeAnno string
 	allocAnno     string
 	grpcServer    *grpc.Server
-	mgr           *AscendManager
+	mgr           *manager.AscendManager
 	socket        string
 	stopCh        chan interface{}
 	healthCh      chan int32
 }
 
-func NewPluginServer(mgr *AscendManager, nodeName string) (*PluginServer, error) {
+func NewPluginServer(mgr *manager.AscendManager, nodeName string) (*PluginServer, error) {
 	return &PluginServer{
 		nodeName:      nodeName,
 		registerAnno:  fmt.Sprintf("hami.io/node-register-%s", mgr.CommonWord()),
@@ -66,6 +71,8 @@ func NewPluginServer(mgr *AscendManager, nodeName string) (*PluginServer, error)
 		grpcServer:    grpc.NewServer(),
 		mgr:           mgr,
 		socket:        path.Join(v1beta1.DevicePluginPath, fmt.Sprintf("%s.sock", mgr.CommonWord())),
+		stopCh:        make(chan interface{}),
+		healthCh:      make(chan int32),
 	}, nil
 }
 
@@ -184,24 +191,41 @@ func (ps *PluginServer) registerKubelet() error {
 	return nil
 }
 
+func (ps *PluginServer) getDeviceNetworkID(idx int) (int, error) {
+	if idx > 3 {
+		return 1, nil
+	}
+	return 0, nil
+}
+
 func (ps *PluginServer) registerHAMi() error {
 	devs := ps.mgr.GetDevices()
-	apiDevices := make([]*api.DeviceInfo, 0, len(devs))
+	apiDevices := make([]*device.DeviceInfo, 0, len(devs))
 	// hami currently believes that the index starts from 0 and is continuous.
 	for i, dev := range devs {
-		apiDevices = append(apiDevices, &api.DeviceInfo{
-			Index:   i,
+		device := &device.DeviceInfo{
+			Index:   uint(i),
 			ID:      dev.UUID,
-			Count:   1,
+			Count:   int32(ps.mgr.VDeviceCount()),
 			Devmem:  int32(dev.Memory),
 			Devcore: dev.AICore,
 			Type:    ps.mgr.CommonWord(),
 			Numa:    0,
 			Health:  dev.Health,
-		})
+		}
+		if strings.HasPrefix(device.Type, Ascend910Prefix) {
+			NetworkID, err := ps.getDeviceNetworkID(i)
+			if err != nil {
+				return fmt.Errorf("get networkID error: %v", err)
+			}
+			device.CustomInfo = map[string]any{
+				"NetworkID": NetworkID,
+			}
+		}
+		apiDevices = append(apiDevices, device)
 	}
 	annos := make(map[string]string)
-	annos[ps.registerAnno] = util.MarshalNodeDevices(apiDevices)
+	annos[ps.registerAnno] = device.MarshalNodeDevices(apiDevices)
 	annos[ps.handshakeAnno] = "Reported_" + time.Now().Add(time.Duration(*reportTimeOffset)*time.Second).Format("2006.01.02 15:04:05")
 	node, err := util.GetNode(ps.nodeName)
 	if err != nil {
@@ -257,6 +281,9 @@ func (ps *PluginServer) parsePodAnnotation(pod *v1.Pod) ([]int32, []string, erro
 	var IDs []int32
 	var temps []string
 	for _, info := range rtInfo {
+		if info.UUID == "" {
+			continue
+		}
 		d := ps.mgr.GetDeviceByUUID(info.UUID)
 		if d == nil {
 			return nil, nil, fmt.Errorf("unknown uuid: %s", info.UUID)
@@ -313,6 +340,14 @@ func (ps *PluginServer) GetPreferredAllocation(context.Context, *v1beta1.Preferr
 
 func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequest) (*v1beta1.AllocateResponse, error) {
 	klog.V(5).Infof("Allocate: %v", reqs)
+	success := false
+	var pod *v1.Pod
+	defer func() {
+		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, success)
+		if lockerr != nil {
+			klog.Errorf("failed to release lock:%s", lockerr.Error())
+		}
+	}()
 	pod, err := util.GetPendingPod(ctx, ps.nodeName)
 	if err != nil {
 		klog.Errorf("get pending pod error: %v", err)
@@ -343,6 +378,7 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 		resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
 	}
 	klog.V(5).Infof("allocate response: %v", resp)
+	success = true
 	return &v1beta1.AllocateResponse{ContainerResponses: []*v1beta1.ContainerAllocateResponse{&resp}}, nil
 }
 

@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-package main
+package manager
 
 import (
 	"fmt"
 	"sort"
 
+	"github.com/Project-HAMi/ascend-device-plugin/internal"
 	"huawei.com/npu-exporter/v6/devmanager"
+	"huawei.com/npu-exporter/v6/devmanager/dcmi"
 	"k8s.io/klog/v2"
 )
 
@@ -38,7 +40,7 @@ type Device struct {
 type AscendManager struct {
 	mgr *devmanager.DeviceManager
 	//nodeName string
-	config VNPUConfig
+	config internal.VNPUConfig
 	devs   []*Device
 }
 
@@ -54,7 +56,7 @@ func NewAscendManager() (*AscendManager, error) {
 }
 
 func (am *AscendManager) LoadConfig(path string) error {
-	config, err := LoadConfig(path)
+	config, err := internal.LoadConfig(path)
 	if err != nil {
 		return err
 	}
@@ -117,13 +119,18 @@ func (am *AscendManager) UpdateDevice() error {
 			klog.Errorf("failed to get card id from device id: %v", err)
 			return err
 		}
+		uuid, err := am.mgr.GetDieID(ID, dcmi.VDIE)
+		if err != nil {
+			klog.Errorf("failed to get uuid from device id: %v", err)
+			return err
+		}
 		health, err := am.mgr.GetDeviceHealth(ID)
 		if err != nil {
 			klog.Errorf("failed to get device health: %v", err)
 			return err
 		}
 		am.devs = append(am.devs, &Device{
-			UUID:     fmt.Sprintf("%s-%d", am.config.CommonWord, phyID),
+			UUID:     uuid,
 			LogicID:  ID,
 			PhyID:    phyID,
 			CardID:   cardID,

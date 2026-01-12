@@ -23,6 +23,10 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/Project-HAMi/HAMi/pkg/util/client"
+	"github.com/Project-HAMi/ascend-device-plugin/internal"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/server"
 	"github.com/Project-HAMi/ascend-device-plugin/version"
 	"github.com/fsnotify/fsnotify"
 	"huawei.com/npu-exporter/v6/common-utils/hwlog"
@@ -46,9 +50,9 @@ func checkFlags() {
 	}
 }
 
-func start(ps *PluginServer) error {
+func start(ps *server.PluginServer) error {
 	klog.Info("Starting FS watcher.")
-	watcher, err := newFSWatcher(v1beta1.DevicePluginPath)
+	watcher, err := internal.NewFSWatcher(v1beta1.DevicePluginPath)
 	if err != nil {
 		return fmt.Errorf("failed to create FS watcher: %v", err)
 	}
@@ -57,7 +61,7 @@ func start(ps *PluginServer) error {
 	}(watcher)
 
 	klog.Info("Starting OS watcher.")
-	sigs := newOSWatcher(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	sigs := internal.NewOSWatcher(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	var restarting bool
 	//var restartTimeout <-chan time.Time
@@ -121,7 +125,7 @@ func main() {
 	if err != nil {
 		klog.Fatalf("init huawei run logger failed, %v", err)
 	}
-	mgr, err := NewAscendManager()
+	mgr, err := manager.NewAscendManager()
 	if err != nil {
 		klog.Fatalf("init AscendManager failed, error is %v", err)
 	}
@@ -129,10 +133,11 @@ func main() {
 	if err != nil {
 		klog.Fatalf("load config failed, error is %v", err)
 	}
-	server, err := NewPluginServer(mgr, *nodeName)
+	server, err := server.NewPluginServer(mgr, *nodeName)
 	if err != nil {
 		klog.Fatalf("init PluginServer failed, error is %v", err)
 	}
+	client.InitGlobalClient()
 
 	err = start(server)
 	if err != nil {

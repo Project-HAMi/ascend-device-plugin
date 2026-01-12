@@ -14,8 +14,6 @@ require (
 )
 
 require (
-	github.com/NVIDIA/k8s-device-plugin v0.15.0 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.3 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
@@ -34,15 +32,10 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/opencontainers/runtime-spec v1.2.0 // indirect
-	github.com/opencontainers/runtime-tools v0.9.1-0.20221107090550-2e043c6bd626 // indirect
-	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/onsi/ginkgo/v2 v2.17.1 // indirect
+	github.com/onsi/gomega v1.32.0 // indirect
 	github.com/smartystreets/goconvey v1.7.2 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
-	github.com/urfave/cli/v2 v2.27.1 // indirect
-	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
-	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/oauth2 v0.17.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect
@@ -61,11 +54,9 @@ require (
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
-	tags.cncf.io/container-device-interface v0.7.1 // indirect
-	tags.cncf.io/container-device-interface/specs-go v0.7.0 // indirect
 )
 
 replace (
-	github.com/Project-HAMi/HAMi v0.0.0 => github.com/Project-HAMi/HAMi v0.0.0-20240918061141-dd1a97603c68
-	huawei.com/npu-exporter/v6 => gitee.com/ascend/ascend-npu-exporter/v6 v6.0.0-RC2.b001
+	github.com/Project-HAMi/HAMi v0.0.0 => github.com/Project-HAMi/HAMi v0.0.0-20250901013025-61c6cbe7d480
+	huawei.com/npu-exporter/v6 => gitee.com/ascend/ascend-npu-exporter/v6 v6.0.0-RC3
 )

@@ -9,7 +9,7 @@ rules:
     verbs: ["get", "list", "update", "watch", "patch"]
   - apiGroups: [""]
     resources: ["nodes"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -53,7 +53,7 @@ spec:
       priorityClassName: "system-node-critical"
       serviceAccountName: hami-ascend
       containers:
-        - image: projecthami/ascend-device-plugin:main
+        - image: projecthami/ascend-device-plugin:v1.1.0
           imagePullPolicy: IfNotPresent
           name: device-plugin
           resources:
@@ -65,7 +65,7 @@ spec:
               cpu: 500m
           args:
             - --config_file
-            - /ascend-config.yaml
+            - /device-config.yaml
           securityContext:
             privileged: true
             readOnlyRootFilesystem: false
@@ -81,9 +81,9 @@ spec:
               mountPath: /var/log/mindx-dl/devicePlugin
             - name: tmp
               mountPath: /tmp
-            - name: device-config
-              mountPath: /ascend-config.yaml
-              subPath: ascend-config.yaml
+            - name: ascend-config
+              mountPath: /device-config.yaml
+              subPath: device-config.yaml
               readOnly: true
           env:
             - name: NODE_NAME
@@ -107,7 +107,7 @@ spec:
         - name: tmp
           hostPath:
             path: /tmp
-        - name: device-config
+        - name: ascend-config
           configMap:
             name: hami-scheduler-device
       nodeSelector:

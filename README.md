@@ -4,13 +4,13 @@
 
 ## Introduction
 
-This Ascend device plugin is implemented for [HAMi](https://github.com/Project-HAMi/HAMi) scheduling.
+This Ascend device plugin is implemented for [HAMi](https://github.com/Project-HAMi/HAMi) and [volcano](https://github.com/volcano-sh/volcano) scheduling.
 
-Memory slicing is supported based on virtualization template, lease available template is automatically used. For detailed information, check [templeate](./config.yaml)
+Memory slicing is supported based on virtualization template, lease available template is automatically used. For detailed information, check [template](./ascend-device-configmap.yaml)
 
-## Prequisites
+## Prerequisites
 
-[ascend-docker-runtime](https://gitee.com/ascend/ascend-docker-runtime)
+[ascend-docker-runtime](https://gitcode.com/Ascend/mind-cluster/tree/master/component/ascend-docker-runtime)
 
 ## Compile
 
@@ -26,51 +26,32 @@ docker buildx build -t $IMAGE_NAME .
 
 ## Deployment
 
-Due to dependencies with HAMi, you need to set 
+### Label the Node with `ascend=on`
 
-```
-devices.ascend.enabled=true
-``` 
-
-during HAMi installation. For more details, see 'devices' section in values.yaml.
-
-```yaml
-devices:
-  ascend:
-    enabled: true
-    image: "ascend-device-plugin:master"
-    imagePullPolicy: IfNotPresent
-    extraArgs: []
-    nodeSelector:
-      ascend: "on"
-    tolerations: []
-    resources:
-      - huawei.com/Ascend910A
-      - huawei.com/Ascend910A-memory
-      - huawei.com/Ascend910B
-      - huawei.com/Ascend910B-memory
-      - huawei.com/Ascend310P
-      - huawei.com/Ascend310P-memory
-```
-
-Note that resources here(hawei.com/Ascend910A,huawei.com/Ascend910B,...) is managed in hami-scheduler-device configMap. It defines three different templates(910A,910B,310P).
-
-label your NPU nodes with 'ascend=on'
 
 ```
 kubectl label node {ascend-node} ascend=on
+``` 
+
+### Deploy ConfigMap
+
+```
+kubectl apply -f ascend-device-configmap.yaml
 ```
 
-Deploy ascend-device-plugin by running
+### Deploy `ascend-device-plugin`
 
 ```bash
 kubectl apply -f ascend-device-plugin.yaml
 ```
 
+If scheduling Ascend devices in HAMi, simply set `devices.ascend.enabled` to true when deploying HAMi, and the ConfigMap and `ascend-device-plugin` will be automatically deployed. refer https://github.com/Project-HAMi/HAMi/blob/master/charts/hami/README.md#huawei-ascend
 
 ## Usage
 
-You can allocate a slice of NPU by specifying both resource number and resource memory. For more examples, see [examples](./examples/)
+To exclusively use an entire card or request multiple cards, you only need to set the corresponding resourceName. If multiple tasks need to share the same NPU, you need to set the corresponding resource request to 1 and configure the appropriate ResourceMemoryName.
+
+### Usage in HAMi
 
 ```yaml
 ...
@@ -80,10 +61,33 @@ You can allocate a slice of NPU by specifying both resource number and resource 
       resources:
         limits:
           huawei.com/Ascend910B: "1"
-          # if you don't specify Asend910B-memory, it will use a whole NPU. 
+          # if you don't specify Ascend910B-memory, it will use a whole NPU.
           huawei.com/Ascend910B-memory: "4096"
 ```
 
 
 ## License
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_large)
+ For more examples, see [examples](./examples/)
+
+ ### Usage in volcano
+
+ Volcano must be installed prior to usage, for more information see [here](https://github.com/volcano-sh/volcano/tree/master/docs/user-guide/how_to_use_vnpu.md)
+
+ ```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ascend-pod
+spec:
+  schedulerName: volcano
+  containers:
+    - name: ubuntu-container
+      image: swr.cn-south-1.myhuaweicloud.com/ascendhub/ascend-pytorch:24.0.RC1-A2-1.11.0-ubuntu20.04
+      command: ["sleep"]
+      args: ["100000"]
+      resources:
+        limits:
+          huawei.com/Ascend310P: "1"
+           huawei.com/Ascend310P-memory: "4096"
+ ```
