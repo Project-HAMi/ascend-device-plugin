@@ -29,7 +29,7 @@ import (
 	"github.com/Project-HAMi/ascend-device-plugin/internal/server"
 	"github.com/Project-HAMi/ascend-device-plugin/version"
 	"github.com/fsnotify/fsnotify"
-	"huawei.com/npu-exporter/v6/common-utils/hwlog"
+	"ascend-common/common-utils/hwlog"
 	"k8s.io/klog/v2"
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
