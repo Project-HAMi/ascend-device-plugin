@@ -1,0 +1,35 @@
+// #######################################################################
+// ##- Copyright (c) Huawei Technologies Co., Ltd. 2019. All rights reserved.
+// # - iSulad licensed under the Mulan PSL v2.
+// # - You can use this software according to the terms and conditions of the Mulan PSL v2.
+// # - You may obtain a copy of Mulan PSL v2 at:
+// # -     http://license.coscl.org.cn/MulanPSL2
+// # - THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+// # - IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+// # - PURPOSE.
+// # - See the Mulan PSL v2 for more details.
+// ##- @Description: generate grpc
+// ##- @Author: wujing
+// ##- @Create: 2019-04-25
+// #######################################################################
+syntax = "proto3";
+option optimize_for = CODE_SIZE;
+
+package containers;
+option go_package = "./;isula";
+
+service ContainerService {
+  rpc Inspect(InspectContainerRequest) returns (InspectContainerResponse);
+}
+
+message InspectContainerRequest {
+  string id = 1;
+  bool bformat = 2;
+  int32 timeout = 3;
+}
+
+message InspectContainerResponse {
+  string ContainerJSON = 1;
+  uint32 cc = 2;
+  string errmsg = 3;
+}

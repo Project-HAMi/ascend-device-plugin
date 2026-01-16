@@ -1,0 +1,167 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: npu-exporter
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: exporter-network-policy
+  namespace: npu-exporter
+spec:
+  podSelector:
+    matchLabels:
+      app: npu-exporter
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app: prometheus
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app: prometheus
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: npu-exporter-310p-1usoc
+  namespace: npu-exporter
+spec:
+  selector:
+    matchLabels:
+      app: npu-exporter
+  template:
+    metadata:
+      ##### For Kubernetes versions lower than 1.19, seccomp is used with annotations.
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: runtime/default
+      labels:
+        app: npu-exporter
+    spec:
+      ##### For Kubernetes version 1.19 and above, seccomp is used with securityContext:seccompProfile
+#      securityContext:
+#        seccompProfile:
+#          type: RuntimeDefault
+      automountServiceAccountToken: false
+      nodeSelector:
+        workerselector: dls-worker-node
+        servertype: soc
+      containers:
+      - name: npu-exporter
+        image: npu-exporter:v5.0.RC1
+        resources:
+          requests:
+              memory: 1000Mi
+              cpu: 1000m
+          limits:
+              memory: 1000Mi
+              cpu: 1000m
+        imagePullPolicy: Never
+        command: [ "/bin/bash", "-c", "/run_for_310P_1usoc.sh"]
+        # pair firstly
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: true
+          runAsUser: 0
+          runAsGroup: 0
+        ports:
+          - name: http
+            containerPort: 8082
+            protocol: TCP
+        volumeMounts:
+          - name: log-npu-exporter
+            mountPath: /var/log/mindx-dl/npu-exporter
+          - name: localtime
+            mountPath: /etc/localtime
+            readOnly: true
+          - name: ascend-driver
+            mountPath: /usr/local/Ascend/driver
+            readOnly: true
+          - name: ascend-dcmi
+            mountPath: /usr/local/dcmi
+            readOnly: true
+          - name: libyaml
+            mountPath: /usr/lib64/libyaml-0.so.2
+            readOnly: true
+          - name: docker-shim  # delete when only use containerd
+            mountPath: /run/dockershim.sock
+            readOnly: true
+          - name: docker  # delete when only use containerd
+            mountPath: /run/docker/containerd/containerd.sock
+            readOnly: true
+          - name: cri-dockerd  # reserve when k8s version is 1.24+ and the container runtime is docker
+            mountPath: /var/run/cri-dockerd.sock
+            readOnly: true
+          - name: containerd
+            mountPath: /run/containerd
+            readOnly: true
+          - name: tmp
+            mountPath: /tmp
+          - name: dmp
+            mountPath: /var/dmp_daemon
+            readOnly: true
+          - name: slogd
+            mountPath: /var/slogd
+            readOnly: true
+          - name: hbasic
+            mountPath: /etc/hdcBasic.cfg
+            readOnly: true
+          - name: slogconf
+            mountPath: /etc/slog.conf
+            readOnly: true
+      volumes:
+        - name: log-npu-exporter
+          hostPath:
+            path: /var/log/mindx-dl/npu-exporter
+            type: Directory
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+        - name: libyaml
+          hostPath:
+            path: /usr/lib64/libyaml-0.so.2
+            type: File
+        - name: ascend-driver
+          hostPath:
+            path: /usr/local/Ascend/driver
+        - name: ascend-dcmi
+          hostPath:
+            path: /usr/local/dcmi
+        - name: docker-shim # delete when only use containerd
+          hostPath:
+            path: /run/dockershim.sock
+        - name: docker  # delete when only use containerd
+          hostPath:
+            path: /run/docker/containerd/containerd.sock
+        - name: cri-dockerd # reserve when k8s version is 1.24+ and the container runtime is docker
+          hostPath:
+            path: /var/run/cri-dockerd.sock
+        - name: containerd
+          hostPath:
+            path: /run/containerd
+        - name: tmp
+          hostPath:
+            path: /tmp
+        - name: dmp
+          hostPath:
+            path: /var/dmp_daemon
+            type: File
+        - name: slogd
+          hostPath:
+            path: /var/slogd
+            type: File
+        - name: hbasic
+          hostPath:
+            path: /etc/hdcBasic.cfg
+            type: File
+        - name: slogconf
+          hostPath:
+            path: /etc/slog.conf
+            type: File
