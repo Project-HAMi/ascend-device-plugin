@@ -1,0 +1,118 @@
+/*
+Copyright 2018 The Kubernetes Authors.
+Copyright (c) Huawei Technologies Co., Ltd. 2019. All rights reserved.
+    modify descripe: remove unused options for example:
+    remove import "github.com/gogo/protobuf/gogoproto/gogo.proto"
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// To regenerate api.pb.go run hack/update-generated-runtime.sh
+syntax = 'proto3';
+
+package runtime.v1alpha2;
+option go_package = "./;isula";
+
+// Runtime service defines the public APIs for remote container runtimes
+service RuntimeService {
+  // ListContainers lists all containers by filters.
+  rpc ListContainers(ListContainersRequest) returns (ListContainersResponse) {}
+}
+
+// ImageSpec is an internal representation of an image.  Currently, it wraps the
+// value of a Container's Image field (e.g. imageID or imageDigest), but in the
+// future it will include more detailed information about the different image types.
+message ImageSpec {
+  string image = 1;
+  // Unstructured key-value map holding arbitrary metadata.
+  // ImageSpec Annotations can be used to help the runtime target specific
+  // images in multi-arch images.
+  map<string, string> annotations = 2;
+}
+
+// ContainerMetadata holds all necessary information for building the container
+// name. The container runtime is encouraged to expose the metadata in its user
+// interface for better user experience. E.g., runtime can construct a unique
+// container name based on the metadata. Note that (name, attempt) is unique
+// within a sandbox for the entire lifetime of the sandbox.
+message ContainerMetadata {
+  // Name of the container. Same as the container name in the PodSpec.
+  string name = 1;
+  // Attempt number of creating the container. Default: 0.
+  uint32 attempt = 2;
+}
+
+enum ContainerState {
+  CONTAINER_CREATED = 0;
+  CONTAINER_RUNNING = 1;
+  CONTAINER_EXITED  = 2;
+  CONTAINER_UNKNOWN = 3;
+}
+
+// ContainerStateValue is the wrapper of ContainerState.
+message ContainerStateValue {
+  // State of the container.
+  ContainerState state = 1;
+}
+
+// ContainerFilter is used to filter containers.
+// All those fields are combined with 'AND'
+message ContainerFilter {
+  // ID of the container.
+  string id = 1;
+  // State of the container.
+  ContainerStateValue state = 2;
+  // ID of the PodSandbox.
+  string pod_sandbox_id = 3;
+  // LabelSelector to select matches.
+  // Only api.MatchLabels is supported for now and the requirements
+  // are ANDed. MatchExpressions is not supported yet.
+  map<string, string> label_selector = 4;
+}
+
+message ListContainersRequest {
+  ContainerFilter filter = 1;
+}
+
+// Container provides the runtime information for a container, such as ID, hash,
+// state of the container.
+message Container {
+  // ID of the container, used by the container runtime to identify
+  // a container.
+  string id = 1;
+  // ID of the sandbox to which this container belongs.
+  string pod_sandbox_id = 2;
+  // Metadata of the container.
+  ContainerMetadata metadata = 3;
+  // Spec of the image.
+  ImageSpec image = 4;
+  // Reference to the image in use. For most runtimes, this should be an
+  // image ID.
+  string image_ref = 5;
+  // State of the container.
+  ContainerState state = 6;
+  // Creation time of the container in nanoseconds.
+  int64 created_at = 7;
+  // Key-value pairs that may be used to scope and select individual resources.
+  map<string, string> labels = 8;
+  // Unstructured key-value map holding arbitrary metadata.
+  // Annotations MUST NOT be altered by the runtime; the value of this field
+  // MUST be identical to that of the corresponding ContainerConfig used to
+  // instantiate this Container.
+  map<string, string> annotations = 9;
+}
+
+message ListContainersResponse {
+  // List of containers.
+  repeated Container containers = 1;
+}
