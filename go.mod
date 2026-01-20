@@ -3,6 +3,7 @@ module github.com/Project-HAMi/ascend-device-plugin
 go 1.22.2
 
 require (
+	ascend-common v0.0.0
 	github.com/Project-HAMi/HAMi v0.0.0
 	github.com/fsnotify/fsnotify v1.7.0
 	google.golang.org/grpc v1.63.2
@@ -57,6 +58,7 @@ require (
 )
 
 replace (
+	ascend-common => ./mind-cluster/component/ascend-common
 	github.com/Project-HAMi/HAMi v0.0.0 => github.com/Project-HAMi/HAMi v0.0.0-20250901013025-61c6cbe7d480
-	huawei.com/npu-exporter/v6 => gitee.com/ascend/ascend-npu-exporter/v6 v6.0.0-RC3
+	huawei.com/npu-exporter => ./mind-cluster/component/npu-exporter
 )

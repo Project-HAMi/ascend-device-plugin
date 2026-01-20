@@ -20,9 +20,10 @@ import (
 	"fmt"
 	"sort"
 
+	"ascend-common/devmanager"
+	"ascend-common/devmanager/dcmi"
+
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
-	"huawei.com/npu-exporter/v6/devmanager"
-	"huawei.com/npu-exporter/v6/devmanager/dcmi"
 	"k8s.io/klog/v2"
 )
 
@@ -45,7 +46,7 @@ type AscendManager struct {
 }
 
 func NewAscendManager() (*AscendManager, error) {
-	mgr, err := devmanager.AutoInit("")
+	mgr, err := devmanager.AutoInit("", 30)
 	if err != nil {
 		return nil, err
 	}

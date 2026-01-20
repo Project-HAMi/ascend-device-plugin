@@ -17,7 +17,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -29,7 +28,7 @@ import (
 	"github.com/Project-HAMi/ascend-device-plugin/internal/server"
 	"github.com/Project-HAMi/ascend-device-plugin/version"
 	"github.com/fsnotify/fsnotify"
-	"huawei.com/npu-exporter/v6/common-utils/hwlog"
+	"huawei.com/npu-exporter/utils/logger"
 	"k8s.io/klog/v2"
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
@@ -117,11 +116,11 @@ func main() {
 	checkFlags()
 	klog.Infof("version: %s", version.GetVersion())
 	klog.Infof("using config file: %s", *configFile)
-	config := &hwlog.LogConfig{
-		OnlyToStdout: true,
-		LogLevel:     *hwLoglevel,
-	}
-	err := hwlog.InitRunLogger(config, context.Background())
+
+	logger.HwLogConfig.OnlyToStdout = true
+	logger.HwLogConfig.LogLevel = *hwLoglevel
+
+	err := logger.InitLogger("Prometheus")
 	if err != nil {
 		klog.Fatalf("init huawei run logger failed, %v", err)
 	}

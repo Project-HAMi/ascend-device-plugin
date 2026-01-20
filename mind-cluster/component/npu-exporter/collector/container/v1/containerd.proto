@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package containerd.services.containers.v1;
+
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "huawei.com/npu-exporter/v6/collector/container;v1";
+
+// Containers provides metadata storage for containers used in the execution
+// service.
+service Containers {
+  rpc Get(GetContainerRequest) returns (GetContainerResponse);
+}
+
+message Container {
+  // ID is the user-specified identifier.
+  string id = 1;
+
+  // Labels provides an area to include arbitrary data on containers.
+  map<string, string> labels = 2;
+
+  // Image contains the reference of the image used to build the
+  string image = 3;
+
+  message Runtime {
+    // Name is the name of the runtime.
+    string name = 1;
+    // Options runtime initialization options.
+    google.protobuf.Any options = 2;
+  }
+  // Runtime specifies runtime.
+  Runtime runtime = 4;
+
+  // Spec opencotainer spec.
+  google.protobuf.Any spec = 5;
+
+  // Snapshotter is the snapshotter name used for rootfs
+  string snapshotter = 6;
+
+  // SnapshotKey the snapshot key to use for the container's root
+  string snapshot_key = 7;
+
+  // CreatedAt is the create time of container.
+  google.protobuf.Timestamp created_at = 8 ;
+
+  // UpdatedAt is the last update of container.
+  google.protobuf.Timestamp updated_at = 9 ;
+
+  // Extensions allow clients to provide zero or more blobs that are directly
+  map<string, google.protobuf.Any> extensions = 10 ;
+}
+
+message GetContainerRequest {
+  string id = 1;
+}
+
+message GetContainerResponse {
+  Container container = 1 ;
+}
+

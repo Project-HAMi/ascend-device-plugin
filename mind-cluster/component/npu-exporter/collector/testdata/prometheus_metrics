@@ -1,0 +1,166 @@
+# HELP machine_npu_nums Amount of npu installed on the machine.
+# TYPE machine_npu_nums gauge
+machine_npu_nums 8
+# HELP npu_chip_info_aicore_current_freq the npu ai core current frequency, unit is 'MHz'
+# TYPE npu_chip_info_aicore_current_freq gauge
+npu_chip_info_aicore_current_freq{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_aicore_current_freq{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_aicore_current_freq{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_aicore_current_freq{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_aicore_current_freq{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_aicore_current_freq{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_aicore_current_freq{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_aicore_current_freq{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_bandwidth_rx the npu interface receive speed, unit is 'MB/s'
+# TYPE npu_chip_info_bandwidth_rx gauge
+npu_chip_info_bandwidth_rx{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_rx{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_rx{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_rx{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_rx{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_rx{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_rx{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_rx{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_bandwidth_tx the npu interface transport speed, unit is 'MB/s'
+# TYPE npu_chip_info_bandwidth_tx gauge
+npu_chip_info_bandwidth_tx{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_tx{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_tx{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_tx{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_tx{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_tx{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_tx{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_bandwidth_tx{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_error_code the npu error code
+# TYPE npu_chip_info_error_code gauge
+npu_chip_info_error_code{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_error_code{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_error_code{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_error_code{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_error_code{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_error_code{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_error_code{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_error_code{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_hbm_total_memory the npu hbm total memory
+# TYPE npu_chip_info_hbm_total_memory gauge
+npu_chip_info_hbm_total_memory{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_total_memory{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_total_memory{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_total_memory{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_total_memory{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_total_memory{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_total_memory{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_total_memory{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_hbm_used_memory the npu hbm used memory
+# TYPE npu_chip_info_hbm_used_memory gauge
+npu_chip_info_hbm_used_memory{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_used_memory{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_used_memory{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_used_memory{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_used_memory{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_used_memory{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_used_memory{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_hbm_used_memory{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_health_status the npu health status
+# TYPE npu_chip_info_health_status gauge
+npu_chip_info_health_status{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_health_status{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_health_status{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_health_status{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_health_status{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_health_status{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_health_status{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_health_status{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+# HELP npu_chip_info_link_status the npu link status
+# TYPE npu_chip_info_link_status gauge
+npu_chip_info_link_status{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_link_status{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_link_status{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_link_status{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_link_status{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_link_status{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_link_status{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_link_status{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_name the Ascend npu name with value '1'
+# TYPE npu_chip_info_name gauge
+npu_chip_info_name{container_name="",id="0",name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_name{container_name="",id="1",name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_name{container_name="",id="2",name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_name{container_name="",id="3",name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_name{container_name="",id="4",name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_name{container_name="",id="5",name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_name{container_name="",id="6",name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+npu_chip_info_name{container_name="",id="7",name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 1 1606402000
+# HELP npu_chip_info_network_status the npu network health status
+# TYPE npu_chip_info_network_status gauge
+npu_chip_info_network_status{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_network_status{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_network_status{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_network_status{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_network_status{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_network_status{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_network_status{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_network_status{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_power the npu power
+# TYPE npu_chip_info_power gauge
+npu_chip_info_power{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_power{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_power{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_power{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_power{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_power{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_power{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_power{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_temperature the npu temperature
+# TYPE npu_chip_info_temperature gauge
+npu_chip_info_temperature{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_temperature{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_temperature{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_temperature{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_temperature{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_temperature{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_temperature{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_temperature{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_total_memory the npu total memory
+# TYPE npu_chip_info_total_memory gauge
+npu_chip_info_total_memory{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_total_memory{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_total_memory{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_total_memory{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_total_memory{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_total_memory{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_total_memory{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_total_memory{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_used_memory the npu used memory
+# TYPE npu_chip_info_used_memory gauge
+npu_chip_info_used_memory{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_used_memory{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_used_memory{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_used_memory{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_used_memory{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_used_memory{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_used_memory{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_used_memory{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_utilization the ai core utilization
+# TYPE npu_chip_info_utilization gauge
+npu_chip_info_utilization{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_utilization{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_utilization{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_utilization{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_utilization{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_utilization{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_utilization{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_utilization{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_chip_info_voltage the npu voltage
+# TYPE npu_chip_info_voltage gauge
+npu_chip_info_voltage{container_name="",id="0",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_voltage{container_name="",id="1",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_voltage{container_name="",id="2",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_voltage{container_name="",id="3",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_voltage{container_name="",id="4",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_voltage{container_name="",id="5",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_voltage{container_name="",id="6",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+npu_chip_info_voltage{container_name="",id="7",model_name="910Awn-Ascend-V1",namespace="",pcie_bus_info="",pod_name="",vdie_id=""} 0 1606402000
+# HELP npu_exporter_version_info exporter version with value '1'
+# TYPE npu_exporter_version_info gauge
+npu_exporter_version_info{exporterVersion=""} 1
