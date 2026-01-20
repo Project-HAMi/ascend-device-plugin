@@ -1,0 +1,4 @@
+[
+  {"metricsGroup": "MyPlugin", "state": "OFF"},
+  {"metricsGroup": "text", "state": "ON"}
+]

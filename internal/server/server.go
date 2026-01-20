@@ -44,6 +44,7 @@ const (
 	// PodAllocAnno = "huawei.com/AscendDevices"
 	NodeLockAscend  = "hami.io/mutex.lock"
 	Ascend910Prefix = "Ascend910"
+	Ascend910CType  = "Ascend910C"
 )
 
 var (
@@ -191,10 +192,16 @@ func (ps *PluginServer) registerKubelet() error {
 	return nil
 }
 
-func (ps *PluginServer) getDeviceNetworkID(idx int) (int, error) {
+func (ps *PluginServer) getDeviceNetworkID(idx int, deviceType string) (int, error) {
+	// For Ascend910C devices, all modules (dies) are interconnected via HCCS
+	if deviceType == Ascend910CType {
+		return 0, nil
+	}
+
 	if idx > 3 {
 		return 1, nil
 	}
+
 	return 0, nil
 }
 
@@ -214,7 +221,7 @@ func (ps *PluginServer) registerHAMi() error {
 			Health:  dev.Health,
 		}
 		if strings.HasPrefix(device.Type, Ascend910Prefix) {
-			NetworkID, err := ps.getDeviceNetworkID(i)
+			NetworkID, err := ps.getDeviceNetworkID(i, device.Type)
 			if err != nil {
 				return fmt.Errorf("get networkID error: %v", err)
 			}
