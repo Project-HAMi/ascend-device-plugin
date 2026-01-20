@@ -7,7 +7,6 @@ require (
 	github.com/Project-HAMi/HAMi v0.0.0
 	github.com/fsnotify/fsnotify v1.7.0
 	google.golang.org/grpc v1.63.2
-	huawei.com/npu-exporter/v6 v6.0.0-RC3.b001
 	k8s.io/api v0.29.3
 	k8s.io/apimachinery v0.29.3
 	k8s.io/klog/v2 v2.120.1
