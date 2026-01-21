@@ -14,11 +14,11 @@ docker:
 	--build-arg GOPROXY=https://goproxy.cn,direct \
 	-t ${IMG_NAME}:${VERSION} .
 
-lint: tidy
+lint: 
 	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0
 	golangci-lint run
 
-ascend-device-plugin: tidy
+ascend-device-plugin: 
 	$(GO) build $(BUILDARGS) -o ./ascend-device-plugin ./cmd/main.go
 
 clean:

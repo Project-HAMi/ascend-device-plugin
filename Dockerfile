@@ -12,8 +12,7 @@ ENV GOPATH=/go
 ARG VERSION
 WORKDIR /build
 ADD . .
-RUN --mount=type=cache,target=/go/pkg/mod \
-    make all
+RUN make all
 
 FROM $BASE_IMAGE
 ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64/common
