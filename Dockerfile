@@ -12,6 +12,8 @@ ENV GOPATH=/go
 ARG VERSION
 WORKDIR /build
 ADD . .
+RUN go mod download github.com/Project-HAMi/HAMi
+RUN go get github.com/Project-HAMi/ascend-device-plugin/internal/server
 RUN make all
 
 FROM $BASE_IMAGE
