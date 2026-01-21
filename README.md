@@ -65,16 +65,13 @@ To exclusively use an entire card or request multiple cards, you only need to se
           huawei.com/Ascend910B-memory: "4096"
 ```
 
+For more examples, see [examples](./examples/)
 
-## License
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_large)
- For more examples, see [examples](./examples/)
+### Usage in volcano
 
- ### Usage in volcano
+Volcano must be installed prior to usage, for more information see [here](https://github.com/volcano-sh/volcano/tree/master/docs/user-guide/how_to_use_vnpu.md)
 
- Volcano must be installed prior to usage, for more information see [here](https://github.com/volcano-sh/volcano/tree/master/docs/user-guide/how_to_use_vnpu.md)
-
- ```yaml
+```yaml
 apiVersion: v1
 kind: Pod
 metadata:
@@ -91,3 +88,6 @@ spec:
           huawei.com/Ascend310P: "1"
            huawei.com/Ascend310P-memory: "4096"
  ```
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_large)

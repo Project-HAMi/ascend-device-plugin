@@ -4,7 +4,7 @@
 name: CI
 
 on:
-  pull_request_target:
+  pull_request:
     branches: [ "main" ]
 
 env:
@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          submodules: true 
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -32,7 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          submodules: true
+  
       - name: Get branch names.
         id: branch-names
         uses: tj-actions/branch-names@v8
@@ -43,16 +49,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Docker Login
-        uses: docker/login-action@v3.1.0
-        with:
-          username: ${{ secrets.DOCKERHUB_TOKEN }}
-          password: ${{ secrets.DOCKERHUB_PASSWD }}
+      #- name: Docker Login
+      #  uses: docker/login-action@v3.1.0
+      #  with:
+      #    username: ${{ secrets.DOCKERHUB_TOKEN }}
+      #    password: ${{ secrets.DOCKERHUB_PASSWD }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: false
           build-args: |
             BASE_IMAGE=ubuntu:20.04
