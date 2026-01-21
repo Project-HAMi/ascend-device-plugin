@@ -1,6 +1,0 @@
-# HELP machine_npu_nums Amount of npu installed on the machine.
-# TYPE machine_npu_nums gauge
-machine_npu_nums 0
-# HELP npu_exporter_version_info exporter version with value '1'
-# TYPE npu_exporter_version_info gauge
-npu_exporter_version_info{exporterVersion=""} 1
