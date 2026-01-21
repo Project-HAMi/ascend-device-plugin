@@ -10,6 +10,11 @@ Ascend device plugin 是用来支持在 [HAMi](https://github.com/Project-HAMi/H
 
 部署 [ascend-docker-runtime](https://gitcode.com/Ascend/mind-cluster/tree/master/component/ascend-docker-runtime)
 
+克隆子模块 mind-cluster
+```bash
+git submodule add https://gitcode.com/Ascend/mind-cluster.git
+```
+
 ## 编译
 
 ```bash
