@@ -1,0 +1,3 @@
+[submodule "mind-cluster"]
+	path = mind-cluster
+	url = https://gitcode.com/Ascend/mind-cluster.git
