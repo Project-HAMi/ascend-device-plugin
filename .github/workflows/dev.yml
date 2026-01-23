@@ -22,7 +22,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - run: go mod tidy
+      - run: go mod download github.com/Project-HAMi/HAMi
+      - run: go get github.com/Project-HAMi/ascend-device-plugin/internal/server
+      - run: go get huawei.com/npu-exporter
+      - run: go get huawei.com/npu-exporter/utils/logger@v0.0.0-00010101000000-000000000000
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
@@ -48,12 +51,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      #- name: Docker Login
-      #  uses: docker/login-action@v3.1.0
-      #  with:
-      #    username: ${{ secrets.DOCKERHUB_TOKEN }}
-      #    password: ${{ secrets.DOCKERHUB_PASSWD }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
