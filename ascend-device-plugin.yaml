@@ -53,7 +53,7 @@ spec:
       priorityClassName: "system-node-critical"
       serviceAccountName: hami-ascend
       containers:
-        - image: projecthami/ascend-device-plugin:v1.1.0
+        - image: projecthami/ascend-device-plugin:v1.2.0
           imagePullPolicy: IfNotPresent
           name: device-plugin
           resources:
