@@ -24,6 +24,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
       - run: go mod download github.com/Project-HAMi/HAMi
       - run: go get github.com/Project-HAMi/ascend-device-plugin/internal/server
+      - run: go get huawei.com/npu-exporter
+      - run: go get huawei.com/npu-exporter/utils/logger@v0.0.0-00010101000000-000000000000
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:

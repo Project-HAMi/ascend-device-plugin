@@ -12,6 +12,10 @@ Memory slicing is supported based on virtualization template, lease available te
 
 [ascend-docker-runtime](https://gitcode.com/Ascend/mind-cluster/tree/master/component/ascend-docker-runtime)
 
+```bash
+git submodule add https://gitcode.com/Ascend/mind-cluster.git
+```
+
 ## Compile
 
 ```bash

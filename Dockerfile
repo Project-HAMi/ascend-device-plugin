@@ -14,6 +14,8 @@ WORKDIR /build
 ADD . .
 RUN go mod download github.com/Project-HAMi/HAMi
 RUN go get github.com/Project-HAMi/ascend-device-plugin/internal/server
+RUN go get huawei.com/npu-exporter
+RUN go get huawei.com/npu-exporter/utils/logger@v0.0.0-00010101000000-000000000000
 RUN make all
 
 FROM $BASE_IMAGE
