@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
@@ -34,9 +35,10 @@ import (
 )
 
 var (
-	hwLoglevel = flag.Int("hw_loglevel", 0, "huawei log level, -1-debug, 0-info, 1-warning, 2-error 3-critical default value: 0")
-	configFile = flag.String("config_file", "", "config file path")
-	nodeName   = flag.String("node_name", os.Getenv("NODE_NAME"), "node name")
+	hwLoglevel            = flag.Int("hw_loglevel", 0, "huawei log level, -1-debug, 0-info, 1-warning, 2-error 3-critical default value: 0")
+	configFile            = flag.String("config_file", "", "config file path")
+	nodeName              = flag.String("node_name", os.Getenv("NODE_NAME"), "node name")
+	checkIdleVNPUInterval = flag.Int("check_idle_vnpu_interval", 60, "the interval (in seconds) to check idle vNPU and release them")
 )
 
 func checkFlags() {
@@ -78,6 +80,26 @@ restart:
 		klog.Errorf("Failed to start plugin server: %v", err)
 		return err
 	}
+
+	if err := ps.CleanupIdleVNPUs(); err != nil {
+		klog.Errorf("Failed to cleanup idle vNPUs: %v", err)
+	}
+	cleanupTicker := time.NewTicker(time.Duration(*checkIdleVNPUInterval) * time.Second)
+	defer cleanupTicker.Stop()
+	go func() {
+		for {
+			select {
+			case <-cleanupTicker.C:
+				klog.Info("Running scheduled idle vNPU cleanup")
+				if err := ps.CleanupIdleVNPUs(); err != nil {
+					klog.Errorf("Failed to cleanup idle vNPUs: %v", err)
+				}
+			case <-ps.StopCh():
+				klog.Info("Stopping cleanup goroutine")
+				return
+			}
+		}
+	}()
 
 	for {
 		select {
@@ -138,8 +160,7 @@ func main() {
 	}
 	client.InitGlobalClient()
 
-	err = start(server)
-	if err != nil {
+	if err = start(server); err != nil {
 		klog.Fatalf("start PluginServer failed, error is %v", err)
 	}
 }

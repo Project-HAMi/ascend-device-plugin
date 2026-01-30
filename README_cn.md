@@ -11,6 +11,7 @@ Ascend device plugin 是用来支持在 [HAMi](https://github.com/Project-HAMi/H
 部署 [ascend-docker-runtime](https://gitcode.com/Ascend/mind-cluster/tree/master/component/ascend-docker-runtime)
 
 克隆子模块 mind-cluster
+
 ```bash
 git submodule add https://gitcode.com/Ascend/mind-cluster.git
 ```
@@ -31,7 +32,6 @@ docker buildx build -t $IMAGE_NAME .
 
 ### 给 Node 打 ascend 标签
 
-
 ```
 kubectl label node {ascend-node} ascend=on
 ```
@@ -48,7 +48,7 @@ kubectl apply -f ascend-device-configmap.yaml
 kubectl apply -f ascend-device-plugin.yaml
 ```
 
-如果要在HAMi中使用升腾NPU, 在部署HAMi时设置 `devices.ascend.enabled` 为 true 会自动部署 ConfigMap 和 `ascend-device-plugin`。 参考 https://github.com/Project-HAMi/HAMi/blob/master/charts/hami/README.md#huawei-ascend
+如果要在HAMi中使用升腾NPU, 在部署HAMi时设置 `devices.ascend.enabled` 为 true 会自动部署 ConfigMap 和 `ascend-device-plugin`。 参考 <https://github.com/Project-HAMi/HAMi/blob/master/charts/hami/README.md#huawei-ascend>
 
 ## 使用
 
@@ -67,9 +67,10 @@ kubectl apply -f ascend-device-plugin.yaml
           # 如果不指定显存大小, 就会使用整张卡
           huawei.com/Ascend910B-memory: "4096"
 ```
+
  For more examples, see [examples](./examples/)
 
- ### 在 volcano 中使用
+### 在 volcano 中使用
 
  在 volcano 中使用时需要提前部署好 volcano, 更多信息请[参考这里](https://github.com/volcano-sh/volcano/tree/master/docs/user-guide/how_to_use_vnpu.md)
 
