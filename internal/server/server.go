@@ -101,6 +101,14 @@ func (ps *PluginServer) Stop() error {
 	return nil
 }
 
+func (ps *PluginServer) StopCh() <-chan interface{} {
+	return ps.stopCh
+}
+
+func (ps *PluginServer) CleanupIdleVNPUs() error {
+	return ps.mgr.CleanupIdleVNPUs()
+}
+
 func (ps *PluginServer) dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
