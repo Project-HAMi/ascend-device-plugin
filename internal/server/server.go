@@ -350,6 +350,14 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 	success := false
 	var pod *v1.Pod
 	defer func() {
+		if success {
+			annotations := make(map[string]string)
+			annotations[util.DeviceBindPhase] = util.DeviceBindSuccess
+			err := util.PatchPodAnnotations(pod, annotations)
+			if err != nil {
+				klog.Errorf("patch pod %s annotations error: %v", pod.Name, err)
+			}
+		}
 		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, success)
 		if lockerr != nil {
 			klog.Errorf("failed to release lock:%s", lockerr.Error())
