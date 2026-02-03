@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"syscall"
-	"time"
 
 	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
@@ -74,32 +73,15 @@ restart:
 		}
 	}
 	restarting = true
+	if err := ps.CleanupIdleVNPUs(); err != nil {
+		klog.Errorf("Failed to cleanup idle vNPUs: %v", err)
+	}
 	klog.Info("Starting Plugins.")
 	err = ps.Start()
 	if err != nil {
 		klog.Errorf("Failed to start plugin server: %v", err)
 		return err
 	}
-
-	if err := ps.CleanupIdleVNPUs(); err != nil {
-		klog.Errorf("Failed to cleanup idle vNPUs: %v", err)
-	}
-	cleanupTicker := time.NewTicker(time.Duration(*checkIdleVNPUInterval) * time.Second)
-	defer cleanupTicker.Stop()
-	go func() {
-		for {
-			select {
-			case <-cleanupTicker.C:
-				klog.Info("Running scheduled idle vNPU cleanup")
-				if err := ps.CleanupIdleVNPUs(); err != nil {
-					klog.Errorf("Failed to cleanup idle vNPUs: %v", err)
-				}
-			case <-ps.StopCh():
-				klog.Info("Stopping cleanup goroutine")
-				return
-			}
-		}
-	}()
 
 	for {
 		select {
@@ -154,7 +136,7 @@ func main() {
 	if err != nil {
 		klog.Fatalf("load config failed, error is %v", err)
 	}
-	server, err := server.NewPluginServer(mgr, *nodeName)
+	server, err := server.NewPluginServer(mgr, *nodeName, *checkIdleVNPUInterval)
 	if err != nil {
 		klog.Fatalf("init PluginServer failed, error is %v", err)
 	}

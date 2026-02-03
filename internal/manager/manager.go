@@ -199,7 +199,7 @@ func (am *AscendManager) CleanupIdleVNPUs() error {
 			klog.Warningf("failed to get card/device ID for logic ID %d: %v", logicID, err)
 			continue
 		}
-		// 获取该设备上的所有 vNPU 信息
+		// Obtain all vNPU information on this device
 		vDevInfos, err := am.mgr.GetVirtualDeviceInfo(logicID)
 		if err != nil {
 			klog.Infof("no vNPU found on device %d or query failed: %v", logicID, err)
