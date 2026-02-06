@@ -182,3 +182,53 @@ func (am *AscendManager) GetUnHealthIDs() []int32 {
 	}
 	return unhealthy
 }
+
+func (am *AscendManager) CleanupIdleVNPUs() error {
+	klog.Info("Starting cleanup of idle vNPUs...")
+
+	_, IDs, err := am.mgr.GetDeviceList()
+	if err != nil {
+		return fmt.Errorf("failed to get device list: %v", err)
+	}
+	klog.Infof("Found %d devices to check for idle vNPUs,%+v", len(IDs), IDs)
+
+	totalCleaned := 0
+	for _, logicID := range IDs {
+		cardID, deviceID, err := am.mgr.GetCardIDDeviceID(logicID)
+		if err != nil {
+			klog.Warningf("failed to get card/device ID for logic ID %d: %v", logicID, err)
+			continue
+		}
+		// Obtain all vNPU information on this device
+		vDevInfos, err := am.mgr.GetVirtualDeviceInfo(logicID)
+		if err != nil {
+			klog.Infof("no vNPU found on device %d or query failed: %v", logicID, err)
+			continue
+		}
+
+		klog.V(1).Infof("Device logicID=%d, cardID=%d,deviceID=%d has %d vNPUs", logicID, cardID, deviceID, len(vDevInfos.VDevInfo))
+
+		for _, vDev := range vDevInfos.VDevInfo {
+			klog.V(1).Infof("vNPU CardId=%d, VDevID(Vnpu ID)=%d,template=%s,IsContainerUsed=%d", cardID, vDev.VDevID, vDev.QueryInfo.Name, vDev.QueryInfo.IsContainerUsed)
+
+			if vDev.QueryInfo.IsContainerUsed == 0 {
+				klog.V(1).Infof("Found idle vNPU: cardID=%d, deviceID=%d, vnpuID=%d, status=%d, template=%s,IsContainerUsed=%d",
+					cardID, deviceID, vDev.VDevID, vDev.QueryInfo.Status, vDev.QueryInfo.Name, vDev.QueryInfo.IsContainerUsed)
+
+				err := am.mgr.DestroyVirtualDevice(logicID, uint32(vDev.VDevID))
+				if err != nil {
+					klog.Errorf("failed to destroy vNPU %d on device %d: %v", vDev.VDevID, logicID, err)
+				} else {
+					klog.Infof("Successfully destroyed idle vNPU: vnpuID=%d", vDev.VDevID)
+					totalCleaned++
+				}
+			} else {
+				klog.Infof("Skipping active vNPU: cardID=%d, deviceID=%d, vnpuID=%d, status=%d, template=%s,IsContainerUsed=%d",
+					cardID, deviceID, vDev.VDevID, vDev.QueryInfo.Status, vDev.QueryInfo.Name, vDev.QueryInfo.IsContainerUsed)
+			}
+		}
+	}
+
+	klog.Infof("Cleanup completed, destroyed %d idle vNPUs", totalCleaned)
+	return nil
+}

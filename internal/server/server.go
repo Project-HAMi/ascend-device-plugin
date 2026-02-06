@@ -52,28 +52,30 @@ var (
 )
 
 type PluginServer struct {
-	nodeName      string
-	registerAnno  string
-	handshakeAnno string
-	allocAnno     string
-	grpcServer    *grpc.Server
-	mgr           *manager.AscendManager
-	socket        string
-	stopCh        chan interface{}
-	healthCh      chan int32
+	nodeName              string
+	registerAnno          string
+	handshakeAnno         string
+	allocAnno             string
+	grpcServer            *grpc.Server
+	mgr                   *manager.AscendManager
+	socket                string
+	stopCh                chan interface{}
+	healthCh              chan int32
+	checkIdleVNPUInterval int
 }
 
-func NewPluginServer(mgr *manager.AscendManager, nodeName string) (*PluginServer, error) {
+func NewPluginServer(mgr *manager.AscendManager, nodeName string, checkIdleVNPUInterval int) (*PluginServer, error) {
 	return &PluginServer{
-		nodeName:      nodeName,
-		registerAnno:  fmt.Sprintf("hami.io/node-register-%s", mgr.CommonWord()),
-		handshakeAnno: fmt.Sprintf("hami.io/node-handshake-%s", mgr.CommonWord()),
-		allocAnno:     fmt.Sprintf("huawei.com/%s", mgr.CommonWord()),
-		grpcServer:    grpc.NewServer(),
-		mgr:           mgr,
-		socket:        path.Join(v1beta1.DevicePluginPath, fmt.Sprintf("%s.sock", mgr.CommonWord())),
-		stopCh:        make(chan interface{}),
-		healthCh:      make(chan int32),
+		nodeName:              nodeName,
+		registerAnno:          fmt.Sprintf("hami.io/node-register-%s", mgr.CommonWord()),
+		handshakeAnno:         fmt.Sprintf("hami.io/node-handshake-%s", mgr.CommonWord()),
+		allocAnno:             fmt.Sprintf("huawei.com/%s", mgr.CommonWord()),
+		grpcServer:            grpc.NewServer(),
+		mgr:                   mgr,
+		socket:                path.Join(v1beta1.DevicePluginPath, fmt.Sprintf("%s.sock", mgr.CommonWord())),
+		stopCh:                make(chan interface{}),
+		healthCh:              make(chan int32),
+		checkIdleVNPUInterval: checkIdleVNPUInterval,
 	}, nil
 }
 
@@ -91,14 +93,40 @@ func (ps *PluginServer) Start() error {
 	if err != nil {
 		return err
 	}
+	go ps.startPeriodicCheckIdleVNPUs()
 	go ps.watchAndRegister()
 	return nil
+}
+
+func (ps *PluginServer) startPeriodicCheckIdleVNPUs() {
+	ticker := time.NewTicker(time.Duration(ps.checkIdleVNPUInterval) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			klog.Info("Running scheduled idle vNPU cleanup")
+			if err := ps.CleanupIdleVNPUs(); err != nil {
+				klog.Errorf("Failed to cleanup idle vNPUs: %v", err)
+			}
+		case <-ps.stopCh:
+			klog.Info("Stopping cleanup goroutine")
+			return
+		}
+	}
 }
 
 func (ps *PluginServer) Stop() error {
 	close(ps.stopCh)
 	ps.grpcServer.Stop()
 	return nil
+}
+
+func (ps *PluginServer) StopCh() <-chan interface{} {
+	return ps.stopCh
+}
+
+func (ps *PluginServer) CleanupIdleVNPUs() error {
+	return ps.mgr.CleanupIdleVNPUs()
 }
 
 func (ps *PluginServer) dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error) {
