@@ -34,9 +34,10 @@ import (
 )
 
 var (
-	hwLoglevel = flag.Int("hw_loglevel", 0, "huawei log level, -1-debug, 0-info, 1-warning, 2-error 3-critical default value: 0")
-	configFile = flag.String("config_file", "", "config file path")
-	nodeName   = flag.String("node_name", os.Getenv("NODE_NAME"), "node name")
+	hwLoglevel            = flag.Int("hw_loglevel", 0, "huawei log level, -1-debug, 0-info, 1-warning, 2-error 3-critical default value: 0")
+	configFile            = flag.String("config_file", "", "config file path")
+	nodeName              = flag.String("node_name", os.Getenv("NODE_NAME"), "node name")
+	checkIdleVNPUInterval = flag.Int("check_idle_vnpu_interval", 60, "the interval (in seconds) to check idle vNPU and release them")
 )
 
 func checkFlags() {
@@ -72,6 +73,9 @@ restart:
 		}
 	}
 	restarting = true
+	if err := ps.CleanupIdleVNPUs(); err != nil {
+		klog.Errorf("Failed to cleanup idle vNPUs: %v", err)
+	}
 	klog.Info("Starting Plugins.")
 	err = ps.Start()
 	if err != nil {
@@ -132,14 +136,13 @@ func main() {
 	if err != nil {
 		klog.Fatalf("load config failed, error is %v", err)
 	}
-	server, err := server.NewPluginServer(mgr, *nodeName)
+	server, err := server.NewPluginServer(mgr, *nodeName, *checkIdleVNPUInterval)
 	if err != nil {
 		klog.Fatalf("init PluginServer failed, error is %v", err)
 	}
 	client.InitGlobalClient()
 
-	err = start(server)
-	if err != nil {
+	if err = start(server); err != nil {
 		klog.Fatalf("start PluginServer failed, error is %v", err)
 	}
 }
