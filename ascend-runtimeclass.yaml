@@ -1,0 +1,6 @@
+apiVersion: node.k8s.io/v1
+handler: ascend
+kind: RuntimeClass
+metadata:
+  name: ascend
+handler: ascend
