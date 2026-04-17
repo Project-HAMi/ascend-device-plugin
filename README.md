@@ -6,15 +6,28 @@
 
 This Ascend device plugin is implemented for [HAMi](https://github.com/Project-HAMi/HAMi) and [volcano](https://github.com/volcano-sh/volcano) scheduling.
 
+#### 1. Template-based Hard Slicing (vNPU)
+
 Memory slicing is supported based on virtualization template, lease available template is automatically used. For detailed information, check [template](./ascend-device-configmap.yaml)
+
+#### 2. Soft Slicing with Runtime Interception (hami-vnpu-core)
+
+This project implements  a soft slicing mechanism based on `libvnpu.so` interception and `limiter` token scheduling, enabling fine-grained resource sharing.  For detailed information, check [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core)
 
 ## Prerequisites
 
 [ascend-docker-runtime](https://gitcode.com/Ascend/mind-cluster/tree/master/component/ascend-docker-runtime)
 
+update submodule:
+
 ```bash
-git submodule add https://gitcode.com/Ascend/mind-cluster.git
+git submodule update --init --recursive
 ```
+
+hami-vnpu-core Soft Slicing Requirements:
+
+- **Ascend Driver Version**: ≥ 25.5
+- **Chip Mode**: enable `device-share` mode on Ascend chips for virtualization
 
 ## Compile
 
@@ -26,6 +39,28 @@ make all
 
 ```bash
 docker buildx build -t $IMAGE_NAME .
+```
+
+### Host Environment Preparation
+
+Before launching any containers, the **Global Shared Memory (SHM) Region** must be initialized on the host to allow inter-Pod coordination.
+
+#### 1. Create the Shared Directory
+
+```bash
+sudo mkdir -p /tmp/hami-shared-region
+sudo chmod 777 /tmp/hami-shared-region
+```
+
+#### 2. Deploy hami-vnpu-core Components
+
+Place the following files in a fixed host path (`/usr/local/hami-vnpu-core/`) for mounting into containers:
+
+```
+/usr/local/hami-vnpu-core/
+├── limiter              # Manager daemon binary (compiled from hami-vnpu-core)
+├── libvnpu.so           # Interception library for LD_PRELOAD
+└── ld.so.preload        # Global preload config 
 ```
 
 ## Deployment
@@ -84,6 +119,26 @@ To exclusively use an entire card or request multiple cards, you only need to se
 
 For more examples, see [examples](./examples/)
 
+### Soft Slicing Configuration (HAMi)
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ascend-soft-slice-pod
+  annotations:
+    huawei.com/vnpu-mode: 'hami-core' # Enables hami-vnpu-core soft-segmentation for this pod
+spec:
+  containers:
+    - name: npu_pod
+      ...
+      resources:
+        limits:
+          huawei.com/Ascend910B3: "1"           # Request 1 physical NPU
+          huawei.com/Ascend910B3-memory: "28672"     # Request 28Gi memory
+          huawei.com/Ascend910B3-core: "40"     # Request 40% core
+```
+
 ### Usage in volcano
 
 Volcano must be installed prior to usage, for more information see [here](https://github.com/volcano-sh/volcano/tree/master/docs/user-guide/how_to_use_vnpu.md)
@@ -104,7 +159,8 @@ spec:
         limits:
           huawei.com/Ascend310P: "1"
            huawei.com/Ascend310P-memory: "4096"
- ```
+```
 
 ## License
+
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_large)

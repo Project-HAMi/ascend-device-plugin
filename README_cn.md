@@ -4,17 +4,28 @@
 
 Ascend device plugin 是用来支持在 [HAMi](https://github.com/Project-HAMi/HAMi) 和 [volcano](https://github.com/volcano-sh/volcano) 中调度昇腾NPU设备.
 
-昇腾NPU虚拟化切分是通过模板来配置的，在调度时会找到满足显存需求的最小模板来作为容器的显存。各芯片的模板配置信息参考[这里](./ascend-device-configmap.yaml)
+**基于模板的硬切分 (vNPU)** 
+
+支持基于虚拟化模板的显存切分，系统会自动使用最小可用模板。详细信息请参阅 [template](https://www.google.com/search?q=链接)。
+
+**基于运行时拦截的软切分 (hami-vnpu-core)** 
+
+实现了基于 `libvnpu.so` 拦截和limiter令牌调度的软切分机制，能够实现精细化的资源共享。详细信息请参阅 [hami-vnpu-core](https://www.google.com/search?q=链接)。
 
 ## 环境要求
 
 部署 [ascend-docker-runtime](https://gitcode.com/Ascend/mind-cluster/tree/master/component/ascend-docker-runtime)
 
-克隆子模块 mind-cluster
+更新子模块 
 
 ```bash
-git submodule add https://gitcode.com/Ascend/mind-cluster.git
+git submodule update --init --recursive
 ```
+
+**hami-vnpu-core 软切分要求：**
+
+- Ascend 驱动版本：≥ 25.5
+- 芯片模式：在昇腾芯片上开启 `device-share` 模式以支持虚拟化。
 
 ## 编译
 
@@ -27,6 +38,28 @@ make all
 ```bash
 docker buildx build -t $IMAGE_NAME .
 ```
+
+### 宿主机环境准备
+
+在启动任何容器之前，必须在宿主机上初始化 **全局共享内存 (SHM) 区域**，以便进行 Pod 间的协同。
+
+1. **创建共享目录**
+
+   ```
+   sudo mkdir -p /tmp/hami-shared-region
+   sudo chmod 777 /tmp/hami-shared-region
+   ```
+
+2. **部署 hami-vnpu-core 组件** 
+
+   将以下文件放置在固定的宿主机路径（`/usr/local/hami-vnpu-core/`）中，以便挂载到容器内： 
+
+   ```
+   /usr/local/hami-vnpu-core/
+   ├── limiter              # Manager daemon binary (compiled from hami-vnpu-core)
+   ├── libvnpu.so           # Interception library for LD_PRELOAD
+   └── ld.so.preload        # Global preload config 
+   ```
 
 ## 部署
 
@@ -83,6 +116,30 @@ devices:
 ```
 
  For more examples, see [examples](./examples/)
+
+#### 软切分配置 (HAMi)
+
+YAML
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ascend-soft-slice-pod
+  annotations:
+    huawei.com/vnpu-mode: 'hami-core' # 添加该注解的走hami-vnpu-core软切分
+spec:
+  containers:
+    - name: npu_pod
+      ...
+      resources:
+        limits:
+          huawei.com/Ascend910B3: "1"          # 请求 1 块物理 NPU
+          huawei.com/Ascend910B3-memory: "28672" # 请求 28Gi 显存
+          huawei.com/Ascend910B3-core: "40"      # 请求 40% 的算力
+```
+
+
 
 ### 在 volcano 中使用
 
