@@ -32,14 +32,20 @@ docker buildx build -t $IMAGE_NAME .
 
 ### 给 Node 打 ascend 标签
 
-```
+```bash
 kubectl label node {ascend-node} ascend=on
 ```
 
 ### 部署 ConfigMap
 
-```
+```bash
 kubectl apply -f ascend-device-configmap.yaml
+```
+
+### 部署 RuntimeClass
+
+```bash
+kubectl apply -f ascend-runtimeclass.yaml
 ```
 
 ### 部署 `ascend-device-plugin`
@@ -49,6 +55,14 @@ kubectl apply -f ascend-device-plugin.yaml
 ```
 
 如果要在HAMi中使用升腾NPU, 在部署HAMi时设置 `devices.ascend.enabled` 为 true 会自动部署 ConfigMap 和 `ascend-device-plugin`。 参考 <https://github.com/Project-HAMi/HAMi/blob/master/charts/hami/README.md#huawei-ascend>
+
+如果需要 HAMi 为申请 ascend 资源的 Pod 自动添加 runtimeClassName 配置（默认关闭），则应该在 HAMi 的 values.yaml 文件中配置 `deivces.ascend.runtimeClassName` 为**一个非空字符串**，并且与 RuntimeClass 资源名称保持一致。 例如：
+
+```yaml
+devices:
+  ascend:
+    runtimeClassName: ascend
+```
 
 ## 使用
 

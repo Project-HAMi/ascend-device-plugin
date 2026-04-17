@@ -32,15 +32,20 @@ docker buildx build -t $IMAGE_NAME .
 
 ### Label the Node with `ascend=on`
 
-
-```
+```bash
 kubectl label node {ascend-node} ascend=on
-``` 
+```
 
 ### Deploy ConfigMap
 
-```
+```bash
 kubectl apply -f ascend-device-configmap.yaml
+```
+
+### Deply RuntimeClass
+
+```bash
+kubectl apply -f ascend-runtimeclass.yaml
 ```
 
 ### Deploy `ascend-device-plugin`
@@ -50,6 +55,14 @@ kubectl apply -f ascend-device-plugin.yaml
 ```
 
 If scheduling Ascend devices in HAMi, simply set `devices.ascend.enabled` to true when deploying HAMi, and the ConfigMap and `ascend-device-plugin` will be automatically deployed. refer https://github.com/Project-HAMi/HAMi/blob/master/charts/hami/README.md#huawei-ascend
+
+If you require HAMi to automatically add the `runtimeClassName` configuration to Pods requesting Ascend resources (this is disabled by default), you should set `devices.ascend.runtimeClassName` value to **a non-empty string** in HAMi’s `values.yaml` file, ensuring it matches the name of the `RuntimeClass` resource. For example:
+
+```yaml
+devices:
+  ascend:
+    runtimeClassName: ascend
+```
 
 ## Usage
 
