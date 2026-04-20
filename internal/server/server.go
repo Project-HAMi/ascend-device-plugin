@@ -443,7 +443,7 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 		}
 
 		mounts = append(mounts, &v1beta1.Mount{
-			HostPath:      "/usr/local/hami-vnpu-core/libvnpu.so", 
+			HostPath:      "/usr/local/hami-vnpu-core", 
 			ContainerPath: "/hami-vnpu-core",                      
 			ReadOnly:      true,
 		})
