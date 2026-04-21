@@ -89,7 +89,88 @@ func NewPluginServer(mgr *manager.AscendManager, nodeName string, checkIdleVNPUI
 	}, nil
 }
 
+
+// Automatically creates directories, sets permissions, and copies core files on the host
+func prepareHostResources() error {
+    klog.Info("Starting host resource preparation for HAMi vNPU core...")
+
+    // 1. Create shared memory directory
+    sharedRegionPath := "/usr/local/hami-shared-region"
+    if err := os.MkdirAll(sharedRegionPath, 0777); err != nil {
+        if !os.IsExist(err) {
+            return fmt.Errorf("failed to create %s: %v", sharedRegionPath, err)
+        }
+    }
+    if err := os.Chmod(sharedRegionPath, 0777); err != nil {
+        return fmt.Errorf("failed to chmod %s: %v", sharedRegionPath, err)
+    }
+    klog.Infof("Successfully prepared directory: %s", sharedRegionPath)
+
+    // 2. Prepare /usr/local/hami-vnpu-core/ directory
+    targetDir := "/usr/local/hami-vnpu-core"
+    if err := os.MkdirAll(targetDir, 0775); err != nil {
+        return fmt.Errorf("failed to create %s: %v", targetDir, err)
+    }
+
+    // Specify the in-container assets directory (can be overridden via environment variable, default follows standard DevicePlugin convention)
+    assetsDir := os.Getenv("HAMI_VNPU_ASSETS_PATH")
+    if assetsDir == "" {
+        assetsDir = "/usr/local/hami-vnpu-core-assets"
+    }
+
+    // Define files to copy: source path in container -> target path on host
+    filesToCopy := map[string]string{
+        "limiter":       filepath.Join(targetDir, "limiter"),
+        "libvnpu.so":    filepath.Join(targetDir, "libvnpu.so"),
+        "ld.so.preload": filepath.Join(targetDir, "ld.so.preload"),
+    }
+
+    for srcName, destPath := range filesToCopy {
+        srcPath := filepath.Join(assetsDir, srcName)
+        if err := copyFile(srcPath, destPath); err != nil {
+            return fmt.Errorf("failed to copy %s to %s: %v", srcPath, destPath, err)
+        }
+        klog.Infof("Copied %s -> %s", srcPath, destPath)
+    }
+
+    klog.Info("Host resource preparation completed successfully.")
+    return nil
+}
+
+// A standard file copy implementation that preserves the original file permissions
+func copyFile(src, dst string) error {
+    srcFile, err := os.Open(src)
+    if err != nil {
+        return err
+    }
+    defer srcFile.Close()
+
+    dstFile, err := os.Create(dst)
+    if err != nil {
+        return err
+    }
+    defer dstFile.Close()
+
+    if _, err = io.Copy(dstFile, srcFile); err != nil {
+        return err
+    }
+
+    // Sync source file permissions (ensure the limiter binary retains executable permission)
+    srcInfo, err := srcFile.Stat()
+    if err != nil {
+        return err
+    }
+    return os.Chmod(dst, srcInfo.Mode())
+}
+
+
 func (ps *PluginServer) Start() error {
+	// Automatically prepare host environment when the plugin starts
+    if err := prepareHostResources(); err != nil {
+        klog.Errorf("Failed to prepare host resources: %v. vNPU core functionality will be impaired.", err)
+        return err
+    }
+	
 	ps.stopCh = make(chan interface{})
 	err := ps.mgr.UpdateDevice()
 	if err != nil {

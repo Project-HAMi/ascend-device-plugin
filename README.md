@@ -41,28 +41,6 @@ make all
 docker buildx build -t $IMAGE_NAME .
 ```
 
-### Host Environment Preparation
-
-Before launching any containers, the **Global Shared Memory (SHM) Region** must be initialized on the host to allow inter-Pod coordination.
-
-#### 1. Create the Shared Directory
-
-```bash
-sudo mkdir -p /tmp/hami-shared-region
-sudo chmod 777 /tmp/hami-shared-region
-```
-
-#### 2. Deploy hami-vnpu-core Components
-
-Place the following files in a fixed host path (`/usr/local/hami-vnpu-core/`) for mounting into containers:
-
-```
-/usr/local/hami-vnpu-core/
-├── limiter              # Manager daemon binary (compiled from hami-vnpu-core)
-├── libvnpu.so           # Interception library for LD_PRELOAD
-└── ld.so.preload        # Global preload config 
-```
-
 ## Deployment
 
 ### Label the Node with `ascend=on`

@@ -39,28 +39,6 @@ make all
 docker buildx build -t $IMAGE_NAME .
 ```
 
-### 宿主机环境准备
-
-在启动任何容器之前，必须在宿主机上初始化 **全局共享内存 (SHM) 区域**，以便进行 Pod 间的协同。
-
-1. **创建共享目录**
-
-   ```
-   sudo mkdir -p /usr/local/hami-shared-region
-   sudo chmod 777 /usr/local/hami-shared-region
-   ```
-
-2. **部署 hami-vnpu-core 组件** 
-
-   将以下文件放置在固定的宿主机路径（`/usr/local/hami-vnpu-core/`）中，以便挂载到容器内： 
-
-   ```
-   /usr/local/hami-vnpu-core/
-   ├── limiter              # Manager daemon binary (compiled from hami-vnpu-core)
-   ├── libvnpu.so           # Interception library for LD_PRELOAD
-   └── ld.so.preload        # Global preload config 
-   ```
-
 ## 部署
 
 ### 给 Node 打 ascend 标签
