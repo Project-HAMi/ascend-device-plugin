@@ -40,6 +40,8 @@ import (
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 	"io"
 	"path/filepath"
+	"crypto/sha256"
+    "encoding/hex"
 )
 
 const (
@@ -91,6 +93,20 @@ func NewPluginServer(mgr *manager.AscendManager, nodeName string, checkIdleVNPUI
 	}, nil
 }
 
+// fileSHA256 calculates the SHA256 checksum of the specified file
+func fileSHA256(path string) (string, error) {
+    f, err := os.Open(path)  
+    if err != nil {
+        return "", err
+    }
+    defer f.Close()
+    
+    h := sha256.New()  
+    if _, err := io.Copy(h, f); err != nil {  
+        return "", err
+    }
+    return hex.EncodeToString(h.Sum(nil)), nil  
+}
 
 // Automatically creates directories, sets permissions, and copies core files on the host
 func prepareHostResources() error {
@@ -129,10 +145,26 @@ func prepareHostResources() error {
 
     for srcName, destPath := range filesToCopy {
         srcPath := filepath.Join(assetsDir, srcName)
-        if err := copyFile(srcPath, destPath); err != nil {
-            return fmt.Errorf("failed to copy %s to %s: %v", srcPath, destPath, err)
+
+		// File already exists, skip if content is consistent
+		if _, err := os.Stat(destPath); err == nil {
+            srcSum, err1 := fileSHA256(srcPath)
+            dstSum, err2 := fileSHA256(destPath)
+            
+            if err1 == nil && err2 == nil && srcSum == dstSum {
+                klog.Infof("✓ %s already up-to-date, skipping", destPath)
+                continue
+            }
         }
-        klog.Infof("Copied %s -> %s", srcPath, destPath)
+
+        if err := copyFile(srcPath, destPath); err != nil {
+            if strings.Contains(err.Error(), "text file busy") {
+                klog.Warningf("⚠ %s is in use by running process, keeping existing version (safe)", destPath)
+                continue
+            }
+            return fmt.Errorf("failed to copy %s: %v", destPath, err)
+        }
+        klog.Infof("✓ Copied %s -> %s", srcPath, destPath)
     }
 
     klog.Info("Host resource preparation completed successfully.")
