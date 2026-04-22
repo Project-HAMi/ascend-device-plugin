@@ -81,6 +81,10 @@ spec:
               mountPath: /var/log/mindx-dl/devicePlugin
             - name: tmp
               mountPath: /tmp
+            - mountPath: /usr/local/hami-shared-region
+              name: hami-shared-region
+            - mountPath: /usr/local/hami-vnpu-core
+              name: hami-vnpu-core
             - name: ascend-config
               mountPath: /device-config.yaml
               subPath: device-config.yaml
@@ -107,6 +111,14 @@ spec:
         - name: tmp
           hostPath:
             path: /tmp
+        - name: hami-shared-region 
+          hostPath:
+            path: /usr/local/hami-shared-region
+            type: DirectoryOrCreate
+        - name: hami-vnpu-core
+          hostPath:
+            path: /usr/local/hami-vnpu-core
+            type: DirectoryOrCreate
         - name: ascend-config
           configMap:
             name: hami-scheduler-device

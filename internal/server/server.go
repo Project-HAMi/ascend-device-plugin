@@ -25,9 +25,10 @@ import (
 	"path"
 	"strings"
 	"time"
+	"strconv"
 
 	"github.com/Project-HAMi/HAMi/pkg/device"
-	"github.com/Project-HAMi/HAMi/pkg/device/ascend"
+	// "github.com/Project-HAMi/HAMi/pkg/device/ascend"
 	"github.com/Project-HAMi/HAMi/pkg/util"
 	"github.com/Project-HAMi/HAMi/pkg/util/nodelock"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
@@ -37,6 +38,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/klog/v2"
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
+	"io"
+	"path/filepath"
+	"crypto/sha256"
+    "encoding/hex"
 )
 
 const (
@@ -45,6 +50,8 @@ const (
 	NodeLockAscend  = "hami.io/mutex.lock"
 	Ascend910Prefix = "Ascend910"
 	Ascend910CType  = "Ascend910C"
+	VNPUModeAnnotation     = "huawei.com/vnpu-mode"
+    VNPUModeHamiCore       = "hami-core"
 )
 
 var (
@@ -64,6 +71,13 @@ type PluginServer struct {
 	checkIdleVNPUInterval int
 }
 
+type RuntimeInfo struct {
+	UUID     string `json:"UUID,omitempty"`
+	Temp     string `json:"temp,omitempty"`
+	Memory *int64  `json:"memory,omitempty"` 
+	Core *int32  `json:"core,omitempty"` 
+}
+
 func NewPluginServer(mgr *manager.AscendManager, nodeName string, checkIdleVNPUInterval int) (*PluginServer, error) {
 	return &PluginServer{
 		nodeName:              nodeName,
@@ -79,7 +93,118 @@ func NewPluginServer(mgr *manager.AscendManager, nodeName string, checkIdleVNPUI
 	}, nil
 }
 
+// fileSHA256 calculates the SHA256 checksum of the specified file
+func fileSHA256(path string) (string, error) {
+    f, err := os.Open(path)  
+    if err != nil {
+        return "", err
+    }
+    defer f.Close()
+    
+    h := sha256.New()  
+    if _, err := io.Copy(h, f); err != nil {  
+        return "", err
+    }
+    return hex.EncodeToString(h.Sum(nil)), nil  
+}
+
+// Automatically creates directories, sets permissions, and copies core files on the host
+func prepareHostResources() error {
+    klog.Info("Starting host resource preparation for HAMi vNPU core...")
+
+    // 1. Create shared memory directory
+    sharedRegionPath := "/usr/local/hami-shared-region"
+    if err := os.MkdirAll(sharedRegionPath, 0777); err != nil {
+        if !os.IsExist(err) {
+            return fmt.Errorf("failed to create %s: %v", sharedRegionPath, err)
+        }
+    }
+    if err := os.Chmod(sharedRegionPath, 0777); err != nil {
+        return fmt.Errorf("failed to chmod %s: %v", sharedRegionPath, err)
+    }
+    klog.Infof("Successfully prepared directory: %s", sharedRegionPath)
+
+    // 2. Prepare /usr/local/hami-vnpu-core/ directory
+    targetDir := "/usr/local/hami-vnpu-core"
+    if err := os.MkdirAll(targetDir, 0775); err != nil {
+        return fmt.Errorf("failed to create %s: %v", targetDir, err)
+    }
+
+    // Specify the in-container assets directory (can be overridden via environment variable, default follows standard DevicePlugin convention)
+    assetsDir := os.Getenv("HAMI_VNPU_ASSETS_PATH")
+    if assetsDir == "" {
+        assetsDir = "/usr/local/hami-vnpu-core-assets"
+    }
+
+    // Define files to copy: source path in container -> target path on host
+    filesToCopy := map[string]string{
+        "limiter":       filepath.Join(targetDir, "limiter"),
+        "libvnpu.so":    filepath.Join(targetDir, "libvnpu.so"),
+        "ld.so.preload": filepath.Join(targetDir, "ld.so.preload"),
+    }
+
+    for srcName, destPath := range filesToCopy {
+        srcPath := filepath.Join(assetsDir, srcName)
+
+		// File already exists, skip if content is consistent
+		if _, err := os.Stat(destPath); err == nil {
+            srcSum, err1 := fileSHA256(srcPath)
+            dstSum, err2 := fileSHA256(destPath)
+            
+            if err1 == nil && err2 == nil && srcSum == dstSum {
+                klog.Infof("✓ %s already up-to-date, skipping", destPath)
+                continue
+            }
+        }
+
+        if err := copyFile(srcPath, destPath); err != nil {
+            if strings.Contains(err.Error(), "text file busy") {
+                klog.Warningf("⚠ %s is in use by running process, keeping existing version (safe)", destPath)
+                continue
+            }
+            return fmt.Errorf("failed to copy %s: %v", destPath, err)
+        }
+        klog.Infof("✓ Copied %s -> %s", srcPath, destPath)
+    }
+
+    klog.Info("Host resource preparation completed successfully.")
+    return nil
+}
+
+// A standard file copy implementation that preserves the original file permissions
+func copyFile(src, dst string) error {
+    srcFile, err := os.Open(src)
+    if err != nil {
+        return err
+    }
+    defer srcFile.Close()
+
+    dstFile, err := os.Create(dst)
+    if err != nil {
+        return err
+    }
+    defer dstFile.Close()
+
+    if _, err = io.Copy(dstFile, srcFile); err != nil {
+        return err
+    }
+
+    // Sync source file permissions (ensure the limiter binary retains executable permission)
+    srcInfo, err := srcFile.Stat()
+    if err != nil {
+        return err
+    }
+    return os.Chmod(dst, srcInfo.Mode())
+}
+
+
 func (ps *PluginServer) Start() error {
+	// Automatically prepare host environment when the plugin starts
+    if err := prepareHostResources(); err != nil {
+        klog.Errorf("Failed to prepare host resources: %v. vNPU core functionality will be impaired.", err)
+        return err
+    }
+	
 	ps.stopCh = make(chan interface{})
 	err := ps.mgr.UpdateDevice()
 	if err != nil {
@@ -303,33 +428,43 @@ func (ps *PluginServer) watchAndRegister() {
 	}
 }
 
-func (ps *PluginServer) parsePodAnnotation(pod *v1.Pod) ([]int32, []string, error) {
+
+func (ps *PluginServer) parsePodAnnotation(pod *v1.Pod) ([]int32, []string, []*int64, []*int32, error) {
 	anno, ok := pod.Annotations[ps.allocAnno]
 	if !ok {
-		return nil, nil, fmt.Errorf("annotation %s not set", "huawei.com/Ascend")
+		return nil, nil,nil, nil, fmt.Errorf("annotation %s not set", "huawei.com/Ascend")
 	}
-	var rtInfo []ascend.RuntimeInfo
+	var rtInfo []RuntimeInfo
 	err := json.Unmarshal([]byte(anno), &rtInfo)
 	if err != nil {
-		return nil, nil, fmt.Errorf("annotation %s value %s invalid", ps.allocAnno, anno)
+		return nil, nil,nil, nil, fmt.Errorf("annotation %s value %s invalid", ps.allocAnno, anno)
 	}
 	var IDs []int32
 	var temps []string
+	var memories []*int64  
+    var cores []*int32 
+
 	for _, info := range rtInfo {
 		if info.UUID == "" {
 			continue
 		}
 		d := ps.mgr.GetDeviceByUUID(info.UUID)
 		if d == nil {
-			return nil, nil, fmt.Errorf("unknown uuid: %s", info.UUID)
+			return nil, nil, nil, nil, fmt.Errorf("unknown uuid: %s", info.UUID)
 		}
 		IDs = append(IDs, d.PhyID)
 		temps = append(temps, info.Temp)
+		if info.Memory != nil {
+			memories = append(memories, info.Memory)
+		} 
+		if info.Core != nil {
+			cores = append(cores, info.Core)
+		} 
 	}
 	if len(IDs) == 0 {
-		return nil, nil, fmt.Errorf("annotation %s value %s invalid", ps.allocAnno, anno)
+		return nil, nil, nil, nil, fmt.Errorf("annotation %s value %s invalid", ps.allocAnno, anno)
 	}
-	return IDs, temps, nil
+	return IDs, temps, memories, cores, nil
 }
 
 func (ps *PluginServer) apiDevices() []*v1beta1.Device {
@@ -389,28 +524,89 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 		return nil, fmt.Errorf("get pending pod error: %v", err)
 	}
 	resp := v1beta1.ContainerAllocateResponse{}
-	IDs, temps, err := ps.parsePodAnnotation(pod)
+	IDs, temps, memories, cores, err := ps.parsePodAnnotation(pod)
 	if err != nil {
 		return nil, fmt.Errorf("parse pod annotation error: %v", err)
 	}
+	
+	vnpuMode := pod.Annotations[VNPUModeAnnotation]
+	klog.V(4).Infof("Pod %s vnpu mode: %s", pod.Name, vnpuMode)
+	
 	if len(IDs) == 0 {
 		return nil, fmt.Errorf("empty id from pod annotation")
 	}
 	ascendVisibleDevices := fmt.Sprintf("%d", IDs[0])
-	ascendVNPUSpec := ""
 	for i := 1; i < len(IDs); i++ {
 		ascendVisibleDevices = fmt.Sprintf("%s,%d", ascendVisibleDevices, IDs[i])
 	}
-	for i := 0; i < len(temps); i++ {
-		if temps[i] != "" {
-			ascendVNPUSpec = temps[i]
-			break
-		}
-	}
+
 	resp.Envs = make(map[string]string)
 	resp.Envs["ASCEND_VISIBLE_DEVICES"] = ascendVisibleDevices
-	if ascendVNPUSpec != "" {
-		resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
+
+	if vnpuMode == VNPUModeHamiCore {
+		// 1. Handle volume mount injection 
+		var mounts []*v1beta1.Mount
+		// A.Huawei driver and SMI toolchain (Read-Only)
+		driverPaths := []string{
+					"/usr/local/bin/npu-smi",
+					"/etc/ascend_install.info",
+					"/usr/local/Ascend/driver/lib64/driver",
+					"/usr/local/Ascend/driver/version.info",
+			}
+		for _, p := range driverPaths {
+			mounts = append(mounts, &v1beta1.Mount{HostPath: p, ContainerPath: p, ReadOnly: true})
+		}
+
+		mounts = append(mounts, &v1beta1.Mount{
+			HostPath:      "/usr/local/hami-vnpu-core", 
+			ContainerPath: "/hami-vnpu-core",                      
+			ReadOnly:      true,
+		})
+		// B. Inject HAMi library path by mounting /etc/ld.so.preload.
+		mounts = append(mounts, &v1beta1.Mount{
+			HostPath:      "/usr/local/hami-vnpu-core/ld.so.preload", // Template file on host
+			ContainerPath: "/etc/ld.so.preload",                      // Overwrites the target file in container
+			ReadOnly:      true,
+		})
+
+		// C. Shared directory for HAMi compute resource partitioning (Read/Write)
+		mounts = append(mounts, &v1beta1.Mount{
+			HostPath:      "/usr/local/hami-shared-region", 
+			ContainerPath: "/hami-shared-region",
+			ReadOnly:      false,
+		})
+		resp.Mounts = mounts
+		
+		// Set NPU_MEM_QUOTA
+		if len(memories) > 0 && memories[0] != nil {
+			resp.Envs["NPU_MEM_QUOTA"] = strconv.FormatInt(*memories[0], 10)
+			klog.V(4).InfoS("Memory quota set", "value", *memories[0])
+		}
+
+		// Set NPU_PRIORITY
+		if len(cores) > 0 && cores[0] != nil {
+			resp.Envs["NPU_PRIORITY"] = strconv.FormatInt(int64(*cores[0]), 10)
+			klog.V(4).InfoS("Core priority set", "value", *cores[0])
+		}
+
+		// Set GLOBAL_SHM_PATH separated by device ID.
+		if len(IDs) > 0 {
+			resp.Envs["NPU_GLOBAL_SHM_PATH"] = fmt.Sprintf("/hami-shared-region/%d_global_registry", IDs[0])
+			klog.V(5).Infof("Create %d_global_registry", IDs[0])
+		} else {
+			klog.Warningf("No device IDs allocated")
+		}
+	} else {
+		ascendVNPUSpec := ""
+		for i := 0; i < len(temps); i++ {
+			if temps[i] != "" {
+				ascendVNPUSpec = temps[i]
+				break
+			}
+		}
+		if ascendVNPUSpec != "" {
+			resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
+		}
 	}
 	klog.V(5).Infof("allocate response: %v", resp)
 	success = true
