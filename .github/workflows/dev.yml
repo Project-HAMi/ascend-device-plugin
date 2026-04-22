@@ -13,6 +13,8 @@ env:
 jobs:
   build-vnpu:
     runs-on: ubuntu-22.04-arm
+    container:
+      image: ghcr.io/dsfans2014/ascend-device-plugin/ascend-lib:0.1
     steps:
       - run: uname -m
       - uses: actions/checkout@v4
