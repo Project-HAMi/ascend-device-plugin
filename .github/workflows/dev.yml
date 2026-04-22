@@ -11,6 +11,10 @@ env:
   GO_VERSION: "1.22.5"
 
 jobs:
+  build-vnpu:
+    runs-on: ubuntu-22.04-arm64
+    steps:
+      - run: uname -m
   build:
     env:
       IMAGE_NAME: ${{ secrets.IMAGE_NAME || 'projecthami/ascend-device-plugin' }}
