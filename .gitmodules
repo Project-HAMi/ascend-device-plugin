@@ -1,3 +1,6 @@
 [submodule "mind-cluster"]
 	path = mind-cluster
 	url = https://gitcode.com/Ascend/mind-cluster.git
+[submodule "libvnpu"]
+	path = libvnpu
+	url = https://github.com/Project-HAMi/hami-vnpu-core.git
