@@ -12,7 +12,7 @@ env:
 
 jobs:
   build-vnpu:
-    runs-on: ubuntu-22.04-arm64
+    runs-on: ubuntu-22.04-arm
     steps:
       - run: uname -m
   build:
