@@ -11,10 +11,39 @@ env:
   GO_VERSION: "1.22.5"
 
 jobs:
+  build-vnpu:
+    runs-on: ubuntu-22.04-arm
+    container:
+      image: ghcr.io/dsfans2014/ascend-device-plugin/ascend-lib:0.2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release
+        working-directory: ./libvnpu
+      - name: Prepare artifacts for upload
+        run: |
+          mkdir -p ./artifacts
+          cp libvnpu/target/release/limiter ./artifacts/
+          cp libvnpu/target/release/libvnpu.so ./artifacts/
+          echo "/vnpu/libvnpu.so" > ./artifacts/ld.so.preload
+      - name: upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          if-no-files-found: error
+          path: ./artifacts/*
+
   build:
     env:
       IMAGE_NAME: ${{ secrets.IMAGE_NAME || 'projecthami/ascend-device-plugin' }}
     runs-on: ubuntu-latest
+    needs: ["build-vnpu"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,6 +54,12 @@ jobs:
         id: branch-names
         uses: tj-actions/branch-names@v8
 
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./lib/hami-vnpu-core/
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -34,6 +69,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
+          context: .
           platforms: linux/amd64
           push: false
           build-args: |
