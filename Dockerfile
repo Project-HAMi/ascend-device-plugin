@@ -27,6 +27,6 @@ RUN echo "=== Current directory: $(pwd) ===" && ls -la
 RUN echo "=== Searching for limiter binary ===" && \
     find . -name "limiter" -type f 2>/dev/null || echo "limiter not found"
 
-COPY ./lib/hami-vnpu-core/ /usr/local/hami-vnpu-core-assets/
+COPY ./lib/hami-vnpu-core /usr/local/hami-vnpu-core-assets
 
 ENTRYPOINT ["ascend-device-plugin"]
