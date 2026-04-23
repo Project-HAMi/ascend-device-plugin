@@ -59,18 +59,6 @@ jobs:
         with:
           name: build-artifacts
           path: ./lib/hami-vnpu-core/
-      - name: Find all downloaded files
-        run: |
-          echo "=== Search for limiter ==="
-          find . -name "limiter" -type f
-          
-          echo "=== Search for .so files ==="
-          find . -name "*.so" -type f
-          
-          echo "=== Show artifact download location ==="
-          echo "Artifacts are downloaded to: $(pwd)"
-          echo "Content of current directory:"
-          ls -la
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -84,7 +72,6 @@ jobs:
           context: .
           platforms: linux/amd64
           push: false
-          no-cache: true
           build-args: |
             BASE_IMAGE=ubuntu:20.04
             GO_VERSION=${{ env.GO_VERSION }}
