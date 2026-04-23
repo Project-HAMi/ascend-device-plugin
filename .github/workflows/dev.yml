@@ -26,20 +26,24 @@ jobs:
       - name: Build
         run: cargo build --release
         working-directory: ./libvnpu
+      - name: Prepare artifacts for upload
+        run: |
+          mkdir -p ./lib/hami-vnpu-core/
+          cp libvnpu/target/release/limiter ./lib/hami-vnpu-core/
+          cp libvnpu/target/release/libvnpu.so ./lib/hami-vnpu-core/
+          echo "/vnpu/libvnpu.so" > ./lib/hami-vnpu-core/ld.so.preload
       - name: upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           if-no-files-found: error
-          path: |
-            libvnpu/target/release/limiter
-            libvnpu/target/release/libvnpu.so
-
+          path: ./lib/hami-vnpu-core/*
 
   build:
     env:
       IMAGE_NAME: ${{ secrets.IMAGE_NAME || 'projecthami/ascend-device-plugin' }}
     runs-on: ubuntu-latest
+    needs: ["build-vnpu"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,6 +53,12 @@ jobs:
       - name: Get branch names.
         id: branch-names
         uses: tj-actions/branch-names@v8
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: .
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
