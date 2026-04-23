@@ -23,7 +23,7 @@ ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib6
 COPY --from=build /build/ascend-device-plugin /usr/local/bin/ascend-device-plugin
 COPY --from=build /build/lib/hami-vnpu-core/limiter /usr/local/bin/limiter
 
-Add . .
+ADD . .
 RUN echo "=== Current directory: $(pwd) ===" && ls -la
 RUN echo "=== Searching for limiter binary ===" && \
     find . -name "limiter" -type f 2>/dev/null || echo "limiter not found"
