@@ -83,6 +83,7 @@ jobs:
         with:
           platforms: linux/amd64
           push: false
+          no-cache: true
           build-args: |
             BASE_IMAGE=ubuntu:20.04
             GO_VERSION=${{ env.GO_VERSION }}
