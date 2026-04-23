@@ -14,6 +14,8 @@ Memory slicing is supported based on virtualization template, lease available te
 
 This project implements  a soft slicing mechanism based on `libvnpu.so` interception and `limiter` token scheduling, enabling fine-grained resource sharing.  For detailed information, check [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core)
 
+**Note:** `hami-vnpu-core` currently only supports ARM platforms.
+
 ## Prerequisites
 
 [ascend-docker-runtime](https://gitcode.com/Ascend/mind-cluster/tree/master/component/ascend-docker-runtime)

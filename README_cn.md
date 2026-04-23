@@ -12,6 +12,8 @@ Ascend device plugin 是用来支持在 [HAMi](https://github.com/Project-HAMi/H
 
 实现了基于 `libvnpu.so` 拦截和limiter令牌调度的软切分机制，能够实现精细化的资源共享。详细信息请参阅 [hami-vnpu-core](https://www.google.com/search?q=链接)。
 
+**注意:** `hami-vnpu-core`目前只支持ARM平台。
+
 ## 环境要求
 
 部署 [ascend-docker-runtime](https://gitcode.com/Ascend/mind-cluster/tree/master/component/ascend-docker-runtime)
