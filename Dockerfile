@@ -21,8 +21,9 @@ RUN make all
 FROM $BASE_IMAGE
 ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64/common
 COPY --from=build /build/ascend-device-plugin /usr/local/bin/ascend-device-plugin
+COPY --from=build /build/lib/hami-vnpu-core/limiter /usr/local/bin/limiter
 
-COPY . .
+Add . .
 RUN echo "=== Current directory: $(pwd) ===" && ls -la
 RUN echo "=== Searching for limiter binary ===" && \
     find . -name "limiter" -type f 2>/dev/null || echo "limiter not found"
