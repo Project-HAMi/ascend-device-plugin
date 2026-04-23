@@ -59,6 +59,21 @@ jobs:
         with:
           name: build-artifacts
           path: .
+      - name: Find all downloaded files
+        run: |
+          echo "=== All files in workspace ==="
+          ls -laR
+          
+          echo "=== Search for limiter ==="
+          find . -name "limiter" -type f
+          
+          echo "=== Search for .so files ==="
+          find . -name "*.so" -type f
+          
+          echo "=== Show artifact download location ==="
+          echo "Artifacts are downloaded to: $(pwd)"
+          echo "Content of current directory:"
+          ls -la
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
