@@ -16,7 +16,6 @@ jobs:
     container:
       image: ghcr.io/dsfans2014/ascend-device-plugin/ascend-lib:0.2
     steps:
-      - run: uname -m
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -25,8 +24,17 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
       - name: Build
-        run: cargo build
+        run: cargo build --release
         working-directory: ./libvnpu
+      - name: upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          if-no-files-found: error
+          path: |
+            libvnpu/target/release/limiter
+            libvnpu/target/release/libvnpu.so
+
 
   build:
     env:
