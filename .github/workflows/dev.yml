@@ -28,16 +28,16 @@ jobs:
         working-directory: ./libvnpu
       - name: Prepare artifacts for upload
         run: |
-          mkdir -p ./lib/hami-vnpu-core/
-          cp libvnpu/target/release/limiter ./lib/hami-vnpu-core/
-          cp libvnpu/target/release/libvnpu.so ./lib/hami-vnpu-core/
-          echo "/vnpu/libvnpu.so" > ./lib/hami-vnpu-core/ld.so.preload
+          mkdir -p ./artifacts
+          cp libvnpu/target/release/limiter ./artifacts/
+          cp libvnpu/target/release/libvnpu.so ./artifacts/
+          echo "/vnpu/libvnpu.so" > ./artifacts/ld.so.preload
       - name: upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           if-no-files-found: error
-          path: ./lib/hami-vnpu-core/*
+          path: ./artifacts/*
 
   build:
     env:
@@ -58,12 +58,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts
-          path: .
+          path: ./lib/hami-vnpu-core/
       - name: Find all downloaded files
         run: |
-          echo "=== All files in workspace ==="
-          ls -laR
-          
           echo "=== Search for limiter ==="
           find . -name "limiter" -type f
           
