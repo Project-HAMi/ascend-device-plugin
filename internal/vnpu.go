@@ -57,3 +57,27 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	return &yamlData, nil
 }
+
+
+type NodeConfig struct {
+	Name         string `json:"name"`
+	HamiVnpuCore bool   `json:"hami-vnpu-core"`
+	VDeviceCount int    `json:"vDeviceCount"`
+}
+
+type NodeListConfig struct {
+	Nodes []NodeConfig `json:"nodes"`
+}
+
+func LoadNodeConfig(path string) (*NodeListConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var yamlData NodeListConfig
+	err = yaml.Unmarshal(data, &yamlData)
+	if err != nil {
+		return nil, err
+	}
+	return &yamlData, nil
+}

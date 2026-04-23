@@ -89,6 +89,10 @@ spec:
               mountPath: /device-config.yaml
               subPath: device-config.yaml
               readOnly: true
+            - mountPath: /node-config.yaml
+              name: ascend-node-config
+              readOnly: true
+              subPath: node-config.yaml
           env:
             - name: NODE_NAME
               valueFrom:
@@ -122,5 +126,8 @@ spec:
         - name: ascend-config
           configMap:
             name: hami-scheduler-device
+        - name: ascend-node-config
+          configMap:
+            name: hami-device-node-config
       nodeSelector:
         ascend: "on"

@@ -43,6 +43,7 @@ type AscendManager struct {
 	//nodeName string
 	config internal.VNPUConfig
 	devs   []*Device
+	nodeConfig *internal.NodeConfig 
 }
 
 func NewAscendManager() (*AscendManager, error) {
@@ -54,6 +55,25 @@ func NewAscendManager() (*AscendManager, error) {
 		mgr:  mgr,
 		devs: []*Device{},
 	}, nil
+}
+
+func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error {
+	nodeConfigList, err := internal.LoadNodeConfig(nodePath) 
+	if err != nil {
+		klog.Warningf("Failed to load node config from %s: %v", nodePath, err)
+		return err
+	}
+
+	for _, n := range nodeConfigList.Nodes {
+		if n.Name == nodeName {
+			am.nodeConfig = &n
+			klog.Infof("Successfully matched node config for %s: %+v", nodeName, n)
+			return nil
+		}
+	}
+ 
+	klog.Infof("No specific config found for node %s, will use default settings", nodeName)
+	return nil
 }
 
 func (am *AscendManager) LoadConfig(path string) error {
