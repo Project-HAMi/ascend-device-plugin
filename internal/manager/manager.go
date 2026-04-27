@@ -252,3 +252,8 @@ func (am *AscendManager) CleanupIdleVNPUs() error {
 	klog.Infof("Cleanup completed, destroyed %d idle vNPUs", totalCleaned)
 	return nil
 }
+
+
+func (am *AscendManager) GetNodeConfig() *internal.NodeConfig {
+    return am.nodeConfig
+}
