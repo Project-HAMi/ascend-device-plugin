@@ -29,6 +29,17 @@ git submodule update --init --recursive
 - Ascend 驱动版本：≥ 25.5
 - 芯片模式：在昇腾芯片上开启 `device-share` 模式以支持虚拟化。
 
+**开启 `device-share`模式**
+
+**npu-smi set -t device-share -i** *id* **-d** *value*  用于设置指定设备的所有芯片的容器共享模式。
+
+**参数说明**
+
+| 类型    | 描述                                                        |
+| ------- | ----------------------------------------------------------- |
+| *id*    | 设备ID。通过**npu-smi info -l**命令查出的NPU ID即为设备ID。 |
+| *value* | 容器使能状态：分为禁用、使能。默认禁用。0：禁用1：使能      |
+
 ## 编译
 
 ```bash
@@ -53,6 +64,13 @@ kubectl label node {ascend-node} ascend=on
 
 ```bash
 kubectl apply -f ascend-device-configmap.yaml
+```
+
+#### 节点自定义配置说明
+hami-device-node-config 用于对集群中特定节点的显卡虚拟化策略进行精细化控制。
+通过设置 hami-vnpu-core: true，指定节点将启用基于 hami-vnpu-core 的软切分，通过 vDeviceCount 字段，手动定义每个物理芯片上报给 Kubernetes 的虚拟设备数量；否则走基于模板的硬切分。
+```bash
+kubectl apply -f ascend-device-node-configmap.yaml
 ```
 
 ### 部署 RuntimeClass

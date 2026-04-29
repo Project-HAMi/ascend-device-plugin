@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: hami-scheduler
+    app.kubernetes.io/name: hami
+    app.kubernetes.io/instance: hami
+  name: hami-device-node-config
+  namespace: kube-system
+data:
+  node-config.yaml: |-
+    nodes:
+      - name: "cnst-dev-w2"
+        hami-vnpu-core: true
+        vDeviceCount: 8

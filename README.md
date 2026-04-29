@@ -30,6 +30,18 @@ hami-vnpu-core Soft Slicing Requirements:
 
 - **Ascend Driver Version**: ≥ 25.5
 - **Chip Mode**: enable `device-share` mode on Ascend chips for virtualization
+Below is the English translation of the instructions for enabling `device-share` mode:
+
+**Enabling `device-share` Mode**
+
+**npu-smi set -t device-share -i** *id* **-d** *value* This command is used to set the container sharing mode for all chips on a specified device.
+
+**Parameter Description**
+
+| Type | Description |
+| :--- | :--- |
+| *id* | **Device ID**. The NPU ID found by running the **npu-smi info -l** command is the device ID. |
+| *value* | **Container Enable Status**: Options are disabled or enabled. The default is disabled.<br>0: Disabled<br>1: Enabled |
 
 ## Compile
 
@@ -55,6 +67,16 @@ kubectl label node {ascend-node} ascend=on
 
 ```bash
 kubectl apply -f ascend-device-configmap.yaml
+```
+
+#### **Node Custom Configuration Description**
+The `hami-device-node-config` is used to enable hami-vnpu-core for specific nodes within the cluster.
+* By setting `hami-vnpu-core: true`, the specified node will enable soft-partitioning based on `hami-vnpu-core`.
+* Specify the number of virtual devices reported to Kubernetes for each physical chip via the `vDeviceCount` field.
+* Nodes without specific configurations will default to template-based hard-partitioning.
+
+```bash
+kubectl apply -f ascend-device-node-configmap.yaml
 ```
 
 ### Deply RuntimeClass
