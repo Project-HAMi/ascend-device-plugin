@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -35,7 +36,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/klog/v2"
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 	"io"
