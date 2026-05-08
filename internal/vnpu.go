@@ -63,7 +63,6 @@ func LoadConfig(path string) (*Config, error) {
 	return &yamlData, nil
 }
 
-
 type NodeConfig struct {
 	Name         string `json:"name"`
 	HamiVnpuCore bool   `json:"hami-vnpu-core"`

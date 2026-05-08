@@ -39,11 +39,11 @@ type Device struct {
 }
 
 type AscendManager struct {
-	mgr        *devmanager.DeviceManager
-	config     internal.VNPUConfig
+	mgr          *devmanager.DeviceManager
+	config       internal.VNPUConfig
 	globalConfig internal.Config
-	devs       []*Device
-	nodeConfig *internal.NodeConfig
+	devs         []*Device
+	nodeConfig   *internal.NodeConfig
 }
 
 func NewAscendManager() (*AscendManager, error) {
@@ -58,7 +58,7 @@ func NewAscendManager() (*AscendManager, error) {
 }
 
 func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error {
-	nodeConfigList, err := internal.LoadNodeConfig(nodePath) 
+	nodeConfigList, err := internal.LoadNodeConfig(nodePath)
 	if err != nil {
 		klog.Warningf("Failed to load node config from %s: %v", nodePath, err)
 		return err
@@ -71,7 +71,7 @@ func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error 
 			return nil
 		}
 	}
- 
+
 	klog.Infof("No specific config found for node %s, will use default settings", nodeName)
 	return nil
 }
@@ -254,9 +254,8 @@ func (am *AscendManager) CleanupIdleVNPUs() error {
 	return nil
 }
 
-
 func (am *AscendManager) GetNodeConfig() *internal.NodeConfig {
-    return am.nodeConfig
+	return am.nodeConfig
 }
 
 func (am *AscendManager) IsHamiVnpuCore() bool {
