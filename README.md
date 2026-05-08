@@ -141,6 +141,41 @@ spec:
           huawei.com/Ascend910B3-core: "40"     # Request 40% core
 ```
 
+
+The soft partitioning mechanism supports requesting multiple virtual devices within a same Pod. When performing multi-card parallel inference (e.g., using vLLM), the value of `--gpu-memory-utilization` must not exceed the ratio of the "container's total memory limit" to the "sum of physical memory of the selected cards".
+
+**Example: Enabling 2-Card Tensor Parallelism (TP=2) with vLLM**
+
+Assume each physical card has **64Gi** of memory, and you plan to use **32Gi** on each of the 2 cards (totaling 64Gi):
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vllm-npu-2card
+  annotations:
+    huawei.com/vnpu-mode: 'hami-core' # Enable hami-vnpu-core soft partitioning
+spec:
+  containers:
+    - name: vllm-container
+      image: vllm-ascend:latest
+      command: ["/bin/sh", "-c"]
+      args: 
+        - |
+          vllm serve /model/Qwen3-0.6B \
+          --host 0.0.0.0 \
+          --port 8002 \
+          --enforce-eager \
+          --tensor-parallel-size 2 \
+          --gpu-memory-utilization 0.5   # Key parameter: Total requested memory 64Gi / Total physical memory 128Gi = 0.5
+      resources:
+        limits:
+          huawei.com/Ascend910B3: "2"           # Request 2 virtual devices for parallel computation
+          huawei.com/Ascend910B3-memory: "65536" # Total memory limit for the container (64GiB combined across 2 cards)
+          huawei.com/Ascend910B3-core: "50"     
+```
+
+
 ### Usage in volcano
 
 Volcano must be installed prior to usage, for more information see [here](https://github.com/volcano-sh/volcano/tree/master/docs/user-guide/how_to_use_vnpu.md)

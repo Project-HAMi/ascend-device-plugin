@@ -137,7 +137,38 @@ spec:
           huawei.com/Ascend910B3-core: "40"      # 请求 40% 的算力
 ```
 
+软切分机制支持在单个 Pod 中申请多个虚拟设备，比如在进行多卡并行推理（如使用 vLLM）时，--gpu-memory-utilization 的值不能大于“容器总显存上限”占“所选卡物理显存总和”的比例。
 
+**示例：使用 vLLM 开启 2 卡张量并行 (TP=2)**
+
+假设单块物理卡显存为 **64Gi**，计划在 2 块卡上各使用 **32Gi**（总计 64Gi）：
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vllm-npu-2card
+  annotations:
+    huawei.com/vnpu-mode: 'hami-core' # 启用 hami-vnpu-core 软切分
+spec:
+  containers:
+    - name: vllm-container
+      image: vllm-ascend:latest
+      command: ["/bin/sh", "-c"]
+      args: 
+        - |
+          vllm serve /model/Qwen3-0.6B \
+          --host 0.0.0.0 \
+          --port 8002 \
+          --enforce-eager \
+          --tensor-parallel-size 2 \
+          --gpu-memory-utilization 0.5   # 关键参数：总申请显存 64G / 总物理显存 128G = 0.5
+      resources:
+        limits:
+          huawei.com/Ascend910B3: "2"           # 申请 2 块虚拟设备进行并行计算
+          huawei.com/Ascend910B3-memory: "65536" # 容器可用的总显存上限（2卡合计 64GiB）
+          huawei.com/Ascend910B3-core: "50"       
+```
 
 ### 在 volcano 中使用
 
