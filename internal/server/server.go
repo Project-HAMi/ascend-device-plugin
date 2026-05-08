@@ -117,18 +117,18 @@ func prepareHostResources() error {
     sharedRegionPath := "/usr/local/hami-shared-region"
     if err := os.MkdirAll(sharedRegionPath, 0777); err != nil {
         if !os.IsExist(err) {
-            return fmt.Errorf("failed to create %s: %v", sharedRegionPath, err)
+            return fmt.Errorf("failed to create %s: %w", sharedRegionPath, err)
         }
     }
     if err := os.Chmod(sharedRegionPath, 0777); err != nil {
-        return fmt.Errorf("failed to chmod %s: %v", sharedRegionPath, err)
+        return fmt.Errorf("failed to chmod %s: %w", sharedRegionPath, err)
     }
     klog.Infof("Successfully prepared directory: %s", sharedRegionPath)
 
     // 2. Prepare /usr/local/hami-vnpu-core/ directory
     targetDir := "/usr/local/hami-vnpu-core"
     if err := os.MkdirAll(targetDir, 0775); err != nil {
-        return fmt.Errorf("failed to create %s: %v", targetDir, err)
+        return fmt.Errorf("failed to create %s: %w", targetDir, err)
     }
 
     // Specify the in-container assets directory (can be overridden via environment variable, default follows standard DevicePlugin convention)
@@ -163,7 +163,7 @@ func prepareHostResources() error {
                 klog.Warningf("⚠ %s is in use by running process, keeping existing version (safe)", destPath)
                 continue
             }
-            return fmt.Errorf("failed to copy %s: %v", destPath, err)
+            return fmt.Errorf("failed to copy %s: %w", destPath, err)
         }
         klog.Infof("✓ Copied %s -> %s", srcPath, destPath)
     }
@@ -377,7 +377,7 @@ func (ps *PluginServer) registerHAMi() error {
 		if strings.HasPrefix(device.Type, Ascend910Prefix) {
 			NetworkID, err := ps.getDeviceNetworkID(i, device.Type)
 			if err != nil {
-				return fmt.Errorf("get networkID error: %v", err)
+				return fmt.Errorf("get networkID error: %w", err)
 			}
 			device.CustomInfo = map[string]any{
 				"NetworkID": NetworkID,
@@ -398,11 +398,11 @@ func (ps *PluginServer) registerHAMi() error {
 	
 	node, err := util.GetNode(ps.nodeName)
 	if err != nil {
-		return fmt.Errorf("get node %s error: %v", ps.nodeName, err)
+		return fmt.Errorf("get node %s error: %w", ps.nodeName, err)
 	}
 	err = util.PatchNodeAnnotations(node, annos)
 	if err != nil {
-		return fmt.Errorf("patch node %s annotations error: %v", ps.nodeName, err)
+		return fmt.Errorf("patch node %s annotations error: %w", ps.nodeName, err)
 	}
 	klog.V(5).Infof("patch node %s annotations: %v", ps.nodeName, annos)
 	return nil
@@ -446,7 +446,7 @@ func (ps *PluginServer) parsePodAnnotation(pod *v1.Pod) ([]int32, []string, []*i
 	var rtInfo []RuntimeInfo
 	err := json.Unmarshal([]byte(anno), &rtInfo)
 	if err != nil {
-		return nil, nil,nil, nil, fmt.Errorf("annotation %s value %s invalid", ps.allocAnno, anno)
+		return nil, nil,nil, nil, fmt.Errorf("annotation %s value %s invalid: %w", ps.allocAnno, anno, err)
 	}
 	var IDs []int32
 	var temps []string
@@ -530,12 +530,12 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 	pod, err := util.GetPendingPod(ctx, ps.nodeName)
 	if err != nil {
 		klog.Errorf("get pending pod error: %v", err)
-		return nil, fmt.Errorf("get pending pod error: %v", err)
+		return nil, fmt.Errorf("get pending pod error: %w", err)
 	}
 	resp := v1beta1.ContainerAllocateResponse{}
 	IDs, temps, memories, cores, err := ps.parsePodAnnotation(pod)
 	if err != nil {
-		return nil, fmt.Errorf("parse pod annotation error: %v", err)
+		return nil, fmt.Errorf("parse pod annotation error: %w", err)
 	}
 	
 	vnpuMode := pod.Annotations[VNPUModeAnnotation]
