@@ -4,27 +4,22 @@
 
 ## Introduction
 
-This Ascend device plugin is implemented for [HAMi](https://github.com/Project-HAMi/HAMi) and [volcano](https://github.com/volcano-sh/volcano) scheduling.
+This Ascend device plugin is implemented for NPU-Slicing for [HAMi](https://github.com/Project-HAMi/HAMi) and [volcano](https://github.com/volcano-sh/volcano). It supports two modes:
 
 #### 1. Template-based Hard Slicing (vNPU)
 
-Memory slicing is supported based on virtualization template, lease available template is automatically used. For detailed information, check [template](./ascend-device-configmap.yaml)
+Memory slicing is supported based on virtualization template, least available template is automatically used. For detailed information, check [template](https://github.com/Project-HAMi/ascend-device-plugin/blob/main/ascend-device-configmap.yaml)
 
 #### 2. Soft Slicing with Runtime Interception (hami-vnpu-core)
 
 This project implements  a soft slicing mechanism based on `libvnpu.so` interception and `limiter` token scheduling, enabling fine-grained resource sharing.  For detailed information, check [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core)
 
-**Note:** `hami-vnpu-core` currently only supports ARM platforms.
+**Note 1:** `hami-vnpu-core` currently only supports ARM platforms.
+**Note 2:** `hami-vnpu-core` currently only supports HAMi scheduler.
 
 ## Prerequisites
 
 [ascend-docker-runtime](https://gitcode.com/Ascend/mind-cluster/tree/master/component/ascend-docker-runtime)
-
-update submodule:
-
-```bash
-git submodule update --init --recursive
-```
 
 hami-vnpu-core Soft Slicing Requirements:
 
@@ -45,14 +40,14 @@ Below is the English translation of the instructions for enabling `device-share`
 
 ## Compile
 
+update submodule:
+
 ```bash
-make all
+git submodule update --init --recursive
 ```
 
-### Build
-
 ```bash
-docker buildx build -t $IMAGE_NAME .
+make all
 ```
 
 ## Deployment
@@ -63,35 +58,39 @@ docker buildx build -t $IMAGE_NAME .
 kubectl label node {ascend-node} ascend=on
 ```
 
-### Deploy ConfigMap
-
-```bash
-kubectl apply -f ascend-device-configmap.yaml
-```
-
-#### **Node Custom Configuration Description**
-The `hami-device-node-config` is used to enable hami-vnpu-core for specific nodes within the cluster.
-* By setting `hami-vnpu-core: true`, the specified node will enable soft-partitioning based on `hami-vnpu-core`.
-* Specify the number of virtual devices reported to Kubernetes for each physical chip via the `vDeviceCount` field.
-* Nodes without specific configurations will default to template-based hard-partitioning.
-
-```bash
-kubectl apply -f ascend-device-node-configmap.yaml
-```
-
 ### Deply RuntimeClass
 
 ```bash
-kubectl apply -f ascend-runtimeclass.yaml
+kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-runtimeclass.yaml
+```
+
+### Deploy ConfigMap
+
+This configMap is used for global configurations, like resourceName, mode, templates.
+* By setting `hamiVnpuCore: true` at the top level, **all nodes** will enable soft-partitioning based on `hami-vnpu-core`.
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
+```
+
+**Note:** You can choose to ignore this step if this configMap already exists.
+
+
+#### (Optional) **Node Custom Configuration Description**
+
+The `hami-device-node-config` is used to enable or override hami-vnpu-core for specific nodes within the cluster. Node-level settings take higher priority than the global `hamiVnpuCore` switch.
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-node-configmap.yaml
 ```
 
 ### Deploy `ascend-device-plugin`
 
 ```bash
-kubectl apply -f ascend-device-plugin.yaml
+kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-plugin.yaml
 ```
 
-If scheduling Ascend devices in HAMi, simply set `devices.ascend.enabled` to true when deploying HAMi, and the ConfigMap and `ascend-device-plugin` will be automatically deployed. refer https://github.com/Project-HAMi/HAMi/blob/master/charts/hami/README.md#huawei-ascend
+## Usage
 
 If you require HAMi to automatically add the `runtimeClassName` configuration to Pods requesting Ascend resources (this is disabled by default), you should set `devices.ascend.runtimeClassName` value to **a non-empty string** in HAMi’s `values.yaml` file, ensuring it matches the name of the `RuntimeClass` resource. For example:
 
@@ -100,8 +99,6 @@ devices:
   ascend:
     runtimeClassName: ascend
 ```
-
-## Usage
 
 To exclusively use an entire card or request multiple cards, you only need to set the corresponding resourceName. If multiple tasks need to share the same NPU, you need to set the corresponding resource request to 1 and configure the appropriate ResourceMemoryName.
 
@@ -119,7 +116,7 @@ To exclusively use an entire card or request multiple cards, you only need to se
           huawei.com/Ascend910B-memory: "4096"
 ```
 
-For more examples, see [examples](./examples/)
+For more examples, see [examples](https://github.com/Project-HAMi/ascend-device-plugin/tree/main/examples)
 
 ### Soft Slicing Configuration (HAMi)
 

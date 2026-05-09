@@ -42,7 +42,8 @@ type VNPUConfig struct {
 }
 
 type Config struct {
-	VNPUs []VNPUConfig `json:"vnpus"`
+	HamiVnpuCore bool         `json:"hamiVnpuCore,omitempty"`
+	VNPUs        []VNPUConfig `json:"vnpus"`
 }
 
 func LoadConfig(path string) (*Config, error) {
