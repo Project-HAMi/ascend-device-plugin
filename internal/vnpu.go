@@ -41,9 +41,13 @@ type VNPUConfig struct {
 	Templates          []Template `json:"templates"`
 }
 
-type Config struct {
+type VNPUsConfig struct {
 	HamiVnpuCore bool         `json:"hamiVnpuCore,omitempty"`
-	VNPUs        []VNPUConfig `json:"vnpus"`
+	Configs      []VNPUConfig `json:"configs"`
+}
+
+type Config struct {
+	VNPUs VNPUsConfig `json:"vnpus"`
 }
 
 func LoadConfig(path string) (*Config, error) {
