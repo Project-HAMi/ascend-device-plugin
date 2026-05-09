@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/instance: hami
 data:
   device-config.yaml: |-
+    hamiVnpuCore: false
     vnpus:
     - chipName: 910A
       commonWord: Ascend910A
