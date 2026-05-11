@@ -59,7 +59,7 @@ type PluginServer struct {
 	allocAnno             string
 	toAllocDeviceAnno     string
 	grpcServer            *grpc.Server
-	mgr                   *manager.AscendManager
+	mgr                   manager.Manager
 	socket                string
 	stopCh                chan interface{}
 	healthCh              chan int32
@@ -73,7 +73,7 @@ type RuntimeInfo struct {
 	Core   *int32 `json:"core,omitempty"`
 }
 
-func NewPluginServer(mgr *manager.AscendManager, nodeName string, checkIdleVNPUInterval int) (*PluginServer, error) {
+func NewPluginServer(mgr manager.Manager, nodeName string, checkIdleVNPUInterval int) (*PluginServer, error) {
 	commonWord := mgr.CommonWord()
 	server := &PluginServer{
 		commonWord:            commonWord,

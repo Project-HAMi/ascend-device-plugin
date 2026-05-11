@@ -39,6 +39,20 @@ type Device struct {
 	Health   bool
 }
 
+// Manager defines the interface that PluginServer depends on.
+// AscendManager implements this interface.
+type Manager interface {
+	CommonWord() string
+	ResourceName() string
+	VDeviceCount() int
+	UpdateDevice() error
+	GetDevices() []*Device
+	GetDeviceByUUID(UUID string) *Device
+	GetUnHealthIDs() []int32
+	CleanupIdleVNPUs() error
+	IsHamiVnpuCore() bool
+}
+
 type AscendManager struct {
 	mu           sync.RWMutex
 	mgr          *devmanager.DeviceManager
