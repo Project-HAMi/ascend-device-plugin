@@ -34,7 +34,6 @@ jobs:
         working-directory: ./libvnpu
       - name: Prepare artifacts for upload
         run: |
-          chmod +x libvnpu/target/release/limiter
           mkdir -p ./artifacts
           cp libvnpu/target/release/limiter ./artifacts/
           cp libvnpu/target/release/libvnpu.so ./artifacts/
