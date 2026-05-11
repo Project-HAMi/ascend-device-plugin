@@ -70,7 +70,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 ### 部署 ConfigMap
 
 该 ConfigMap 用于全局配置，包括 resourceName、模式、模板等。
-* 在顶层设置 `hamiVnpuCore: true`，**所有节点**将启用基于 `hami-vnpu-core` 的软切分。
+* 在 `vnpus` 下设置 `hamiVnpuCore: true`，**所有节点**会向调度器声明基于 `hami-vnpu-core` 的软切分能力（可被 `hami-device-node-config` 按节点覆盖）。
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
@@ -80,7 +80,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 #### （可选）节点自定义配置说明
 
-`hami-device-node-config` 用于对集群中特定节点的 hami-vnpu-core 进行启用或覆盖。节点级配置的优先级高于全局 `hamiVnpuCore` 开关。
+`hami-device-node-config` 用于对集群中特定节点的 hami-vnpu-core 进行启用或覆盖。节点级配置的优先级高于全局 `vnpus.hamiVnpuCore` 开关。
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-node-configmap.yaml
@@ -108,6 +108,8 @@ devices:
 
 ### 在 HAMi 中使用
 
+**HAMi 与 vNPU 模式说明：** 只有为 Pod 配置了注解 `huawei.com/vnpu-mode: hami-core` 时，设备插件才会按 **软切分**（`libvnpu` / `hami-vnpu-core` 的挂载与环境变量）处理。**未添加**该注解的任务仍走 **原有 vNPU** 方案（虚拟化模板与 `ASCEND_VNPU_SPECS` 等）。两种路径不同。当集群里 Ascend 节点 **只有** 面向软切分的部署或调度预期（例如节点均按 `hami-vnpu-core` 配置、工作负载预期都使用软切分）时，**未**设置 `vnpu-mode=hami-core` 的任务可能一直处于 **Pending**，因为其仍按旧版 vNPU 申请与分配逻辑，可能与当前节点暴露的资源或调度匹配方式不一致。
+
 ```yaml
 ...
     containers:
@@ -123,6 +125,8 @@ devices:
 更多示例请参阅 [examples](https://github.com/Project-HAMi/ascend-device-plugin/tree/main/examples)
 
 ### 软切分配置 (HAMi)
+
+需要 **软切分** 时请显式加上下文中的注解；不加则仍为 **模板硬切分 vNPU**（与上一节「在 HAMi 中使用」中的说明一致）。
 
 ```yaml
 apiVersion: v1
