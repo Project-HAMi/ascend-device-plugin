@@ -67,7 +67,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 ### Deploy ConfigMap
 
 This configMap is used for global configurations, like resourceName, mode, templates.
-* By setting `hamiVnpuCore: true` at the top level, **all nodes** will enable soft-partitioning based on `hami-vnpu-core`.
+* Under `vnpus`, set `hamiVnpuCore: true` so **all nodes** advertise soft-partitioning based on `hami-vnpu-core` to the scheduler (unless overridden per node in `hami-device-node-config`).
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
@@ -78,7 +78,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 #### (Optional) **Node Custom Configuration Description**
 
-The `hami-device-node-config` is used to enable or override hami-vnpu-core for specific nodes within the cluster. Node-level settings take higher priority than the global `hamiVnpuCore` switch.
+The `hami-device-node-config` is used to enable or override hami-vnpu-core for specific nodes within the cluster. Node-level settings take higher priority than the global `vnpus.hamiVnpuCore` switch.
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-node-configmap.yaml
@@ -104,8 +104,14 @@ To exclusively use an entire card or request multiple cards, you only need to se
 
 ### Usage in HAMi
 
+**How HAMi chooses soft vs legacy vNPU:** The device plugin applies **soft slicing** (`libvnpu` / `hami-vnpu-core` mounts and environment) **only** when the Pod sets `huawei.com/vnpu-mode: hami-core`. Pods **without** this annotation still follow the **original vNPU** path (virtualization templates and `ASCEND_VNPU_SPECS`). These two paths are different. If your cluster effectively has **only** soft-slicing–oriented Ascend capacity (for example every node is configured for `hami-vnpu-core` and workloads are expected to use soft slicing), Pods that **omit** `vnpu-mode=hami-core` may remain **Pending** because they still request the legacy vNPU allocation model, which may not match what those nodes expose or how the scheduler pairs Pods to nodes.
+
 ```yaml
 ...
+metadata:
+  name: ascend-soft-slice-pod
+  annotations:
+    huawei.com/vnpu-mode: 'hami-core' # Enables hami-vnpu-core soft-segmentation for this pod
     containers:
     - name: npu_pod
       ...
@@ -119,6 +125,8 @@ To exclusively use an entire card or request multiple cards, you only need to se
 For more examples, see [examples](https://github.com/Project-HAMi/ascend-device-plugin/tree/main/examples)
 
 ### Soft Slicing Configuration (HAMi)
+
+Use the annotation below whenever you intend **soft** slicing; omitting it keeps **template-based vNPU** behavior (see the note under [Usage in HAMi](#usage-in-hami)).
 
 ```yaml
 apiVersion: v1
