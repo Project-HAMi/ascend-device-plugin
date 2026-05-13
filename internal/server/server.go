@@ -18,6 +18,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -25,25 +27,22 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/Project-HAMi/HAMi/pkg/device"
-
-	// "github.com/Project-HAMi/HAMi/pkg/device/ascend"
-	"crypto/sha256"
-	"encoding/hex"
-	"path/filepath"
-
-	"github.com/Project-HAMi/HAMi/pkg/util"
-	"github.com/Project-HAMi/HAMi/pkg/util/nodelock"
-	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
+
+	// "github.com/Project-HAMi/HAMi/pkg/device/ascend"
+	"github.com/Project-HAMi/HAMi/pkg/device"
+	"github.com/Project-HAMi/HAMi/pkg/device-plugin/nvidiadevice/nvinternal/plugin"
+	"github.com/Project-HAMi/HAMi/pkg/util"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 )
 
 const (
@@ -62,6 +61,7 @@ var (
 )
 
 type PluginServer struct {
+	commonWord            string
 	nodeName              string
 	registerAnno          string
 	handshakeAnno         string
@@ -84,7 +84,8 @@ type RuntimeInfo struct {
 
 func NewPluginServer(mgr *manager.AscendManager, nodeName string, checkIdleVNPUInterval int) (*PluginServer, error) {
 	commonWord := mgr.CommonWord()
-	return &PluginServer{
+	server := &PluginServer{
+		commonWord:            commonWord,
 		nodeName:              nodeName,
 		registerAnno:          fmt.Sprintf("hami.io/node-register-%s", commonWord),
 		handshakeAnno:         fmt.Sprintf("hami.io/node-handshake-%s", commonWord),
@@ -96,7 +97,10 @@ func NewPluginServer(mgr *manager.AscendManager, nodeName string, checkIdleVNPUI
 		stopCh:                make(chan interface{}),
 		healthCh:              make(chan int32),
 		checkIdleVNPUInterval: checkIdleVNPUInterval,
-	}, nil
+	}
+	// enable calling hami methods
+	device.InRequestDevices[commonWord] = server.toAllocDeviceAnno
+	return server, nil
 }
 
 // fileSHA256 calculates the SHA256 checksum of the specified file
@@ -739,22 +743,25 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 	success := false
 	var pod *v1.Pod
 	defer func() {
-		lockerr := nodelock.ReleaseNodeLock(ps.nodeName, NodeLockAscend, pod, success)
-		if lockerr != nil {
-			klog.Errorf("failed to release lock:%s", lockerr.Error())
+		if pod == nil {
+			return
+		}
+		if success {
+			ps.podAllocationTrySuccess(pod)
+		} else {
+			ps.podAllocationFailed(pod)
 		}
 	}()
-	pod, err := util.GetPendingPod(ctx, ps.nodeName)
-	if err != nil {
-		klog.Errorf("get pending pod error: %v", err)
-		return nil, fmt.Errorf("get pending pod error: %w", err)
-	}
-	klog.Infof("allocating for pod %s/%s", pod.Namespace, pod.Name)
 
 	responses := v1beta1.AllocateResponse{}
-
-	// resp := v1beta1.ContainerAllocateResponse{}
 	for _, req := range reqs.ContainerRequests {
+		pod, err := util.GetPendingPod(ctx, ps.nodeName)
+		if err != nil {
+			klog.Errorf("get pending pod error: %v", err)
+			return nil, fmt.Errorf("get pending pod error: %w", err)
+		}
+		klog.Infof("allocating for pod %s/%s", pod.Namespace, pod.Name)
+
 		containerDevs, err := ps.getNextContainerDevices(pod)
 		if err != nil {
 			return nil, fmt.Errorf("get next container devices: %w", err)
@@ -784,4 +791,17 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 
 func (ps *PluginServer) PreStartContainer(context.Context, *v1beta1.PreStartContainerRequest) (*v1beta1.PreStartContainerResponse, error) {
 	return &v1beta1.PreStartContainerResponse{}, nil
+}
+
+// podAllocationTrySuccess checks if all containers of this pod have been
+// allocated. If so, it sets bind-phase to "success" and releases the node
+// lock; otherwise it returns without setting bind-phase or releasing the lock,
+// waiting for the next Allocate call.
+func (ps *PluginServer) podAllocationTrySuccess(pod *v1.Pod) {
+	plugin.PodAllocationTrySuccess(ps.nodeName, ps.commonWord, NodeLockAscend, pod)
+}
+
+// podAllocationFailed sets bind-phase to "failed" and releases the node lock.
+func (ps *PluginServer) podAllocationFailed(pod *v1.Pod) {
+	plugin.PodAllocationFailed(ps.nodeName, pod, NodeLockAscend)
 }
