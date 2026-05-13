@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Project-HAMi/HAMi/pkg/device"
+
 	// "github.com/Project-HAMi/HAMi/pkg/device/ascend"
 	"crypto/sha256"
 	"encoding/hex"
@@ -65,6 +66,7 @@ type PluginServer struct {
 	registerAnno          string
 	handshakeAnno         string
 	allocAnno             string
+	toAllocDeviceAnno     string
 	grpcServer            *grpc.Server
 	mgr                   *manager.AscendManager
 	socket                string
@@ -81,14 +83,16 @@ type RuntimeInfo struct {
 }
 
 func NewPluginServer(mgr *manager.AscendManager, nodeName string, checkIdleVNPUInterval int) (*PluginServer, error) {
+	commonWord := mgr.CommonWord()
 	return &PluginServer{
 		nodeName:              nodeName,
-		registerAnno:          fmt.Sprintf("hami.io/node-register-%s", mgr.CommonWord()),
-		handshakeAnno:         fmt.Sprintf("hami.io/node-handshake-%s", mgr.CommonWord()),
-		allocAnno:             fmt.Sprintf("huawei.com/%s", mgr.CommonWord()),
+		registerAnno:          fmt.Sprintf("hami.io/node-register-%s", commonWord),
+		handshakeAnno:         fmt.Sprintf("hami.io/node-handshake-%s", commonWord),
+		allocAnno:             fmt.Sprintf("huawei.com/%s", commonWord),
+		toAllocDeviceAnno:     fmt.Sprintf("hami.io/%s-devices-to-allocate", commonWord),
 		grpcServer:            grpc.NewServer(),
 		mgr:                   mgr,
-		socket:                path.Join(v1beta1.DevicePluginPath, fmt.Sprintf("%s.sock", mgr.CommonWord())),
+		socket:                path.Join(v1beta1.DevicePluginPath, fmt.Sprintf("%s.sock", commonWord)),
 		stopCh:                make(chan interface{}),
 		healthCh:              make(chan int32),
 		checkIdleVNPUInterval: checkIdleVNPUInterval,
@@ -437,6 +441,220 @@ func (ps *PluginServer) watchAndRegister() {
 	}
 }
 
+// buildContainerAllocateResponse constructs the ContainerAllocateResponse for
+// the given container devices. It resolves UUIDs to PhyIDs and looks up vNPU
+// template names from the allocAnno annotation.
+func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, containerDevs device.ContainerDevices) (*v1beta1.ContainerAllocateResponse, error) {
+	rtInfoLookup, err := ps.buildRuntimeInfoLookup(pod)
+	if err != nil {
+		return nil, fmt.Errorf("build runtimeInfo lookup: %w", err)
+	}
+
+	resp := &v1beta1.ContainerAllocateResponse{}
+
+	var (
+		IDs            []int32
+		memories       []*int64
+		cores          []*int32
+		ascendVNPUSpec string
+	)
+
+	for _, dev := range containerDevs {
+		d := ps.mgr.GetDeviceByUUID(dev.UUID)
+		if d == nil {
+			return nil, fmt.Errorf("unknown uuid: %s", dev.UUID)
+		}
+		IDs = append(IDs, d.PhyID)
+
+		if info, ok := rtInfoLookup[dev.UUID]; ok {
+			if ascendVNPUSpec == "" && info.Temp != "" {
+				ascendVNPUSpec = info.Temp
+			}
+			if info.Memory != nil {
+				memories = append(memories, info.Memory)
+			}
+			if info.Core != nil {
+				cores = append(cores, info.Core)
+			}
+		}
+	}
+
+	if len(IDs) == 0 {
+		return nil, fmt.Errorf("annotation %s value invalid", ps.allocAnno)
+	}
+	ascendVisibleDevices := fmt.Sprintf("%d", IDs[0])
+	for i := 1; i < len(IDs); i++ {
+		ascendVisibleDevices = fmt.Sprintf("%s,%d", ascendVisibleDevices, IDs[i])
+	}
+	resp.Envs = make(map[string]string)
+	resp.Envs["ASCEND_VISIBLE_DEVICES"] = ascendVisibleDevices
+
+	vnpuMode := pod.Annotations[VNPUModeAnnotation]
+	klog.V(4).Infof("Pod %s vnpu mode: %s", pod.Name, vnpuMode)
+	if vnpuMode == VNPUModeHamiCore {
+		// 1. Handle volume mount injection
+		var mounts []*v1beta1.Mount
+		// A.Huawei driver and SMI toolchain (Read-Only)
+		driverPaths := []string{
+			"/usr/local/bin/npu-smi",
+			"/etc/ascend_install.info",
+			"/usr/local/Ascend/driver/lib64/driver",
+			"/usr/local/Ascend/driver/version.info",
+		}
+		for _, p := range driverPaths {
+			mounts = append(mounts, &v1beta1.Mount{HostPath: p, ContainerPath: p, ReadOnly: true})
+		}
+
+		mounts = append(mounts, &v1beta1.Mount{
+			HostPath:      "/usr/local/hami-vnpu-core",
+			ContainerPath: "/hami-vnpu-core",
+			ReadOnly:      true,
+		})
+		// B. Inject HAMi library path by mounting /etc/ld.so.preload.
+		mounts = append(mounts, &v1beta1.Mount{
+			HostPath:      "/usr/local/hami-vnpu-core/ld.so.preload", // Template file on host
+			ContainerPath: "/etc/ld.so.preload",                      // Overwrites the target file in container
+			ReadOnly:      true,
+		})
+
+		// C. Shared directory for HAMi compute resource partitioning (Read/Write)
+		mounts = append(mounts, &v1beta1.Mount{
+			HostPath:      "/usr/local/hami-shared-region",
+			ContainerPath: "/hami-shared-region",
+			ReadOnly:      false,
+		})
+		resp.Mounts = mounts
+
+		// Set NPU_MEM_QUOTA
+		if len(memories) > 0 && memories[0] != nil {
+			resp.Envs["NPU_MEM_QUOTA"] = strconv.FormatInt(*memories[0], 10)
+			klog.V(4).InfoS("Memory quota set", "value", *memories[0])
+		}
+
+		// Set NPU_PRIORITY
+		if len(cores) > 0 && cores[0] != nil {
+			resp.Envs["NPU_PRIORITY"] = strconv.FormatInt(int64(*cores[0]), 10)
+			klog.V(4).InfoS("Core priority set", "value", *cores[0])
+		}
+
+		// Set GLOBAL_SHM_PATH separated by device ID.
+		if len(IDs) > 0 {
+			resp.Envs["NPU_GLOBAL_SHM_PATH"] = fmt.Sprintf("/hami-shared-region/%d_global_registry", IDs[0])
+			klog.V(5).Infof("Create %d_global_registry", IDs[0])
+		} else {
+			klog.Warningf("No device IDs allocated")
+		}
+	} else {
+		if ascendVNPUSpec != "" {
+			resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
+		}
+	}
+	return resp, nil
+}
+
+// getNextContainerDevices reads the toAllocDeviceAnno annotation and returns
+// the devices of the first container that still has pending allocations.
+func (ps *PluginServer) getNextContainerDevices(pod *v1.Pod) (device.ContainerDevices, error) {
+	anno, ok := pod.Annotations[ps.toAllocDeviceAnno]
+	if !ok {
+		return nil, fmt.Errorf("annotation %s not found", ps.toAllocDeviceAnno)
+	}
+	podSingleDev, err := decodePodSingleDevice(anno)
+	if err != nil {
+		return nil, fmt.Errorf("decode annotation %s: %w", ps.toAllocDeviceAnno, err)
+	}
+	for _, ctrDevice := range podSingleDev {
+		if len(ctrDevice) > 0 {
+			return ctrDevice, nil
+		}
+	}
+	return nil, fmt.Errorf("no pending device allocation in annotation %s", ps.toAllocDeviceAnno)
+}
+
+// buildTempLookup reads the allocAnno annotation and returns a map from
+// device UUID to its vNPU template name.
+func (ps *PluginServer) buildRuntimeInfoLookup(pod *v1.Pod) (map[string]RuntimeInfo, error) {
+	anno, ok := pod.Annotations[ps.allocAnno]
+	if !ok {
+		// The annotation may not exist for non-vNPU scenarios; return empty lookup.
+		return nil, fmt.Errorf("annotation %s not set", ps.allocAnno)
+	}
+	var rtInfo []RuntimeInfo
+	if err := json.Unmarshal([]byte(anno), &rtInfo); err != nil {
+		return nil, fmt.Errorf("annotation %s value %s invalid: %w", ps.allocAnno, anno, err)
+	}
+	lookup := make(map[string]RuntimeInfo, len(rtInfo))
+	for _, info := range rtInfo {
+		if info.UUID != "" {
+			lookup[info.UUID] = info
+		}
+	}
+	return lookup, nil
+}
+
+// eraseCurrentContainerAnnotation erases the current container's devices from
+// the toAllocDeviceAnno annotation, so the next Allocate call will advance
+// to the next container.
+func (ps *PluginServer) eraseCurrentContainerAnnotation(pod *v1.Pod) error {
+	anno, ok := pod.Annotations[ps.toAllocDeviceAnno]
+	if !ok {
+		return fmt.Errorf("annotation %s not found", ps.toAllocDeviceAnno)
+	}
+	podSingleDev, err := decodePodSingleDevice(anno)
+	if err != nil {
+		return fmt.Errorf("decode annotation %s: %w", ps.toAllocDeviceAnno, err)
+	}
+	res := make(device.PodSingleDevice, 0, len(podSingleDev))
+	found := false
+	for _, val := range podSingleDev {
+		if found {
+			res = append(res, val)
+		} else {
+			if len(val) > 0 {
+				found = true
+				res = append(res, device.ContainerDevices{})
+			} else {
+				res = append(res, val)
+			}
+		}
+	}
+	klog.V(5).Infof("After erase annotation, remaining devices: %v", res)
+	newAnnoValue := device.EncodePodSingleDevice(res)
+	newAnnos := map[string]string{
+		ps.toAllocDeviceAnno: newAnnoValue,
+	}
+	if err := util.PatchPodAnnotations(pod, newAnnos); err != nil {
+		return err
+	}
+	// Update in-memory pod annotations so subsequent getNextContainerDevices
+	// calls within the same Allocate see the erased state.
+	pod.Annotations[ps.toAllocDeviceAnno] = newAnnoValue
+	return nil
+}
+
+// decodePodSingleDevice decodes a single annotation value string into a
+// PodSingleDevice. It reuses HAMi's DecodeContainerDevices for per-device
+// parsing. The format is:
+//
+//	<ctr1-dev1>,<fields>:<ctr1-dev2>,<fields>;<ctr2-dev1>,<fields>;...
+func decodePodSingleDevice(str string) (device.PodSingleDevice, error) {
+	if len(str) == 0 {
+		return device.PodSingleDevice{}, nil
+	}
+	pd := make(device.PodSingleDevice, 0)
+	for _, s := range strings.Split(str, device.OnePodMultiContainerSplitSymbol) {
+		cd, err := device.DecodeContainerDevices(s)
+		if err != nil {
+			return nil, err
+		}
+		if len(cd) == 0 {
+			continue
+		}
+		pd = append(pd, cd)
+	}
+	return pd, nil
+}
+
 func (ps *PluginServer) parsePodAnnotation(pod *v1.Pod) ([]int32, []string, []*int64, []*int32, error) {
 	anno, ok := pod.Annotations[ps.allocAnno]
 	if !ok {
@@ -531,94 +749,37 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 		klog.Errorf("get pending pod error: %v", err)
 		return nil, fmt.Errorf("get pending pod error: %w", err)
 	}
-	resp := v1beta1.ContainerAllocateResponse{}
-	IDs, temps, memories, cores, err := ps.parsePodAnnotation(pod)
-	if err != nil {
-		return nil, fmt.Errorf("parse pod annotation error: %w", err)
+	klog.Infof("allocating for pod %s/%s", pod.Namespace, pod.Name)
+
+	responses := v1beta1.AllocateResponse{}
+
+	// resp := v1beta1.ContainerAllocateResponse{}
+	for _, req := range reqs.ContainerRequests {
+		containerDevs, err := ps.getNextContainerDevices(pod)
+		if err != nil {
+			return nil, fmt.Errorf("get next container devices: %w", err)
+		}
+		klog.Infof("containerDevs: %+v", containerDevs)
+
+		if len(containerDevs) != len(req.DevicesIDs) {
+			return nil, fmt.Errorf("device number not matched: annotation has %d, request has %d", len(containerDevs), len(req.DevicesIDs))
+		}
+
+		resp, err := ps.buildContainerAllocateResponse(pod, containerDevs)
+		if err != nil {
+			return nil, fmt.Errorf("build container allocate response: %w", err)
+		}
+
+		if err := ps.eraseCurrentContainerAnnotation(pod); err != nil {
+			klog.Errorf("erase current container annotation error: %v", err)
+			return nil, fmt.Errorf("erase current container annotation: %w", err)
+		}
+
+		responses.ContainerResponses = append(responses.ContainerResponses, resp)
 	}
-
-	vnpuMode := pod.Annotations[VNPUModeAnnotation]
-	klog.V(4).Infof("Pod %s vnpu mode: %s", pod.Name, vnpuMode)
-
-	if len(IDs) == 0 {
-		return nil, fmt.Errorf("empty id from pod annotation")
-	}
-	ascendVisibleDevices := fmt.Sprintf("%d", IDs[0])
-	for i := 1; i < len(IDs); i++ {
-		ascendVisibleDevices = fmt.Sprintf("%s,%d", ascendVisibleDevices, IDs[i])
-	}
-
-	resp.Envs = make(map[string]string)
-	resp.Envs["ASCEND_VISIBLE_DEVICES"] = ascendVisibleDevices
-
-	if vnpuMode == VNPUModeHamiCore {
-		// 1. Handle volume mount injection
-		var mounts []*v1beta1.Mount
-		// A.Huawei driver and SMI toolchain (Read-Only)
-		driverPaths := []string{
-			"/usr/local/bin/npu-smi",
-			"/etc/ascend_install.info",
-			"/usr/local/Ascend/driver/lib64/driver",
-			"/usr/local/Ascend/driver/version.info",
-		}
-		for _, p := range driverPaths {
-			mounts = append(mounts, &v1beta1.Mount{HostPath: p, ContainerPath: p, ReadOnly: true})
-		}
-
-		mounts = append(mounts, &v1beta1.Mount{
-			HostPath:      "/usr/local/hami-vnpu-core",
-			ContainerPath: "/hami-vnpu-core",
-			ReadOnly:      true,
-		})
-		// B. Inject HAMi library path by mounting /etc/ld.so.preload.
-		mounts = append(mounts, &v1beta1.Mount{
-			HostPath:      "/usr/local/hami-vnpu-core/ld.so.preload", // Template file on host
-			ContainerPath: "/etc/ld.so.preload",                      // Overwrites the target file in container
-			ReadOnly:      true,
-		})
-
-		// C. Shared directory for HAMi compute resource partitioning (Read/Write)
-		mounts = append(mounts, &v1beta1.Mount{
-			HostPath:      "/usr/local/hami-shared-region",
-			ContainerPath: "/hami-shared-region",
-			ReadOnly:      false,
-		})
-		resp.Mounts = mounts
-
-		// Set NPU_MEM_QUOTA
-		if len(memories) > 0 && memories[0] != nil {
-			resp.Envs["NPU_MEM_QUOTA"] = strconv.FormatInt(*memories[0], 10)
-			klog.V(4).InfoS("Memory quota set", "value", *memories[0])
-		}
-
-		// Set NPU_PRIORITY
-		if len(cores) > 0 && cores[0] != nil {
-			resp.Envs["NPU_PRIORITY"] = strconv.FormatInt(int64(*cores[0]), 10)
-			klog.V(4).InfoS("Core priority set", "value", *cores[0])
-		}
-
-		// Set GLOBAL_SHM_PATH separated by device ID.
-		if len(IDs) > 0 {
-			resp.Envs["NPU_GLOBAL_SHM_PATH"] = fmt.Sprintf("/hami-shared-region/%d_global_registry", IDs[0])
-			klog.V(5).Infof("Create %d_global_registry", IDs[0])
-		} else {
-			klog.Warningf("No device IDs allocated")
-		}
-	} else {
-		ascendVNPUSpec := ""
-		for i := 0; i < len(temps); i++ {
-			if temps[i] != "" {
-				ascendVNPUSpec = temps[i]
-				break
-			}
-		}
-		if ascendVNPUSpec != "" {
-			resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
-		}
-	}
-	klog.V(5).Infof("allocate response: %v", resp)
+	klog.V(5).Infof("allocate response: %+v", responses.ContainerResponses)
 	success = true
-	return &v1beta1.AllocateResponse{ContainerResponses: []*v1beta1.ContainerAllocateResponse{&resp}}, nil
+	return &responses, nil
 }
 
 func (ps *PluginServer) PreStartContainer(context.Context, *v1beta1.PreStartContainerRequest) (*v1beta1.PreStartContainerResponse, error) {
