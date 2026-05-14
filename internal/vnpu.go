@@ -63,15 +63,15 @@ func LoadConfig(path string) (*Config, error) {
 	return &yamlData, nil
 }
 
-
 type NodeConfig struct {
-	Name         string `json:"name"`
-	HamiVnpuCore bool   `json:"hami-vnpu-core"`
-	VDeviceCount int    `json:"vDeviceCount"`
+	Name          string  `json:"name" yaml:"name"`
+	HamiVnpuCore  bool    `json:"hami-vnpu-core" yaml:"hami-vnpu-core"`
+	VDeviceCount  int     `json:"vDeviceCount" yaml:"vDeviceCount"`
+	FilterDevices []int32 `json:"filterDevices,omitempty" yaml:"filterDevices,omitempty"`
 }
 
 type NodeListConfig struct {
-	Nodes []NodeConfig `json:"nodes"`
+	Nodes []NodeConfig `json:"nodes" yaml:"nodes"`
 }
 
 func LoadNodeConfig(path string) (*NodeListConfig, error) {
