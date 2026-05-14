@@ -445,15 +445,8 @@ func (ps *PluginServer) watchAndRegister() {
 	}
 }
 
-// buildContainerAllocateResponse constructs the ContainerAllocateResponse for
-// the given container devices. It resolves UUIDs to PhyIDs and looks up vNPU
-// template names from the allocAnno annotation.
-func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, containerDevs device.ContainerDevices) (*v1beta1.ContainerAllocateResponse, error) {
-	rtInfoLookup, err := ps.buildRuntimeInfoLookup(pod)
-	if err != nil {
-		return nil, fmt.Errorf("build runtimeInfo lookup: %w", err)
-	}
-
+// buildContainerAllocateResponse builds the allocate response for a single container.
+func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, containerDevs device.ContainerDevices, rtInfoLookup map[string]RuntimeInfo) (*v1beta1.ContainerAllocateResponse, error) {
 	resp := &v1beta1.ContainerAllocateResponse{}
 
 	var (
@@ -556,31 +549,37 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, containerDev
 	return resp, nil
 }
 
-// getNextContainerDevices reads the toAllocDeviceAnno annotation and returns
-// the devices of the first container that still has pending allocations.
-func (ps *PluginServer) getNextContainerDevices(pod *v1.Pod) (device.ContainerDevices, error) {
-	anno, ok := pod.Annotations[ps.toAllocDeviceAnno]
-	if !ok {
-		return nil, fmt.Errorf("annotation %s not found", ps.toAllocDeviceAnno)
-	}
-	podSingleDev, err := decodePodSingleDevice(anno)
-	if err != nil {
-		return nil, fmt.Errorf("decode annotation %s: %w", ps.toAllocDeviceAnno, err)
-	}
-	for _, ctrDevice := range podSingleDev {
-		if len(ctrDevice) > 0 {
-			return ctrDevice, nil
+// popNextContainerDevices finds and erases the first non-empty containerDevices
+// from podSingleDev. It mutates podSingleDev in place.
+func (ps *PluginServer) popNextContainerDevices(podSingleDev device.PodSingleDevice) (device.ContainerDevices, error) {
+	for i, ctrDevs := range podSingleDev {
+		if len(ctrDevs) > 0 {
+			podSingleDev[i] = device.ContainerDevices{}
+			return ctrDevs, nil
 		}
 	}
-	return nil, fmt.Errorf("no pending device allocation in annotation %s", ps.toAllocDeviceAnno)
+	return nil, fmt.Errorf("no pending device allocation found")
 }
 
-// buildTempLookup reads the allocAnno annotation and returns a map from
-// device UUID to its vNPU template name.
+// decodeDeviceAnnotations decodes the pod's device allocation annotation
+// (registered as hami.io/<commonword>-devices-to-allocate in InRequestDevices)
+// into a PodSingleDevice.
+func (ps *PluginServer) decodeDeviceAnnotations(pod *v1.Pod) (device.PodSingleDevice, error) {
+	pdevices, err := device.DecodePodDevices(device.InRequestDevices, pod.Annotations)
+	if err != nil {
+		return nil, err
+	}
+	pd, ok := pdevices[ps.commonWord]
+	if !ok {
+		return nil, fmt.Errorf("device %s not found in pod annotations", ps.commonWord)
+	}
+	return pd, nil
+}
+
+// buildRuntimeInfoLookup builds a UUID-to-RuntimeInfo lookup from the pod's allocAnno annotation.
 func (ps *PluginServer) buildRuntimeInfoLookup(pod *v1.Pod) (map[string]RuntimeInfo, error) {
 	anno, ok := pod.Annotations[ps.allocAnno]
 	if !ok {
-		// The annotation may not exist for non-vNPU scenarios; return empty lookup.
 		return nil, fmt.Errorf("annotation %s not set", ps.allocAnno)
 	}
 	var rtInfo []RuntimeInfo
@@ -596,105 +595,19 @@ func (ps *PluginServer) buildRuntimeInfoLookup(pod *v1.Pod) (map[string]RuntimeI
 	return lookup, nil
 }
 
-// eraseCurrentContainerAnnotation erases the current container's devices from
-// the toAllocDeviceAnno annotation, so the next Allocate call will advance
-// to the next container.
-func (ps *PluginServer) eraseCurrentContainerAnnotation(pod *v1.Pod) error {
-	anno, ok := pod.Annotations[ps.toAllocDeviceAnno]
-	if !ok {
-		return fmt.Errorf("annotation %s not found", ps.toAllocDeviceAnno)
-	}
-	podSingleDev, err := decodePodSingleDevice(anno)
-	if err != nil {
-		return fmt.Errorf("decode annotation %s: %w", ps.toAllocDeviceAnno, err)
-	}
-	res := make(device.PodSingleDevice, 0, len(podSingleDev))
-	found := false
-	for _, val := range podSingleDev {
-		if found {
-			res = append(res, val)
-		} else {
-			if len(val) > 0 {
-				found = true
-				res = append(res, device.ContainerDevices{})
-			} else {
-				res = append(res, val)
-			}
-		}
-	}
-	klog.V(5).Infof("After erase annotation, remaining devices: %v", res)
-	newAnnoValue := device.EncodePodSingleDevice(res)
+// patchErasedAnnotation patches the pod's device annotation with the given
+// podSingleDev. It also updates pod.Annotations in place.
+func (ps *PluginServer) patchErasedAnnotation(pod *v1.Pod, podSingleDev device.PodSingleDevice) error {
+	klog.V(5).Infof("After erase annotation, remaining devices: %v", podSingleDev)
+	newAnnoValue := device.EncodePodSingleDevice(podSingleDev)
 	newAnnos := map[string]string{
 		ps.toAllocDeviceAnno: newAnnoValue,
 	}
 	if err := util.PatchPodAnnotations(pod, newAnnos); err != nil {
 		return err
 	}
-	// Update in-memory pod annotations so subsequent getNextContainerDevices
-	// calls within the same Allocate see the erased state.
 	pod.Annotations[ps.toAllocDeviceAnno] = newAnnoValue
 	return nil
-}
-
-// decodePodSingleDevice decodes a single annotation value string into a
-// PodSingleDevice. It reuses HAMi's DecodeContainerDevices for per-device
-// parsing. The format is:
-//
-//	<ctr1-dev1>,<fields>:<ctr1-dev2>,<fields>;<ctr2-dev1>,<fields>;...
-func decodePodSingleDevice(str string) (device.PodSingleDevice, error) {
-	if len(str) == 0 {
-		return device.PodSingleDevice{}, nil
-	}
-	pd := make(device.PodSingleDevice, 0)
-	for _, s := range strings.Split(str, device.OnePodMultiContainerSplitSymbol) {
-		cd, err := device.DecodeContainerDevices(s)
-		if err != nil {
-			return nil, err
-		}
-		if len(cd) == 0 {
-			continue
-		}
-		pd = append(pd, cd)
-	}
-	return pd, nil
-}
-
-func (ps *PluginServer) parsePodAnnotation(pod *v1.Pod) ([]int32, []string, []*int64, []*int32, error) {
-	anno, ok := pod.Annotations[ps.allocAnno]
-	if !ok {
-		return nil, nil, nil, nil, fmt.Errorf("annotation %s not set", "huawei.com/Ascend")
-	}
-	var rtInfo []RuntimeInfo
-	err := json.Unmarshal([]byte(anno), &rtInfo)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("annotation %s value %s invalid: %w", ps.allocAnno, anno, err)
-	}
-	var IDs []int32
-	var temps []string
-	var memories []*int64
-	var cores []*int32
-
-	for _, info := range rtInfo {
-		if info.UUID == "" {
-			continue
-		}
-		d := ps.mgr.GetDeviceByUUID(info.UUID)
-		if d == nil {
-			return nil, nil, nil, nil, fmt.Errorf("unknown uuid: %s", info.UUID)
-		}
-		IDs = append(IDs, d.PhyID)
-		temps = append(temps, info.Temp)
-		if info.Memory != nil {
-			memories = append(memories, info.Memory)
-		}
-		if info.Core != nil {
-			cores = append(cores, info.Core)
-		}
-	}
-	if len(IDs) == 0 {
-		return nil, nil, nil, nil, fmt.Errorf("annotation %s value %s invalid", ps.allocAnno, anno)
-	}
-	return IDs, temps, memories, cores, nil
 }
 
 func (ps *PluginServer) apiDevices() []*v1beta1.Device {
@@ -753,16 +666,30 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 		}
 	}()
 
+	var err error
+	pod, err = util.GetPendingPod(ctx, ps.nodeName)
+	if err != nil {
+		klog.Errorf("get pending pod error: %v", err)
+		return nil, fmt.Errorf("get pending pod error: %w", err)
+	}
+	klog.Infof("allocating for pod %s/%s", pod.Namespace, pod.Name)
+
+	rtInfoLookup, err := ps.buildRuntimeInfoLookup(pod)
+	if err != nil {
+		return nil, fmt.Errorf("build runtimeInfo lookup: %w", err)
+	}
+
+	podSingleDev, err := ps.decodeDeviceAnnotations(pod)
+	if err != nil {
+		return nil, fmt.Errorf("decode device annotations: %w", err)
+	}
+
+	// kubelet may call Allocate multiple times for the same pod, each time with
+	// a subset of containers. Use pop semantics to match each request with its
+	// corresponding containerDevices.
 	responses := v1beta1.AllocateResponse{}
 	for _, req := range reqs.ContainerRequests {
-		pod, err := util.GetPendingPod(ctx, ps.nodeName)
-		if err != nil {
-			klog.Errorf("get pending pod error: %v", err)
-			return nil, fmt.Errorf("get pending pod error: %w", err)
-		}
-		klog.Infof("allocating for pod %s/%s", pod.Namespace, pod.Name)
-
-		containerDevs, err := ps.getNextContainerDevices(pod)
+		containerDevs, err := ps.popNextContainerDevices(podSingleDev)
 		if err != nil {
 			return nil, fmt.Errorf("get next container devices: %w", err)
 		}
@@ -772,18 +699,19 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 			return nil, fmt.Errorf("device number not matched: annotation has %d, request has %d", len(containerDevs), len(req.DevicesIDs))
 		}
 
-		resp, err := ps.buildContainerAllocateResponse(pod, containerDevs)
+		resp, err := ps.buildContainerAllocateResponse(pod, containerDevs, rtInfoLookup)
 		if err != nil {
 			return nil, fmt.Errorf("build container allocate response: %w", err)
 		}
-
-		if err := ps.eraseCurrentContainerAnnotation(pod); err != nil {
-			klog.Errorf("erase current container annotation error: %v", err)
-			return nil, fmt.Errorf("erase current container annotation: %w", err)
-		}
-
 		responses.ContainerResponses = append(responses.ContainerResponses, resp)
 	}
+
+	// Patch the annotation with the in-memory erased podSingleDev.
+	if err := ps.patchErasedAnnotation(pod, podSingleDev); err != nil {
+		klog.Errorf("erase allocated containers annotation error: %v", err)
+		return nil, fmt.Errorf("erase allocated containers annotation: %w", err)
+	}
+
 	klog.V(5).Infof("allocate response: %+v", responses.ContainerResponses)
 	success = true
 	return &responses, nil
