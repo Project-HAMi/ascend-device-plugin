@@ -329,7 +329,7 @@ func (ps *PluginServer) serve() error {
 	// Wait for server to start by launching a blocking connexion
 	conn, err := ps.dial(ps.socket, 5*time.Second)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to dial device plugin socket: %w", err)
 	}
 	_ = conn.Close()
 
@@ -339,7 +339,7 @@ func (ps *PluginServer) serve() error {
 func (ps *PluginServer) registerKubelet() error {
 	conn, err := ps.dial(v1beta1.KubeletSocket, 5*time.Second)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to dial kubelet socket: %w", err)
 	}
 	defer func(conn *grpc.ClientConn) {
 		_ = conn.Close()
@@ -356,7 +356,7 @@ func (ps *PluginServer) registerKubelet() error {
 
 	_, err = client.Register(context.Background(), reqt)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to register device plugin with kubelet: %w", err)
 	}
 	return nil
 }
