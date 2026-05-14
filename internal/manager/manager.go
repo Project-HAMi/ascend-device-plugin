@@ -51,7 +51,7 @@ type AscendManager struct {
 func NewAscendManager() (*AscendManager, error) {
 	mgr, err := devmanager.AutoInit("", 30)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to auto-init device manager: %w", err)
 	}
 	return &AscendManager{
 		mgr:  mgr,
@@ -81,11 +81,11 @@ func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error 
 func (am *AscendManager) LoadConfig(path string) error {
 	config, err := internal.LoadConfig(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load config from %s: %w", path, err)
 	}
 	chipInfo, err := am.mgr.GetValidChipInfo()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get valid chip info: %w", err)
 	}
 	if chipInfo.Type != "Ascend" {
 		return fmt.Errorf("chip type is not Ascend")
