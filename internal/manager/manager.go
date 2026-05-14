@@ -218,7 +218,7 @@ func (am *AscendManager) CleanupIdleVNPUs() error {
 
 	_, IDs, err := am.mgr.GetDeviceList()
 	if err != nil {
-		return fmt.Errorf("failed to get device list: %v", err)
+		return fmt.Errorf("failed to get device list: %w", err)
 	}
 	klog.Infof("Found %d devices to check for idle vNPUs,%+v", len(IDs), IDs)
 
