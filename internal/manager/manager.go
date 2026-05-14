@@ -78,6 +78,27 @@ func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error 
 	return nil
 }
 
+func (am *AscendManager) filteredCardSet() map[int32]struct{} {
+	if am.nodeConfig == nil || len(am.nodeConfig.FilterDevices) == 0 {
+		return nil
+	}
+
+	filtered := make(map[int32]struct{}, len(am.nodeConfig.FilterDevices))
+	for _, cardID := range am.nodeConfig.FilterDevices {
+		filtered[cardID] = struct{}{}
+	}
+	return filtered
+}
+
+func (am *AscendManager) shouldIncludeCard(cardID int32) bool {
+	filtered := am.filteredCardSet()
+	if len(filtered) == 0 {
+		return true
+	}
+	_, ok := filtered[cardID]
+	return ok
+}
+
 func (am *AscendManager) LoadConfig(path string) error {
 	config, err := internal.LoadConfig(path)
 	if err != nil {
@@ -143,6 +164,10 @@ func (am *AscendManager) UpdateDevice() error {
 			klog.Errorf("failed to get card id from device id: %v", err)
 			return err
 		}
+		if !am.shouldIncludeCard(cardID) {
+			klog.V(4).Infof("skip filtered cardID=%d logicID=%d phyID=%d deviceID=%d", cardID, ID, phyID, deviceID)
+			continue
+		}
 		uuid, err := am.mgr.GetDieID(ID, dcmi.VDIE)
 		if err != nil {
 			klog.Errorf("failed to get uuid from device id: %v", err)
@@ -193,7 +218,18 @@ func (am *AscendManager) GetIDs() []int32 {
 		klog.Errorf("failed to get device list: %v", err)
 		return nil
 	}
-	return IDs
+	filteredIDs := make([]int32, 0, len(IDs))
+	for _, id := range IDs {
+		cardID, _, err := am.mgr.GetCardIDDeviceID(id)
+		if err != nil {
+			klog.Warningf("failed to get card/device ID for logic ID %d: %v", id, err)
+			continue
+		}
+		if am.shouldIncludeCard(cardID) {
+			filteredIDs = append(filteredIDs, id)
+		}
+	}
+	return filteredIDs
 }
 
 func (am *AscendManager) GetUnHealthIDs() []int32 {
@@ -203,6 +239,14 @@ func (am *AscendManager) GetUnHealthIDs() []int32 {
 	}
 	var unhealthy []int32
 	for _, d := range IDs {
+		cardID, _, err := am.mgr.GetCardIDDeviceID(d)
+		if err != nil {
+			klog.Warningf("failed to get card/device ID for logic ID %d: %v", d, err)
+			continue
+		}
+		if !am.shouldIncludeCard(cardID) {
+			continue
+		}
 		healthCode, err := am.mgr.GetDeviceHealth(d)
 		if err != nil {
 			klog.Warningf("failed to get device health for %d: %v", d, err)
@@ -229,6 +273,10 @@ func (am *AscendManager) CleanupIdleVNPUs() error {
 		cardID, deviceID, err := am.mgr.GetCardIDDeviceID(logicID)
 		if err != nil {
 			klog.Warningf("failed to get card/device ID for logic ID %d: %v", logicID, err)
+			continue
+		}
+		if !am.shouldIncludeCard(cardID) {
+			klog.V(4).Infof("skip cleanup on filtered cardID=%d logicID=%d deviceID=%d", cardID, logicID, deviceID)
 			continue
 		}
 		// Obtain all vNPU information on this device
