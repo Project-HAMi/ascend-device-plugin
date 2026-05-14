@@ -190,6 +190,7 @@ func (am *AscendManager) GetDeviceByUUID(UUID string) *Device {
 func (am *AscendManager) GetIDs() []int32 {
 	_, IDs, err := am.mgr.GetDeviceList()
 	if err != nil {
+		klog.Errorf("failed to get device list: %v", err)
 		return nil
 	}
 	return IDs
@@ -204,6 +205,7 @@ func (am *AscendManager) GetUnHealthIDs() []int32 {
 	for _, d := range IDs {
 		healthCode, err := am.mgr.GetDeviceHealth(d)
 		if err != nil {
+			klog.Warningf("failed to get device health for %d: %v", d, err)
 			continue
 		}
 		if healthCode != 0 {
