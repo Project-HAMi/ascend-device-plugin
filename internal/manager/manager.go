@@ -19,6 +19,7 @@ package manager
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"ascend-common/devmanager"
 	"ascend-common/devmanager/dcmi"
@@ -39,6 +40,7 @@ type Device struct {
 }
 
 type AscendManager struct {
+	mu           sync.RWMutex
 	mgr          *devmanager.DeviceManager
 	config       internal.VNPUConfig
 	globalConfig internal.Config
@@ -129,7 +131,7 @@ func (am *AscendManager) UpdateDevice() error {
 		return err
 	}
 
-	am.devs = make([]*Device, 0, len(IDs))
+	newDevs := make([]*Device, 0, len(IDs))
 	for _, ID := range IDs {
 		phyID, err := am.mgr.GetPhysicIDFromLogicID(ID)
 		if err != nil {
@@ -151,7 +153,7 @@ func (am *AscendManager) UpdateDevice() error {
 			klog.Errorf("failed to get device health: %v", err)
 			return err
 		}
-		am.devs = append(am.devs, &Device{
+		newDevs = append(newDevs, &Device{
 			UUID:     uuid,
 			LogicID:  ID,
 			PhyID:    phyID,
@@ -162,14 +164,21 @@ func (am *AscendManager) UpdateDevice() error {
 			Health:   health == 0,
 		})
 	}
+	am.mu.Lock()
+	am.devs = newDevs
+	am.mu.Unlock()
 	return nil
 }
 
 func (am *AscendManager) GetDevices() []*Device {
+	am.mu.RLock()
+	defer am.mu.RUnlock()
 	return am.devs
 }
 
 func (am *AscendManager) GetDeviceByUUID(UUID string) *Device {
+	am.mu.RLock()
+	defer am.mu.RUnlock()
 	for _, dev := range am.devs {
 		if dev.UUID == UUID {
 			return dev
