@@ -534,13 +534,9 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, containerDev
 			klog.V(4).InfoS("Core priority set", "value", *cores[0])
 		}
 
-		// Set GLOBAL_SHM_PATH separated by device ID.
-		if len(IDs) > 0 {
-			resp.Envs["NPU_GLOBAL_SHM_PATH"] = fmt.Sprintf("/hami-shared-region/%d_global_registry", IDs[0])
-			klog.V(5).Infof("Create %d_global_registry", IDs[0])
-		} else {
-			klog.Warningf("No device IDs allocated")
-		}
+		// Set GLOBAL_SHM_PATH based on the first device ID.
+		resp.Envs["NPU_GLOBAL_SHM_PATH"] = fmt.Sprintf("/hami-shared-region/%d_global_registry", IDs[0])
+		klog.V(5).Infof("Create %d_global_registry", IDs[0])
 	} else {
 		if ascendVNPUSpec != "" {
 			resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
