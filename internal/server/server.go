@@ -293,6 +293,11 @@ func (ps *PluginServer) serve() error {
 		lastCrashTime := time.Now()
 		restartCount := 0
 		for {
+			select {
+			case <-ps.stopCh:
+				return
+			default:
+			}
 			klog.Infof("Starting GRPC server for '%s'", resourceName)
 			err := ps.grpcServer.Serve(sock)
 			if err == nil {
