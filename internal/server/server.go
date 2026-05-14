@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -30,6 +31,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
@@ -168,7 +170,7 @@ func prepareHostResources() error {
 		}
 
 		if err := copyFile(srcPath, destPath); err != nil {
-			if strings.Contains(err.Error(), "text file busy") {
+			if errors.Is(err, syscall.ETXTBSY) {
 				klog.Warningf("⚠ %s is in use by running process, keeping existing version (safe)", destPath)
 				continue
 			}
