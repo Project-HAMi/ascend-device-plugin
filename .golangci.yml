@@ -1,4 +1,13 @@
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - stylecheck
+
 issues:
+  exclude-dirs:
+    - mind-cluster
+    - libvnpu
   exclude-rules:
     - path: internal/server/server\.go
       linters:

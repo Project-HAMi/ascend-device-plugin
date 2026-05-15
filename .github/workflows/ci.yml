@@ -28,19 +28,25 @@ jobs:
       - name: install Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.0"
+          go-version: ${{ env.GO_VERSION }}
       - name: go tidy
+        env:
+          GOTOOLCHAIN: auto
         run: |
+          find mind-cluster/component -maxdepth 1 -type d ! -name "npu-exporter" ! -name "ascend-common"  ! -name "component" -exec rm -rf {} \;
           go mod download github.com/Project-HAMi/HAMi
           go get github.com/Project-HAMi/ascend-device-plugin/internal/server
           go get huawei.com/npu-exporter
           go get huawei.com/npu-exporter/utils/logger@v0.0.0-00010101000000-000000000000
-          make tidy
+          go mod tidy
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@v6
+        env:
+          GOTOOLCHAIN: auto
         with:
-          version: v2.8.0
-          install-mode: goinstall
+          version: v1.64.5
+          install-mode: binary
+          args: --timeout=10m
 
   build-vnpu:
     runs-on: ubuntu-22.04-arm
