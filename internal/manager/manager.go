@@ -19,6 +19,7 @@ package manager
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"ascend-common/devmanager"
 	"ascend-common/devmanager/dcmi"
@@ -39,17 +40,18 @@ type Device struct {
 }
 
 type AscendManager struct {
-	mgr        *devmanager.DeviceManager
-	config     internal.VNPUConfig
+	mu           sync.RWMutex
+	mgr          *devmanager.DeviceManager
+	config       internal.VNPUConfig
 	globalConfig internal.Config
-	devs       []*Device
-	nodeConfig *internal.NodeConfig
+	devs         []*Device
+	nodeConfig   *internal.NodeConfig
 }
 
 func NewAscendManager() (*AscendManager, error) {
 	mgr, err := devmanager.AutoInit("", 30)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to auto-init device manager: %w", err)
 	}
 	return &AscendManager{
 		mgr:  mgr,
@@ -58,7 +60,7 @@ func NewAscendManager() (*AscendManager, error) {
 }
 
 func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error {
-	nodeConfigList, err := internal.LoadNodeConfig(nodePath) 
+	nodeConfigList, err := internal.LoadNodeConfig(nodePath)
 	if err != nil {
 		klog.Warningf("Failed to load node config from %s: %v", nodePath, err)
 		return err
@@ -71,7 +73,7 @@ func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error 
 			return nil
 		}
 	}
- 
+
 	klog.Infof("No specific config found for node %s, will use default settings", nodeName)
 	return nil
 }
@@ -79,11 +81,11 @@ func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error 
 func (am *AscendManager) LoadConfig(path string) error {
 	config, err := internal.LoadConfig(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load config from %s: %w", path, err)
 	}
 	chipInfo, err := am.mgr.GetValidChipInfo()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get valid chip info: %w", err)
 	}
 	if chipInfo.Type != "Ascend" {
 		return fmt.Errorf("chip type is not Ascend")
@@ -129,7 +131,7 @@ func (am *AscendManager) UpdateDevice() error {
 		return err
 	}
 
-	am.devs = make([]*Device, 0, len(IDs))
+	newDevs := make([]*Device, 0, len(IDs))
 	for _, ID := range IDs {
 		phyID, err := am.mgr.GetPhysicIDFromLogicID(ID)
 		if err != nil {
@@ -151,7 +153,7 @@ func (am *AscendManager) UpdateDevice() error {
 			klog.Errorf("failed to get device health: %v", err)
 			return err
 		}
-		am.devs = append(am.devs, &Device{
+		newDevs = append(newDevs, &Device{
 			UUID:     uuid,
 			LogicID:  ID,
 			PhyID:    phyID,
@@ -162,14 +164,21 @@ func (am *AscendManager) UpdateDevice() error {
 			Health:   health == 0,
 		})
 	}
+	am.mu.Lock()
+	am.devs = newDevs
+	am.mu.Unlock()
 	return nil
 }
 
 func (am *AscendManager) GetDevices() []*Device {
+	am.mu.RLock()
+	defer am.mu.RUnlock()
 	return am.devs
 }
 
 func (am *AscendManager) GetDeviceByUUID(UUID string) *Device {
+	am.mu.RLock()
+	defer am.mu.RUnlock()
 	for _, dev := range am.devs {
 		if dev.UUID == UUID {
 			return dev
@@ -181,6 +190,7 @@ func (am *AscendManager) GetDeviceByUUID(UUID string) *Device {
 func (am *AscendManager) GetIDs() []int32 {
 	_, IDs, err := am.mgr.GetDeviceList()
 	if err != nil {
+		klog.Errorf("failed to get device list: %v", err)
 		return nil
 	}
 	return IDs
@@ -195,6 +205,7 @@ func (am *AscendManager) GetUnHealthIDs() []int32 {
 	for _, d := range IDs {
 		healthCode, err := am.mgr.GetDeviceHealth(d)
 		if err != nil {
+			klog.Warningf("failed to get device health for %d: %v", d, err)
 			continue
 		}
 		if healthCode != 0 {
@@ -209,7 +220,7 @@ func (am *AscendManager) CleanupIdleVNPUs() error {
 
 	_, IDs, err := am.mgr.GetDeviceList()
 	if err != nil {
-		return fmt.Errorf("failed to get device list: %v", err)
+		return fmt.Errorf("failed to get device list: %w", err)
 	}
 	klog.Infof("Found %d devices to check for idle vNPUs,%+v", len(IDs), IDs)
 
@@ -254,9 +265,8 @@ func (am *AscendManager) CleanupIdleVNPUs() error {
 	return nil
 }
 
-
 func (am *AscendManager) GetNodeConfig() *internal.NodeConfig {
-    return am.nodeConfig
+	return am.nodeConfig
 }
 
 func (am *AscendManager) IsHamiVnpuCore() bool {
