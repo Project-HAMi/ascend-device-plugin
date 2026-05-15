@@ -22,5 +22,6 @@ FROM $BASE_IMAGE
 ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64/common
 COPY --from=build /build/ascend-device-plugin /usr/local/bin/ascend-device-plugin
 COPY --from=build /build/lib/hami-vnpu-core/* /usr/local/hami-vnpu-core-assets/
+RUN chmod +x /usr/local/hami-vnpu-core-assets/limiter
 
 ENTRYPOINT ["ascend-device-plugin"]

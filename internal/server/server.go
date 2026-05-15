@@ -389,10 +389,10 @@ func (ps *PluginServer) registerHAMi() error {
 	annos[ps.registerAnno] = device.MarshalNodeDevices(apiDevices)
 	annos[ps.handshakeAnno] = "Reported_" + time.Now().Add(time.Duration(*reportTimeOffset)*time.Second).Format("2006.01.02 15:04:05")
 	
-	if ps.mgr.GetNodeConfig() != nil && ps.mgr.GetNodeConfig().HamiVnpuCore {
-        annos[VNPUNodeSelectorAnnotation] = "true"
-        klog.V(4).Infof("Node %s has HamiVnpuCore enabled, patching annotation %s: true", ps.nodeName, VNPUNodeSelectorAnnotation)
-    } else {
+	if ps.mgr.IsHamiVnpuCore() {
+		annos[VNPUNodeSelectorAnnotation] = "true"
+		klog.V(4).Infof("Node %s has HamiVnpuCore enabled, patching annotation %s: true", ps.nodeName, VNPUNodeSelectorAnnotation)
+	} else {
 		annos[VNPUNodeSelectorAnnotation] = "false"
 	}
 	

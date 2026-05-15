@@ -3,6 +3,7 @@ kind: Pod
 metadata:
   name: ascend910b-job
 spec:
+  runtimeClassName: ascend
   containers:
     - name: ubuntu-container
       image: ascendhub.huawei.com/public-ascendhub/ascend-mindspore:23.0.RC3-centos7

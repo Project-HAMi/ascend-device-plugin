@@ -39,11 +39,11 @@ type Device struct {
 }
 
 type AscendManager struct {
-	mgr *devmanager.DeviceManager
-	//nodeName string
-	config internal.VNPUConfig
-	devs   []*Device
-	nodeConfig *internal.NodeConfig 
+	mgr        *devmanager.DeviceManager
+	config     internal.VNPUConfig
+	globalConfig internal.Config
+	devs       []*Device
+	nodeConfig *internal.NodeConfig
 }
 
 func NewAscendManager() (*AscendManager, error) {
@@ -89,7 +89,7 @@ func (am *AscendManager) LoadConfig(path string) error {
 		return fmt.Errorf("chip type is not Ascend")
 	}
 	idx := -1
-	for i, vnpu := range config.VNPUs {
+	for i, vnpu := range config.VNPUs.Configs {
 		if vnpu.ChipName == chipInfo.Name {
 			idx = i
 			break
@@ -98,7 +98,8 @@ func (am *AscendManager) LoadConfig(path string) error {
 	if idx == -1 {
 		return fmt.Errorf("can not find vnpu config for chip %s", chipInfo.Name)
 	}
-	am.config = config.VNPUs[idx]
+	am.config = config.VNPUs.Configs[idx]
+	am.globalConfig = *config
 	sort.Slice(am.config.Templates, func(i, j int) bool {
 		return am.config.Templates[i].Memory < am.config.Templates[j].Memory
 	})
@@ -256,4 +257,11 @@ func (am *AscendManager) CleanupIdleVNPUs() error {
 
 func (am *AscendManager) GetNodeConfig() *internal.NodeConfig {
     return am.nodeConfig
+}
+
+func (am *AscendManager) IsHamiVnpuCore() bool {
+	if am.nodeConfig != nil {
+		return am.nodeConfig.HamiVnpuCore
+	}
+	return am.globalConfig.VNPUs.HamiVnpuCore
 }

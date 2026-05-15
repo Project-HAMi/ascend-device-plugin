@@ -3,6 +3,7 @@ kind: Pod
 metadata:
   name: ascend310p-job
 spec:
+  runtimeClassName: ascend
   containers:
     - name: ubuntu-container
       image: swr.cn-south-1.myhuaweicloud.com/ascendhub/ascend-pytorch:24.0.RC1-A2-1.11.0-ubuntu20.04
