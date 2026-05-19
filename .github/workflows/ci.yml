@@ -20,7 +20,8 @@ jobs:
   build-vnpu:
     runs-on: ubuntu-22.04-arm
     container:
-      image: ghcr.io/dsfans2014/ascend-device-plugin/ascend-lib:0.2
+      image: ascendai/cann:8.3.rc2
+
     steps:
       - uses: actions/checkout@v4
         with:
