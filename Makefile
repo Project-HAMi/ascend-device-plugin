@@ -8,6 +8,9 @@ all: ascend-device-plugin
 tidy:
 	$(GO) mod tidy
 
+test:
+	$(GO) test -v -coverprofile=_output/coverage/coverage.out ./...
+
 docker:
 	docker build \
 	--build-arg BASE_IMAGE=ubuntu:20.04 \
@@ -24,4 +27,4 @@ ascend-device-plugin:
 clean:
 	rm -rf ./ascend-device-plugin
 
-.PHONY: all clean
+.PHONY: all tidy test lint clean

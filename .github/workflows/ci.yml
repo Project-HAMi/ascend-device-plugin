@@ -7,9 +7,9 @@ on:
   push:
     branches: [ "main" ]
     tags:
-      - v[0-9]+.[0-9]+.[0-9]+.[0-9]+
-      - v[0-9]+.[0-9]+.[0-9]+
-      - v[0-9]+.[0-9]+
+    - v[0-9]+.[0-9]+.[0-9]+.[0-9]+
+    - v[0-9]+.[0-9]+.[0-9]+
+    - v[0-9]+.[0-9]+
   pull_request:
     branches: [ "main" ]
 
@@ -21,114 +21,139 @@ jobs:
     name: lint
     runs-on: ubuntu-22.04
     steps:
-      - name: checkout code
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-      - name: install Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - name: go tidy
-        env:
-          GOTOOLCHAIN: auto
-        run: |
-          find mind-cluster/component -maxdepth 1 -type d ! -name "npu-exporter" ! -name "ascend-common"  ! -name "component" -exec rm -rf {} \;
-          go mod download github.com/Project-HAMi/HAMi
-          go get github.com/Project-HAMi/ascend-device-plugin/internal/server
-          go get huawei.com/npu-exporter
-          go get huawei.com/npu-exporter/utils/logger@v0.0.0-00010101000000-000000000000
-          go mod tidy
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        env:
-          GOTOOLCHAIN: auto
-        with:
-          version: v1.64.5
-          install-mode: binary
-          args: --timeout=10m
+    - name: checkout code
+      uses: actions/checkout@v6
+      with:
+        submodules: recursive
+    - name: install Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    - name: go tidy
+      env:
+        GOTOOLCHAIN: auto
+      run: |
+        find mind-cluster/component -maxdepth 1 -type d ! -name "npu-exporter" ! -name "ascend-common"  ! -name "component" -exec rm -rf {} \;
+        go mod download github.com/Project-HAMi/HAMi
+        go get github.com/Project-HAMi/ascend-device-plugin/internal/server
+        go get huawei.com/npu-exporter
+        go get huawei.com/npu-exporter/utils/logger@v0.0.0-00010101000000-000000000000
+        go mod tidy
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      env:
+        GOTOOLCHAIN: auto
+      with:
+        version: v1.64.5
+        install-mode: binary
+        args: --timeout=10m
+  test:
+    name: Unit test
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Install Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    - name: Go tidy
+      run: make tidy
+    - name: Run tests
+      run: make test
+    - name: Upload coverage to Codecov
+      if: ${{ github.repository == 'Project-HAMi/ascend-device-plugin' }}
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./_output/coverage/coverage.out
+        flags: unittests
+        fail_ci_if_error: false
+        verbose: true
 
   build-vnpu:
     runs-on: ubuntu-22.04-arm
     container:
       image: ghcr.io/dsfans2014/ascend-device-plugin/ascend-lib:0.2
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-      - name: Build
-        run: cargo build --release
-        working-directory: ./libvnpu
-      - name: Prepare artifacts for upload
-        run: |
-          mkdir -p ./artifacts
-          cp libvnpu/target/release/limiter ./artifacts/
-          cp libvnpu/target/release/libvnpu.so ./artifacts/
-          echo "/hami-vnpu-core/libvnpu.so" > ./artifacts/ld.so.preload
-      - name: upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          if-no-files-found: error
-          path: ./artifacts/*
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
+    - name: Build
+      run: cargo build --release
+      working-directory: ./libvnpu
+    - name: Prepare artifacts for upload
+      run: |
+        mkdir -p ./artifacts
+        cp libvnpu/target/release/limiter ./artifacts/
+        cp libvnpu/target/release/libvnpu.so ./artifacts/
+        echo "/hami-vnpu-core/libvnpu.so" > ./artifacts/ld.so.preload
+    - name: upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts
+        if-no-files-found: error
+        path: ./artifacts/*
 
   build:
     env:
       IMAGE_NAME: ${{ secrets.IMAGE_NAME || 'projecthami/ascend-device-plugin' }}
     runs-on: ubuntu-latest
-    needs: ["build-vnpu"]
+    needs: [ "build-vnpu", "test" ]
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          submodules: true
-  
-      - name: Get branch names.
-        id: branch-names
-        uses: tj-actions/branch-names@v8
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        submodules: true
 
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: ./lib/hami-vnpu-core/
+    - name: Get branch names.
+      id: branch-names
+      uses: tj-actions/branch-names@v8
 
-      - name: Docker Login
-        if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
-        uses: docker/login-action@v3.6.0
-        with:
-            username: ${{ secrets.DOCKERHUB_TOKEN }}
-            password: ${{ secrets.DOCKERHUB_PASSWD }}
+    - name: Download Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: build-artifacts
+        path: ./lib/hami-vnpu-core/
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+    - name: Docker Login
+      if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
+      uses: docker/login-action@v3.6.0
+      with:
+        username: ${{ secrets.DOCKERHUB_TOKEN }}
+        password: ${{ secrets.DOCKERHUB_PASSWD }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
 
-      - name: Extract tag name
-        id: tag
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG_NAME="${GITHUB_REF#refs/tags/}"
-            echo "VERSION=${TAG_NAME}" >> $GITHUB_OUTPUT
-            echo "Extracted version: ${VERSION}"
-          else
-            echo "VERSION=latest" >> $GITHUB_OUTPUT
-          fi
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
-          build-args: |
-            BASE_IMAGE=ubuntu:20.04
-            GO_VERSION=${{ env.GO_VERSION }}
-            VERSION=${{ steps.branch-names.outputs.current_branch || steps.branch-names.outputs.tag }}-${{ github.sha }}
-          tags: ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.VERSION }}
+    - name: Extract tag name
+      id: tag
+      run: |
+        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          echo "VERSION=${TAG_NAME#v}" >> $GITHUB_OUTPUT
+          echo "Extracted version: ${VERSION}"
+        else
+          echo "VERSION=latest" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build and push
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
+        build-args: |
+          BASE_IMAGE=ubuntu:20.04
+          GO_VERSION=${{ env.GO_VERSION }}
+          VERSION=${{ steps.branch-names.outputs.current_branch || steps.branch-names.outputs.tag }}-${{ github.sha }}
+        tags: ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.VERSION }}
