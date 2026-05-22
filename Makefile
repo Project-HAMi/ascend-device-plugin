@@ -9,7 +9,7 @@ tidy:
 	$(GO) mod tidy
 
 test:
-	$(GO) test -v -coverprofile=_output/coverage/coverage.out ./...
+	$(GO) test -v -coverprofile=_output/coverage/coverage.out ./internal/...
 
 docker:
 	docker build \
