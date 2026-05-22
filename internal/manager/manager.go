@@ -55,7 +55,7 @@ type Manager interface {
 
 type AscendManager struct {
 	mu           sync.RWMutex
-	mgr          *devmanager.DeviceManager
+	mgr          devmanager.DeviceInterface
 	config       internal.VNPUConfig
 	globalConfig internal.Config
 	devs         []*Device
