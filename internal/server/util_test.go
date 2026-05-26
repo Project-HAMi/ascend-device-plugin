@@ -1089,7 +1089,7 @@ func TestPatchErasedAnnotation(t *testing.T) {
 				toAllocDeviceAnno: "hami.io/Ascend910-devices-to-allocate",
 			}
 			podSingleDev, _ := ps.decodeDeviceAnnotations(tc.pod)
-			ps.popNextContainerDevices(podSingleDev)
+			_, _ = ps.popNextContainerDevices(podSingleDev)
 
 			origValue := tc.pod.Annotations[ps.toAllocDeviceAnno]
 
