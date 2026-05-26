@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/klog/v2"
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
@@ -136,17 +137,19 @@ func (ps *PluginServer) registerKubelet() error {
 func (ps *PluginServer) dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	c, err := grpc.DialContext(ctx, unixSocketPath,
+	c, _ := grpc.NewClient(unixSocketPath,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 		grpc.WithContextDialer(func(ctx2 context.Context, addr string) (net.Conn, error) {
 			var d net.Dialer
 			return d.DialContext(ctx2, "unix", addr)
 		}),
 	)
 
-	if err != nil {
-		return nil, err
+	// NewClient is non-blocking; block here to match the original WithBlock behaviour.
+	if !c.WaitForStateChange(ctx, connectivity.Ready) {
+		c.Close()
+		return nil, ctx.Err()
 	}
+
 	return c, nil
 }
