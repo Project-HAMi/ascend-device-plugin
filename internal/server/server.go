@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -64,6 +65,12 @@ type PluginServer struct {
 	stopCh                chan interface{}
 	healthCh              chan int32
 	checkIdleVNPUInterval int
+	wg                    sync.WaitGroup
+
+	// test hooks — injected by tests to avoid real socket/kubelet dependencies
+	dialFunc                 func(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error)
+	registerKubeletFunc      func() error
+	prepareHostResourcesFunc func() error
 }
 
 type RuntimeInfo struct {
@@ -82,7 +89,6 @@ func NewPluginServer(mgr manager.Manager, nodeName string, checkIdleVNPUInterval
 		handshakeAnno:         fmt.Sprintf("hami.io/node-handshake-%s", commonWord),
 		allocAnno:             fmt.Sprintf("huawei.com/%s", commonWord),
 		toAllocDeviceAnno:     fmt.Sprintf("hami.io/%s-devices-to-allocate", commonWord),
-		grpcServer:            grpc.NewServer(),
 		mgr:                   mgr,
 		socket:                path.Join(v1beta1.DevicePluginPath, fmt.Sprintf("%s.sock", commonWord)),
 		stopCh:                make(chan interface{}),
@@ -102,6 +108,8 @@ func (ps *PluginServer) Start() error {
 	}
 
 	ps.stopCh = make(chan interface{})
+	ps.grpcServer = grpc.NewServer()
+
 	err := ps.mgr.UpdateDevice()
 	if err != nil {
 		return err
@@ -120,6 +128,8 @@ func (ps *PluginServer) Start() error {
 }
 
 func (ps *PluginServer) startPeriodicCheckIdleVNPUs() {
+	ps.wg.Add(1)
+	defer ps.wg.Done()
 	ticker := time.NewTicker(time.Duration(ps.checkIdleVNPUInterval) * time.Second)
 	defer ticker.Stop()
 	for {
@@ -137,8 +147,19 @@ func (ps *PluginServer) startPeriodicCheckIdleVNPUs() {
 }
 
 func (ps *PluginServer) Stop() error {
-	close(ps.stopCh)
-	ps.grpcServer.Stop()
+	if ps.stopCh != nil {
+		select {
+		case <-ps.stopCh:
+			// already closed; no-op
+		default:
+			close(ps.stopCh)
+		}
+	}
+	if ps.grpcServer != nil {
+		ps.grpcServer.Stop()
+	}
+	ps.wg.Wait()
+	_ = os.Remove(ps.socket)
 	return nil
 }
 
@@ -158,7 +179,9 @@ func (ps *PluginServer) serve() error {
 	}
 	v1beta1.RegisterDevicePluginServer(ps.grpcServer, ps)
 	resourceName := ps.mgr.ResourceName()
+	ps.wg.Add(1)
 	go func() {
+		defer ps.wg.Done()
 		lastCrashTime := time.Now()
 		restartCount := 0
 		for {
