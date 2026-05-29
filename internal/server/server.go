@@ -100,9 +100,18 @@ func NewPluginServer(mgr manager.Manager, nodeName string, checkIdleVNPUInterval
 	return server, nil
 }
 
+// prepareHostResources wraps the package-level prepareHostResources() to
+// allow test injection via the prepareHostResourcesFunc hook.
+func (ps *PluginServer) prepareHostResources() error {
+	if ps.prepareHostResourcesFunc != nil {
+		return ps.prepareHostResourcesFunc()
+	}
+	return prepareHostResources()
+}
+
 func (ps *PluginServer) Start() error {
 	// Automatically prepare host environment when the plugin starts
-	if err := prepareHostResources(); err != nil {
+	if err := ps.prepareHostResources(); err != nil {
 		klog.Errorf("Failed to prepare host resources: %v. vNPU core functionality will be impaired.", err)
 		return err
 	}
