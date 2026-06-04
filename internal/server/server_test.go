@@ -20,9 +20,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path"
 	"strings"
 	"testing"
 
+	"google.golang.org/grpc/grpclog"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -760,5 +763,184 @@ func TestCleanupIdleVNPUs(t *testing.T) {
 				t.Fatalf("CleanupIdleVNPUs() error = %v, wantErr %v", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+// ============================================================================
+// gRPC restart tests
+// ============================================================================
+
+// panicOnFatalLogger is a gRPC logger that converts Fatalf calls to panics.
+// This allows tests to verify that gRPC does NOT call Fatalf (which would
+// otherwise call os.Exit(1) and abort the test process).
+//
+// Usage:
+//
+//	defer grpclog.SetLoggerV2(grpclog.NewLoggerV2(os.Stderr, os.Stderr, os.Stderr))
+//	grpclog.SetLoggerV2(newPanicOnFatalLogger())
+type panicOnFatalLogger struct {
+	inner grpclog.LoggerV2
+}
+
+func newPanicOnFatalLogger() *panicOnFatalLogger {
+	return &panicOnFatalLogger{
+		inner: grpclog.NewLoggerV2(os.Stderr, os.Stderr, os.Stderr),
+	}
+}
+
+var _ grpclog.LoggerV2 = (*panicOnFatalLogger)(nil)
+
+func (l *panicOnFatalLogger) Info(args ...interface{})   { l.inner.Info(args...) }
+func (l *panicOnFatalLogger) Infoln(args ...interface{}) { l.inner.Infoln(args...) }
+func (l *panicOnFatalLogger) Infof(format string, args ...interface{}) {
+	l.inner.Infof(format, args...)
+}
+func (l *panicOnFatalLogger) Warning(args ...interface{})   { l.inner.Warning(args...) }
+func (l *panicOnFatalLogger) Warningln(args ...interface{}) { l.inner.Warningln(args...) }
+func (l *panicOnFatalLogger) Warningf(format string, args ...interface{}) {
+	l.inner.Warningf(format, args...)
+}
+func (l *panicOnFatalLogger) Error(args ...interface{})   { l.inner.Error(args...) }
+func (l *panicOnFatalLogger) Errorln(args ...interface{}) { l.inner.Errorln(args...) }
+func (l *panicOnFatalLogger) Errorf(format string, args ...interface{}) {
+	l.inner.Errorf(format, args...)
+}
+func (l *panicOnFatalLogger) V(level int) bool { return l.inner.V(level) }
+
+func (l *panicOnFatalLogger) Fatalf(format string, args ...interface{}) {
+	panic(fmt.Sprintf("grpc FATAL: "+format, args...))
+}
+
+func (l *panicOnFatalLogger) Fatalln(args ...interface{}) {
+	panic(fmt.Sprintf("grpc FATAL: %v", fmt.Sprintln(args...)))
+}
+
+func (l *panicOnFatalLogger) Fatal(args ...interface{}) {
+	panic(fmt.Sprintf("grpc FATAL: %v", fmt.Sprint(args...)))
+}
+
+// setupRestartablePluginServer creates a PluginServer with all test hooks
+// injected so that Start()/Stop() work without real socket files or a kubelet.
+func setupRestartablePluginServer(t *testing.T) *PluginServer {
+	t.Helper()
+
+	ps := &PluginServer{
+		commonWord:            "test-ascend",
+		registerAnno:          "hami.io/node-register-test-ascend",
+		handshakeAnno:         "hami.io/node-handshake-test-ascend",
+		allocAnno:             "huawei.com/test-ascend",
+		toAllocDeviceAnno:     "hami.io/test-ascend-devices-to-allocate",
+		mgr:                   &FakeManager{ResourceNameFunc: func() string { return "test-ascend" }},
+		socket:                path.Join(t.TempDir(), "test-ascend.sock"),
+		stopCh:                make(chan interface{}),
+		healthCh:              make(chan int32),
+		checkIdleVNPUInterval: 3600,
+		dialFunc:              nil,
+		registerKubeletFunc: func() error {
+			return nil
+		},
+		prepareHostResourcesFunc: func() error {
+			return nil
+		},
+	}
+	return ps
+}
+
+// TestGrpcServer_RestartDoesNotPanic verifies that a single Stop+Start cycle
+// does not trigger the gRPC "RegisterService after Serve" fatal error.
+func TestGrpcServer_RestartDoesNotPanic(t *testing.T) {
+	defer grpclog.SetLoggerV2(grpclog.NewLoggerV2(os.Stderr, os.Stderr, os.Stderr))
+	grpclog.SetLoggerV2(newPanicOnFatalLogger())
+
+	ps := setupRestartablePluginServer(t)
+
+	// First Start
+	if err := ps.Start(); err != nil {
+		t.Fatalf("first Start() failed: %v", err)
+	}
+
+	// Stop
+	if err := ps.Stop(); err != nil {
+		t.Fatalf("Stop() failed: %v", err)
+	}
+
+	// Second Start — this must not trigger grpc Fatalf
+	if err := ps.Start(); err != nil {
+		t.Fatalf("second Start() after restart failed: %v", err)
+	}
+
+	// Cleanup
+	if err := ps.Stop(); err != nil {
+		t.Fatalf("final Stop() failed: %v", err)
+	}
+}
+
+// TestGrpcServer_MultipleRestarts verifies that the server can survive
+// multiple Stop+Start cycles without panic.
+func TestGrpcServer_MultipleRestarts(t *testing.T) {
+	defer grpclog.SetLoggerV2(grpclog.NewLoggerV2(os.Stderr, os.Stderr, os.Stderr))
+	grpclog.SetLoggerV2(newPanicOnFatalLogger())
+
+	ps := setupRestartablePluginServer(t)
+
+	for i := 0; i < 5; i++ {
+		if err := ps.Start(); err != nil {
+			t.Fatalf("Start() iteration %d failed: %v", i, err)
+		}
+		if err := ps.Stop(); err != nil {
+			t.Fatalf("Stop() iteration %d failed: %v", i, err)
+		}
+	}
+}
+
+// TestGrpcServer_StopWithoutStart verifies that Stop() is safe when
+// Start() was never called (no goroutines to wait for).
+func TestGrpcServer_StopWithoutStart(t *testing.T) {
+	ps := setupRestartablePluginServer(t)
+	if err := ps.Stop(); err != nil {
+		t.Fatalf("Stop() without Start() should be safe: %v", err)
+	}
+}
+
+// TestGrpcServer_DoubleStop verifies that calling Stop() twice is safe.
+func TestGrpcServer_DoubleStop(t *testing.T) {
+	ps := setupRestartablePluginServer(t)
+
+	if err := ps.Start(); err != nil {
+		t.Fatalf("Start() failed: %v", err)
+	}
+
+	if err := ps.Stop(); err != nil {
+		t.Fatalf("first Stop() failed: %v", err)
+	}
+
+	if err := ps.Stop(); err != nil {
+		t.Fatalf("second Stop() should be safe: %v", err)
+	}
+}
+
+// TestGrpcServer_StopWaitForAllGoroutines verifies that Stop() returns
+// only after all goroutines have exited. We verify this indirectly by
+// checking that Start() after Stop() does not race (goroutine leak would
+// manifest as stale channel reads).
+func TestGrpcServer_StopWaitForAllGoroutines(t *testing.T) {
+	ps := setupRestartablePluginServer(t)
+
+	if err := ps.Start(); err != nil {
+		t.Fatalf("Start() failed: %v", err)
+	}
+
+	if err := ps.Stop(); err != nil {
+		t.Fatalf("Stop() failed: %v", err)
+	}
+
+	// bgWG and serveWG should be zero after Stop() returns.
+	// A new cycle confirms there is no deadlock or hang.
+	if err := ps.Start(); err != nil {
+		t.Fatalf("Start() after Stop() failed: %v", err)
+	}
+
+	if err := ps.Stop(); err != nil {
+		t.Fatalf("Stop() failed: %v", err)
 	}
 }
