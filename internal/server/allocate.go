@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 
 	v1 "k8s.io/api/core/v1"
@@ -14,8 +15,17 @@ import (
 	"github.com/Project-HAMi/HAMi/pkg/util"
 )
 
+var hostHookPath string
+
+func init() {
+	hostHookPath = os.Getenv("HOOK_PATH")
+	if hostHookPath == "" {
+		hostHookPath = "/usr/local/hami-vnpu-core"
+	}
+}
+
 // buildContainerAllocateResponse builds the allocate response for a single container.
-func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, containerDevs device.ContainerDevices, rtInfoLookup map[string]RuntimeInfo) (*v1beta1.ContainerAllocateResponse, error) {
+func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, ctrName string, containerDevs device.ContainerDevices, rtInfoLookup map[string]RuntimeInfo) (*v1beta1.ContainerAllocateResponse, error) {
 	resp := &v1beta1.ContainerAllocateResponse{}
 
 	var (
@@ -106,6 +116,23 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, containerDev
 		// Set GLOBAL_SHM_PATH based on the first device ID.
 		resp.Envs["NPU_GLOBAL_SHM_PATH"] = fmt.Sprintf("/hami-shared-region/%d_global_registry", IDs[0])
 		klog.V(5).Infof("Create %d_global_registry", IDs[0])
+
+		// Per-container local shmem dir (like NVIDIA vgpu/containers/{podUID}_{ctrName})
+		containerShmemDir := fmt.Sprintf("%s/containers/%s_%s", hostHookPath, pod.UID, ctrName)
+		os.RemoveAll(containerShmemDir)
+		if err := os.MkdirAll(containerShmemDir, 0777); err != nil {
+			klog.Warningf("MkdirAll %s: %v", containerShmemDir, err)
+		}
+		if err := os.Chmod(containerShmemDir, 0777); err != nil {
+			klog.Warningf("Chmod %s: %v", containerShmemDir, err)
+		}
+		resp.Mounts = append(resp.Mounts, &v1beta1.Mount{
+			HostPath:      containerShmemDir,
+			ContainerPath: "/hami-vnpu-shmem",
+			ReadOnly:      false,
+		})
+		resp.Envs["NPU_LOCAL_SHM_PATH"] = "/hami-vnpu-shmem/vnpu_local_shmem"
+		klog.V(4).Infof("Local shmem for %s/%s: host=%s", pod.UID, ctrName, containerShmemDir)
 	} else {
 		if ascendVNPUSpec != "" {
 			resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec
@@ -115,15 +142,26 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, containerDev
 }
 
 // popNextContainerDevices finds and erases the first non-empty containerDevices
-// from podSingleDev. It mutates podSingleDev in place.
-func (ps *PluginServer) popNextContainerDevices(podSingleDev device.PodSingleDevice) (device.ContainerDevices, error) {
+// from podSingleDev and returns the corresponding container name.
+// The annotation order is: init containers first, then regular containers.
+func (ps *PluginServer) popNextContainerDevices(pod *v1.Pod, podSingleDev device.PodSingleDevice) (device.ContainerDevices, string, error) {
+	initCount := len(pod.Spec.InitContainers)
 	for i, ctrDevs := range podSingleDev {
 		if len(ctrDevs) > 0 {
 			podSingleDev[i] = device.ContainerDevices{}
-			return ctrDevs, nil
+			var ctrName string
+			if i < initCount {
+				ctrName = pod.Spec.InitContainers[i].Name
+			} else {
+				regularIdx := i - initCount
+				if regularIdx < len(pod.Spec.Containers) {
+					ctrName = pod.Spec.Containers[regularIdx].Name
+				}
+			}
+			return ctrDevs, ctrName, nil
 		}
 	}
-	return nil, fmt.Errorf("no pending device allocation found")
+	return nil, "", fmt.Errorf("no pending device allocation found")
 }
 
 // decodeDeviceAnnotations decodes the pod's device allocation annotation

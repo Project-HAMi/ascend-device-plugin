@@ -314,7 +314,7 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 	// corresponding containerDevices.
 	responses := v1beta1.AllocateResponse{}
 	for _, req := range reqs.ContainerRequests {
-		containerDevs, err := ps.popNextContainerDevices(podSingleDev)
+		containerDevs, ctrName, err := ps.popNextContainerDevices(pod, podSingleDev)
 		if err != nil {
 			return nil, fmt.Errorf("get next container devices: %w", err)
 		}
@@ -324,7 +324,7 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 			return nil, fmt.Errorf("device number not matched: annotation has %d, request has %d", len(containerDevs), len(req.DevicesIDs))
 		}
 
-		resp, err := ps.buildContainerAllocateResponse(pod, containerDevs, rtInfoLookup)
+		resp, err := ps.buildContainerAllocateResponse(pod, ctrName, containerDevs, rtInfoLookup)
 		if err != nil {
 			return nil, fmt.Errorf("build container allocate response: %w", err)
 		}
