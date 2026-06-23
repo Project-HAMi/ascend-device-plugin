@@ -125,7 +125,9 @@ To exclusively use an entire card or request multiple cards, you only need to se
 
 ### Usage in HAMi
 
-**How HAMi chooses soft vs legacy vNPU:** The device plugin applies **soft slicing** (`libvnpu` / `hami-vnpu-core` mounts and environment) **only** when the Pod sets `huawei.com/vnpu-mode: hami-core`. Pods **without** this annotation still follow the **original vNPU** path (virtualization templates and `ASCEND_VNPU_SPECS`). These two paths are different. If your cluster effectively has **only** soft-slicing–oriented Ascend capacity (for example every node is configured for `hami-vnpu-core` and workloads are expected to use soft slicing), Pods that **omit** `vnpu-mode=hami-core` may remain **Pending** because they still request the legacy vNPU allocation model, which may not match what those nodes expose or how the scheduler pairs Pods to nodes.
+**How HAMi chooses soft vs legacy vNPU:**
+- A Pod that sets `huawei.com/vnpu-mode: hami-core` always uses **soft slicing** and is scheduled only onto hami-core-capable nodes.
+- A Pod that **omits** the annotation is **mode-agnostic**: it may be scheduled onto either a template node or a hami-core node, and its effective mode **follows the node**. On a hami-core node the device plugin applies soft slicing (`libvnpu` / `hami-vnpu-core` mounts and environment); on a template node it uses the original vNPU path (`ASCEND_VNPU_SPECS`). The plugin resolves this from the node's `hami-vnpu-core` setting (`IsHamiVnpuCore()`), so annotation-less Pods no longer remain Pending on hami-core-only clusters.
 
 ```yaml
 ...
