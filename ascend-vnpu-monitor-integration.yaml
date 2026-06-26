@@ -1,0 +1,86 @@
+# Prometheus integration for embedded vNPU monitor (:9395/metrics).
+# Apply when kube-prometheus-stack (or compatible Prometheus Operator) is installed.
+# Kantaloupe discovers ServiceMonitors labeled release=prometheus in monitoring namespace.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hami-ascend-vnpu-monitor
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  jobLabel: app.kubernetes.io/name
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: hami-ascend-device-plugin
+  endpoints:
+    - port: monitorport
+      path: /metrics
+      interval: 15s
+      relabelings:
+        - action: replace
+          sourceLabels:
+            - __meta_kubernetes_endpoint_node_name
+          targetLabel: node
+      metricRelabelings:
+        - action: replace
+          sourceLabels:
+            - pod
+          targetLabel: exported_pod
+        - action: replace
+          sourceLabels:
+            - namespace
+          targetLabel: exported_namespace
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: hami-ascend-vnpu-monitor
+  namespace: monitoring
+  labels:
+    release: prometheus
+    role: recording-rules
+    vendor: ascend
+spec:
+  groups:
+    - name: ascend-vnpu
+      interval: 15s
+      labels:
+        vendor: ascend
+      rules:
+        # Host-level: map hami_host_gpu_* to kantaloupe_gpu_* for UI/dashboard compatibility.
+        - record: kantaloupe_gpu_mem_used
+          expr: |
+            label_replace(
+              hami_host_gpu_memory_used_bytes / 1024 / 1024,
+              "UUID", "$1", "device_uuid", "(.*)"
+            )
+        - record: kantaloupe_gpu_core_used
+          expr: |
+            label_replace(
+              hami_host_gpu_utilization_ratio,
+              "UUID", "$1", "device_uuid", "(.*)"
+            )
+        # Workload-level: soft-slice container metrics from hami-vnpu-core shmem.
+        - record: kantaloupe_workload_gpumem_used
+          expr: |
+            label_replace(
+              hami_vgpu_memory_used_bytes / 1024 / 1024,
+              "UUID", "$1", "device_uuid", "(.*)"
+            )
+        - record: kantaloupe_workload_gpumem_allocated
+          expr: |
+            label_replace(
+              hami_vgpu_memory_limit_bytes / 1024 / 1024,
+              "UUID", "$1", "device_uuid", "(.*)"
+            )
+        - record: kantaloupe_workload_gpucore_used
+          expr: |
+            label_replace(
+              hami_container_device_utilization_ratio,
+              "UUID", "$1", "device_uuid", "(.*)"
+            )

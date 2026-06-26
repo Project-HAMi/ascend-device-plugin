@@ -6,6 +6,7 @@ require (
 	ascend-common v0.0.0
 	github.com/Project-HAMi/HAMi v0.0.0
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/prometheus/client_golang v1.23.2
 	google.golang.org/grpc v1.75.0
 	huawei.com/npu-exporter v0.0.0-00010101000000-000000000000
 	k8s.io/api v0.33.0
@@ -21,7 +22,9 @@ require (
 	github.com/NVIDIA/go-nvml v0.12.9-0 // indirect
 	github.com/NVIDIA/k8s-device-plugin v0.17.3 // indirect
 	github.com/NVIDIA/nvidia-container-toolkit v1.18.0-rc.2 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/ccoveille/go-safecast v1.6.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.11.3 // indirect
@@ -45,6 +48,9 @@ require (
 	github.com/opencontainers/runtime-spec v1.2.1 // indirect
 	github.com/opencontainers/runtime-tools v0.9.1-0.20221107090550-2e043c6bd626 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/prometheus/client_model v0.6.2 // indirect
+	github.com/prometheus/common v0.66.1 // indirect
+	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/smartystreets/goconvey v1.7.2 // indirect
@@ -53,6 +59,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.7 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
+	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/mod v0.27.0 // indirect
 	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
