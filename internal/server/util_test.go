@@ -197,6 +197,13 @@ func TestCopyFile(t *testing.T) {
 func TestBuildContainerAllocateResponse(t *testing.T) {
 	const allocAnno = "huawei.com/Ascend910"
 
+	// buildContainerAllocateResponse creates a per-container shmem dir under
+	// hostHookPath in hami-core mode; point it at a temp dir so the test does
+	// not write under /usr/local.
+	origHookPath := hostHookPath
+	hostHookPath = t.TempDir()
+	t.Cleanup(func() { hostHookPath = origHookPath })
+
 	type buildContainerAllocateResponseArgs struct {
 		pod           *v1.Pod
 		containerDevs device.ContainerDevices
@@ -347,6 +354,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 					{HostPath: "/usr/local/hami-vnpu-core", ContainerPath: "/hami-vnpu-core", ReadOnly: true},
 					{HostPath: "/usr/local/hami-vnpu-core/ld.so.preload", ContainerPath: "/etc/ld.so.preload", ReadOnly: true},
 					{HostPath: "/usr/local/hami-shared-region", ContainerPath: "/hami-shared-region", ReadOnly: false},
+					{HostPath: hostHookPath + "/containers/_", ContainerPath: "/hami-vnpu-shmem", ReadOnly: false},
 				},
 			},
 		},
@@ -613,7 +621,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 			ps, cleanup := tc.setup()
 			t.Cleanup(cleanup)
 
-			resp, err := ps.buildContainerAllocateResponse(tc.args.pod, tc.args.containerDevs, tc.args.rtInfoLookup)
+			resp, err := ps.buildContainerAllocateResponse(tc.args.pod, "", tc.args.containerDevs, tc.args.rtInfoLookup)
 
 			if tc.wantErr != "" {
 				if err == nil {
@@ -742,7 +750,7 @@ func TestPopNextContainerDevices(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ps.popNextContainerDevices(tc.podSingleDev)
+			got, _, err := ps.popNextContainerDevices(&v1.Pod{}, tc.podSingleDev)
 
 			if tc.wantErr != "" {
 				if err == nil {
@@ -1089,7 +1097,7 @@ func TestPatchErasedAnnotation(t *testing.T) {
 				toAllocDeviceAnno: "hami.io/Ascend910-devices-to-allocate",
 			}
 			podSingleDev, _ := ps.decodeDeviceAnnotations(tc.pod)
-			_, _ = ps.popNextContainerDevices(podSingleDev)
+			_, _, _ = ps.popNextContainerDevices(tc.pod, podSingleDev)
 
 			origValue := tc.pod.Annotations[ps.toAllocDeviceAnno]
 
@@ -1157,7 +1165,7 @@ func TestPopNextContainerDevices_AfterDecode(t *testing.T) {
 		t.Fatalf("unexpected error decoding: %v", err)
 	}
 
-	got, err := ps.popNextContainerDevices(podSingleDev)
+	got, _, err := ps.popNextContainerDevices(pod, podSingleDev)
 	if err != nil {
 		t.Fatalf("unexpected error popping: %v", err)
 	}
@@ -1166,7 +1174,7 @@ func TestPopNextContainerDevices_AfterDecode(t *testing.T) {
 	}
 
 	// Pop again should return uuid2
-	got2, err := ps.popNextContainerDevices(podSingleDev)
+	got2, _, err := ps.popNextContainerDevices(pod, podSingleDev)
 	if err != nil {
 		t.Fatalf("unexpected error on second pop: %v", err)
 	}
@@ -1175,7 +1183,7 @@ func TestPopNextContainerDevices_AfterDecode(t *testing.T) {
 	}
 
 	// Third pop should fail
-	_, err = ps.popNextContainerDevices(podSingleDev)
+	_, _, err = ps.popNextContainerDevices(pod, podSingleDev)
 	if err == nil {
 		t.Fatal("expected error on third pop, got nil")
 	}
@@ -1231,7 +1239,7 @@ func BenchmarkBuildContainerAllocateResponse(b *testing.B) {
 		containerDevs := device.ContainerDevices{cd("uuid1", "Ascend910", 1024, 4)}
 
 		for b.Loop() {
-			_, err := ps.buildContainerAllocateResponse(pod, containerDevs, rtInfoLookup)
+			_, err := ps.buildContainerAllocateResponse(pod, "", containerDevs, rtInfoLookup)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1258,7 +1266,7 @@ func BenchmarkBuildContainerAllocateResponse(b *testing.B) {
 		pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{}}}
 
 		for b.Loop() {
-			_, err := ps.buildContainerAllocateResponse(pod, containerDevs, rtInfoLookup)
+			_, err := ps.buildContainerAllocateResponse(pod, "", containerDevs, rtInfoLookup)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1291,7 +1299,7 @@ func BenchmarkBuildContainerAllocateResponse(b *testing.B) {
 		}
 
 		for b.Loop() {
-			_, err := ps.buildContainerAllocateResponse(pod, containerDevs, rtInfoLookup)
+			_, err := ps.buildContainerAllocateResponse(pod, "", containerDevs, rtInfoLookup)
 			if err != nil {
 				b.Fatal(err)
 			}
