@@ -70,12 +70,16 @@ func (ps *PluginServer) registerHAMi() error {
 	apiDevices := make([]*device.DeviceInfo, 0, len(devs))
 	// hami currently believes that the index starts from 0 and is continuous.
 	for i, dev := range devs {
+		devcore := dev.AICore
+		if ps.mgr.IsHamiVnpuCore() {
+			devcore = HamiVnpuCoreMaxPercent
+		}
 		device := &device.DeviceInfo{
 			Index:   uint(i),
 			ID:      dev.UUID,
 			Count:   int32(ps.mgr.VDeviceCount()),
 			Devmem:  int32(dev.Memory),
-			Devcore: dev.AICore,
+			Devcore: devcore,
 			Type:    ps.mgr.CommonWord(),
 			Numa:    0,
 			Health:  dev.Health,
