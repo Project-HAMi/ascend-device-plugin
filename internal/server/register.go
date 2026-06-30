@@ -161,18 +161,23 @@ func (ps *PluginServer) dial(unixSocketPath string, timeout time.Duration) (*grp
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	c, _ := grpc.NewClient(unixSocketPath,
+
+	target := "passthrough:///" + unixSocketPath
+	c, err := grpc.NewClient(target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx2 context.Context, addr string) (net.Conn, error) {
 			var d net.Dialer
 			return d.DialContext(ctx2, "unix", addr)
 		}),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("grpc.NewClient(%s): %w", target, err)
+	}
 
 	// NewClient is non-blocking; block here to match the original WithBlock behaviour.
-	if !c.WaitForStateChange(ctx, connectivity.Ready) {
+	if !c.WaitForStateChange(ctx, connectivity.Idle) {
 		c.Close()
-		return nil, ctx.Err()
+		return nil, fmt.Errorf("timed out waiting for connection to %s", unixSocketPath)
 	}
 
 	return c, nil
