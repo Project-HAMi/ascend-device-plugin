@@ -174,11 +174,20 @@ func (ps *PluginServer) dial(unixSocketPath string, timeout time.Duration) (*grp
 		return nil, fmt.Errorf("grpc.NewClient(%s): %w", target, err)
 	}
 
-	// NewClient is non-blocking; block here to match the original WithBlock behaviour.
-	if !c.WaitForStateChange(ctx, connectivity.Idle) {
-		c.Close()
-		return nil, fmt.Errorf("timed out waiting for connection to %s", unixSocketPath)
+	c.Connect()
+	for {
+		state := c.GetState()
+		if state == connectivity.Ready {
+			return c, nil
+		}
+		if state == connectivity.TransientFailure || state == connectivity.Shutdown {
+			c.Close()
+			return nil, fmt.Errorf("connection to %s failed (state: %s)", unixSocketPath, state)
+		}
+		// Block until the state changes or the deadline is exceeded.
+		if !c.WaitForStateChange(ctx, state) {
+			c.Close()
+			return nil, fmt.Errorf("timed out waiting for connection to %s", unixSocketPath)
+		}
 	}
-
-	return c, nil
 }
