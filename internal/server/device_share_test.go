@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The HAMi Authors.
+ * Copyright 2026 The HAMi Authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ import (
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 )
 
-// withFakeNpuSmi swaps the package-level runNpuSmi for a fake and restores it
-// after the test. Shared by the Allocate device-share tests in server_test.go.
+// withFakeNpuSmi swaps runNpuSmi for a fake and restores it after the test.
+// Shared with the Allocate device-share tests in server_test.go.
 func withFakeNpuSmi(t *testing.T, fn func(args ...string) ([]byte, error)) {
 	t.Helper()
 	orig := runNpuSmi
@@ -86,10 +86,8 @@ func TestApplyDeviceShare_Disable(t *testing.T) {
 	}
 }
 
-// TestApplyDeviceShare_FailFast guards the contract that the first per-chip
-// failure stops the loop — Allocate cannot return a partial response, so any
-// chip past the failure point must be left untouched and re-driven by the
-// next Allocate.
+// TestApplyDeviceShare_FailFast checks that the first per-chip failure stops
+// the loop, leaving later chips untouched.
 func TestApplyDeviceShare_FailFast(t *testing.T) {
 	var calls [][]string
 	withFakeNpuSmi(t, func(args ...string) ([]byte, error) {
@@ -127,11 +125,8 @@ func TestApplyDeviceShare_NoChips(t *testing.T) {
 	}
 }
 
-// TestRunNpuSmi_AnswersDeviceShareConfirmation guards the production runNpuSmi
-// path: enabling device-share triggers npu-smi's interactive Y/N prompt and
-// the binary exits 200 if stdin is closed. The fake here mimics that prompt
-// and only succeeds when "Y" is delivered on stdin, so the test exercises the
-// real exec.Command wiring (not the runNpuSmi mock used elsewhere).
+// TestRunNpuSmi_AnswersDeviceShareConfirmation exercises the real exec.Command
+// path: the fake npu-smi prompts Y/N and exits 200 unless "Y" arrives on stdin.
 func TestRunNpuSmi_AnswersDeviceShareConfirmation(t *testing.T) {
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "npu-smi")

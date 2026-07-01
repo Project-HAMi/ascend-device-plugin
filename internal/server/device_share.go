@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The HAMi Authors.
+ * Copyright 2026 The HAMi Authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,31 +26,26 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// chipKey identifies a single NPU chip by the two coordinates npu-smi takes
-// for its -i (card) and -c (chip) flags.
+// chipKey identifies an NPU chip by npu-smi's -i (card) and -c (chip) coordinates.
 type chipKey struct {
 	Card int32
 	Chip int32
 }
 
-// npuSmiCandidates lists the host paths where npu-smi may live, in priority
-// order. The first is what the daemonset's /usr/local/Ascend/driver hostPath
-// mount exposes; the others cover hosts that ship npu-smi elsewhere. It is a
-// package var so tests can point it at a temp dir.
+// npuSmiCandidates lists host paths where npu-smi may live, in priority order.
+// A package var so tests can point it at a temp dir.
 var npuSmiCandidates = []string{
 	"/usr/local/Ascend/driver/tools/npu-smi",
 	"/usr/local/sbin/npu-smi",
 	"/usr/local/bin/npu-smi",
 }
 
-// runNpuSmi executes npu-smi with the given args and returns combined output.
-// It is a package var so tests can substitute a fake.
+// runNpuSmi runs npu-smi and returns combined output. A package var so tests
+// can substitute a fake.
 //
-// Enabling device-share (-d 1) prints a "There are security risks ... continue
-// setting?(Y/N)" prompt and aborts with exit 200 if stdin is closed. npu-smi
-// has no -y/--force flag in the driver versions this plugin targets, so we
-// feed "Y\n" unconditionally: commands that don't prompt simply ignore the
-// unread stdin.
+// Enabling device-share (-d 1) prompts "continue setting?(Y/N)" and exits 200
+// if stdin is closed; npu-smi has no -y flag, so we feed "Y\n" unconditionally
+// (commands that don't prompt ignore the unread stdin).
 var runNpuSmi = func(args ...string) ([]byte, error) {
 	bin, err := resolveNpuSmi()
 	if err != nil {
@@ -74,17 +69,10 @@ func resolveNpuSmi() (string, error) {
 	return "", fmt.Errorf("npu-smi not found in %v or PATH", npuSmiCandidates)
 }
 
-// applyDeviceShare flips device-share on every chip in chips. It does not query
-// current state first — npu-smi accepts redundant set commands, so the
-// unconditional write is cheaper than a query+set round trip and keeps Allocate
-// latency predictable.
-//
-// Fails fast on the first per-chip error. The caller (Allocate) propagates that
-// error so kubelet surfaces it on the Pod; partial state on the remaining chips
-// will be re-driven by the next Allocate that lands on them.
-//
-// This plugin only ever calls it with enabled=true; the enabled=false path
-// exists for symmetry and test coverage.
+// applyDeviceShare sets device-share on every chip unconditionally; npu-smi
+// accepts redundant set commands, so this is cheaper than a query+set round
+// trip. Fails fast on the first per-chip error, leaving later chips to be
+// re-driven by the next Allocate. The enabled=false path exists only for tests.
 func applyDeviceShare(chips []chipKey, enabled bool) error {
 	if len(chips) == 0 {
 		return nil
@@ -107,16 +95,10 @@ func applyDeviceShare(chips []chipKey, enabled bool) error {
 }
 
 // enableNodeDeviceShare turns device-share on for every chip on the node when
-// the node is configured for hami-vnpu-core soft slicing. It is called once at
-// startup (from Start, after UpdateDevice has populated the device list) and is
-// idempotent: npu-smi accepts redundant set commands, so a plugin restart
-// simply re-applies the same state.
-//
-// When the node is not hami-vnpu-core it is a no-op — it never writes -d 0, so
-// share state set for other purposes is left untouched.
-//
-// Fail-fast: any per-chip failure is returned to the caller, which aborts
-// startup so kubelet restarts the plugin and retries.
+// it runs in hami-vnpu-core soft-slice mode. Called once at startup and
+// idempotent (npu-smi accepts redundant set commands). On a non-hami-vnpu-core
+// node it is a no-op and never writes -d 0. Any per-chip failure aborts startup
+// so kubelet restarts and retries.
 func (ps *PluginServer) enableNodeDeviceShare() error {
 	if !ps.mgr.IsHamiVnpuCore() {
 		klog.V(3).Infof("node %s is not hami-vnpu-core, skipping device-share", ps.nodeName)
