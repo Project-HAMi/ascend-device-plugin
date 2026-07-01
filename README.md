@@ -24,8 +24,25 @@ This project implements  a soft slicing mechanism based on `libvnpu.so` intercep
 hami-vnpu-core Soft Slicing Requirements:
 
 - **Ascend Driver Version**: ≥ 25.5
-- **Chip Mode**: enable `device-share` mode on Ascend chips for virtualization
-Below is the English translation of the instructions for enabling `device-share` mode:
+- **Chip Mode**: `device-share` is **auto-managed at the node level**. When the
+  node is configured for hami-vnpu-core soft slicing (the `hami-vnpu-core` field
+  in `device-node-config`), the device plugin enables device-share on **every
+  chip on the node at startup**, running
+  `npu-smi set -t device-share -i <card> -c <chip> -d 1` once per chip. No manual
+  `npu-smi` step and no per-Pod annotation are required to enable it.
+
+  The plugin resolves `npu-smi` from, in order:
+  `/usr/local/Ascend/driver/tools/npu-smi` (provided by the existing driver
+  hostPath mount), `/usr/local/sbin/npu-smi`, `/usr/local/bin/npu-smi`, then
+  `PATH`. If your host ships `npu-smi` elsewhere, add a single-file hostPath
+  mount in `ascend-device-plugin.yaml`, e.g. `/usr/local/sbin/npu-smi`.
+
+  This config is read once at startup, so **changing `hami-vnpu-core` requires
+  restarting the plugin** to take effect. If any chip's flip fails, the **plugin
+  fails to start** and advertises no devices on the node until it succeeds.
+
+<details>
+<summary>Legacy: manually enabling <code>device-share</code> (no longer required)</summary>
 
 **Enabling `device-share` Mode**
 
@@ -37,6 +54,8 @@ Below is the English translation of the instructions for enabling `device-share`
 | :--- | :--- |
 | *id* | **Device ID**. The NPU ID found by running the **npu-smi info -l** command is the device ID. |
 | *value* | **Container Enable Status**: Options are disabled or enabled. The default is disabled.<br>0: Disabled<br>1: Enabled |
+
+</details>
 
 ## Compile
 
