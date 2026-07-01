@@ -25,6 +25,7 @@ import (
 	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/monitor"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/server"
 	"github.com/Project-HAMi/ascend-device-plugin/version"
 	"github.com/fsnotify/fsnotify"
@@ -148,6 +149,19 @@ func main() {
 		klog.Fatalf("init PluginServer failed, error is %v", err)
 	}
 	client.InitGlobalClient()
+
+	if mgr.IsHamiVnpuCore() {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					klog.Errorf("recovered from panic in vNPU metrics server: %v", r)
+				}
+			}()
+			monitor.StartMetricsServer(":9395", "/usr/local/hami-vnpu-core/containers")
+		}()
+	} else {
+		klog.Info("hami-vnpu-core disabled on this node; not starting the vNPU metrics server")
+	}
 
 	if err = start(server); err != nil {
 		klog.Fatalf("start PluginServer failed, error is %v", err)

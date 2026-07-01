@@ -203,6 +203,38 @@ spec:
            huawei.com/Ascend310P-memory: "4096"
 ```
 
+## Monitoring
+
+When a node runs in **hami-vnpu-core (soft slicing) mode**, the device plugin starts an **embedded Prometheus exporter** on **`:9395/metrics`** that reports physical-device and per-container vNPU usage. It is **not** started for the legacy template-based vNPU (or whole-card) path, which has no soft-slice data to export. The DaemonSet declares the `monitorport` (9395) container port; the metrics `Service` and `ServiceMonitor` ship in `ascend-vnpu-monitor-integration.yaml`.
+
+### Exposed metrics
+
+| Metric | Labels | Description |
+| :--- | :--- | :--- |
+| `hami_host_gpu_memory_used_bytes` | `device_index`, `device_uuid`, `device_type` | Physical NPU memory used (bytes) |
+| `hami_host_gpu_utilization_ratio` | `device_index`, `device_uuid`, `device_type` | Physical NPU AICore utilization (0–100) |
+| `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | Per-container vNPU memory used (bytes) |
+| `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | Per-container vNPU memory limit (bytes) |
+| `hami_container_device_utilization_ratio` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | AICore utilization of the device the container runs on (0–100) |
+
+Per-container metrics come from the `hami-vnpu-core` soft-slice shmem and require the Pod to carry the device-UUID annotation the plugin writes (`huawei.com/Ascend<type>`), i.e. workloads soft-sliced through this plugin. In soft-slice mode multiple containers share one physical card, so they report that card's AICore utilization.
+
+### Scrape with Prometheus
+
+Quick check via `port-forward` to a plugin Pod:
+
+```bash
+POD=$(kubectl -n kube-system get pod -l app.kubernetes.io/component=hami-ascend-device-plugin -o jsonpath='{.items[0].metadata.name}')
+kubectl -n kube-system port-forward "$POD" 9395:9395
+curl -s localhost:9395/metrics | grep hami_
+```
+
+With the Prometheus Operator (kube-prometheus-stack) installed, apply the metrics `Service`, `ServiceMonitor` and recording rules:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-vnpu-monitor-integration.yaml
+```
+
 ## License
 
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_large)

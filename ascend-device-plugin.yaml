@@ -66,6 +66,11 @@ spec:
           args:
             - --config_file
             - /device-config.yaml
+          ports:
+            # Embedded vNPU Prometheus metrics endpoint (/metrics).
+            - name: monitorport
+              containerPort: 9395
+              protocol: TCP
           securityContext:
             privileged: true
             readOnlyRootFilesystem: false
