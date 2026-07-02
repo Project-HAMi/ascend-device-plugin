@@ -126,6 +126,9 @@ func (ps *PluginServer) Start() error {
 	if err != nil {
 		return err
 	}
+	if err := ps.enableNodeDeviceShare(); err != nil {
+		return err
+	}
 	err = ps.serve()
 	if err != nil {
 		return err
