@@ -13,3 +13,4 @@ data:
       - name: "cnst-dev-w2"
         hami-vnpu-core: true
         vDeviceCount: 8
+        filterDevices: [0, 1, 2, 3, 4, 5, 6, 7]

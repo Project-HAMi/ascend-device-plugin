@@ -80,6 +80,8 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 The `hami-device-node-config` is used to enable or override hami-vnpu-core for specific nodes within the cluster. Node-level settings take higher priority than the global `vnpus.hamiVnpuCore` switch.
 
+It also supports `filterDevices` to limit which card IDs are exposed by the device plugin on a specific node, for example: `filterDevices: [0, 1, 2, 3]`.
+
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-node-configmap.yaml
 ```
