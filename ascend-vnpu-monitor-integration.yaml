@@ -1,6 +1,26 @@
-# Prometheus integration for embedded vNPU monitor (:9395/metrics).
+# Prometheus integration for the embedded vNPU monitor (:9395/metrics), which the
+# device-plugin serves only in hami-vnpu-core (soft-slice) mode.
 # Apply when kube-prometheus-stack (or compatible Prometheus Operator) is installed.
 # Kantaloupe discovers ServiceMonitors labeled release=prometheus in monitoring namespace.
+---
+# Headless Service exposing the plugin's vNPU metrics endpoint; the ServiceMonitor
+# below selects it by label.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hami-ascend-device-plugin-metrics
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/component: hami-ascend-device-plugin
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/component: hami-ascend-device-plugin
+  ports:
+    - name: monitorport
+      port: 9395
+      targetPort: monitorport
+      protocol: TCP
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

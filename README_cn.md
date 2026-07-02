@@ -200,3 +200,35 @@ spec:
           huawei.com/Ascend310P: "1"
           huawei.com/Ascend310P-memory: "4096"
 ```
+
+## 监控
+
+当节点运行在 **hami-vnpu-core(软切)模式**时,设备插件会在 **`:9395/metrics`** 启动内置 **Prometheus exporter**,上报物理设备级和每容器的 vNPU 使用指标。传统的模板 vNPU(或整卡)模式**不会**启动它——那种模式没有软切数据可导出。DaemonSet 声明了 `monitorport`(9395)容器端口;metrics `Service` 和 `ServiceMonitor` 放在 `ascend-vnpu-monitor-integration.yaml` 里。
+
+### 暴露的指标
+
+| 指标 | 标签 | 说明 |
+| :--- | :--- | :--- |
+| `hami_host_gpu_memory_used_bytes` | `device_index`, `device_uuid`, `device_type` | 物理 NPU 已用显存(字节) |
+| `hami_host_gpu_utilization_ratio` | `device_index`, `device_uuid`, `device_type` | 物理 NPU AICore 利用率(0–100) |
+| `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 每容器 vNPU 已用显存(字节) |
+| `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 每容器 vNPU 显存上限(字节) |
+| `hami_container_device_utilization_ratio` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 容器所在设备的 AICore 利用率(0–100) |
+
+每容器指标来自 `hami-vnpu-core` 软切的共享内存,依赖插件写入的设备 UUID 注解(`huawei.com/Ascend<型号>`),即通过本插件软切的负载。软切模式下多个容器共享同一张物理卡,因此它们上报的是该卡的 AICore 利用率。
+
+### 用 Prometheus 抓取
+
+通过 `port-forward` 到插件 Pod 快速验证:
+
+```bash
+POD=$(kubectl -n kube-system get pod -l app.kubernetes.io/component=hami-ascend-device-plugin -o jsonpath='{.items[0].metadata.name}')
+kubectl -n kube-system port-forward "$POD" 9395:9395
+curl -s localhost:9395/metrics | grep hami_
+```
+
+已安装 Prometheus Operator(kube-prometheus-stack)时,应用 metrics `Service`、`ServiceMonitor` 和录制规则:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-vnpu-monitor-integration.yaml
+```

@@ -98,6 +98,26 @@ func (l *ContainerLister) Stop() {
 	close(l.stopCh)
 }
 
+// ascendDeviceResource returns the Ascend device resource the container requests
+// (also the pod-annotation key holding its device UUIDs), or "" if there is none.
+func ascendDeviceResource(pod *corev1.Pod, ctrName string) string {
+	for _, c := range pod.Spec.Containers {
+		if c.Name != ctrName {
+			continue
+		}
+		for _, rl := range []corev1.ResourceList{c.Resources.Limits, c.Resources.Requests} {
+			for res := range rl {
+				k := string(res)
+				if strings.HasPrefix(k, "huawei.com/Ascend") &&
+					!strings.HasSuffix(k, "-core") && !strings.HasSuffix(k, "-memory") {
+					return k
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // ListContainers enumerates container directories and reads shmem from each.
 // Directory format: {podUID}_{containerName}.
 func (l *ContainerLister) ListContainers() ([]ContainerEntry, error) {
@@ -155,12 +175,14 @@ func (l *ContainerLister) ListContainers() ([]ContainerEntry, error) {
 		}
 
 		var devUUIDs []string
-		if anno, ok := pod.Annotations["huawei.com/Ascend310P"]; ok {
-			var devs []struct{ UUID string }
-			if json.Unmarshal([]byte(anno), &devs) == nil {
-				for _, d := range devs {
-					if d.UUID != "" {
-						devUUIDs = append(devUUIDs, d.UUID)
+		if key := ascendDeviceResource(pod, ctrName); key != "" {
+			if anno, ok := pod.Annotations[key]; ok {
+				var devs []struct{ UUID string }
+				if json.Unmarshal([]byte(anno), &devs) == nil {
+					for _, d := range devs {
+						if d.UUID != "" {
+							devUUIDs = append(devUUIDs, d.UUID)
+						}
 					}
 				}
 			}

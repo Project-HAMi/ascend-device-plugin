@@ -93,8 +93,8 @@ func (c *vNPUCollector) Collect(ch chan<- prometheus.Metric) {
 		klog.Errorf("Host device stats: %v", err)
 	}
 
-	c.collectPodMetrics(ch, hostDevices)
-	c.collectHostMetrics(ch, hostDevices)
+	podMemByDevice := c.collectPodMetrics(ch, hostDevices)
+	c.collectHostMetrics(ch, hostDevices, podMemByDevice)
 }
 
 func formatDeviceType(deviceType string) string {
@@ -104,9 +104,13 @@ func formatDeviceType(deviceType string) string {
 	return "Ascend-" + deviceType
 }
 
-func (c *vNPUCollector) collectHostMetrics(ch chan<- prometheus.Metric, devices []DeviceStat) {
+func (c *vNPUCollector) collectHostMetrics(ch chan<- prometheus.Metric, devices []DeviceStat, podMemByDevice map[string]uint64) {
 	for _, d := range devices {
 		hostUsed := float64(d.MemoryUsed) * 1024 * 1024
+		// Override with pod aggregate if available (more accurate in device-share mode)
+		if sum, ok := podMemByDevice[d.UUID]; ok && sum > 0 {
+			hostUsed = float64(sum)
+		}
 		labels := []string{fmt.Sprint(d.Index), d.UUID, formatDeviceType(d.DeviceType)}
 		ch <- prometheus.MustNewConstMetric(hostGPUdesc, prometheus.GaugeValue, hostUsed, labels...)
 		ch <- prometheus.MustNewConstMetric(hostGPUUtilizationdesc, prometheus.GaugeValue, float64(d.AICorePct), labels...)
@@ -120,9 +124,9 @@ func (c *vNPUCollector) collectPodMetrics(ch chan<- prometheus.Metric, devices [
 		return nil
 	}
 
-	hostAICore := 0.0
-	if len(devices) > 0 {
-		hostAICore = float64(devices[0].AICorePct)
+	utilByUUID := make(map[string]float64)
+	for _, d := range devices {
+		utilByUUID[d.UUID] = float64(d.AICorePct)
 	}
 
 	podMemByDevice := make(map[string]uint64)
@@ -153,7 +157,7 @@ func (c *vNPUCollector) collectPodMetrics(ch chan<- prometheus.Metric, devices [
 
 			ch <- prometheus.MustNewConstMetric(ctrvGPUdesc, prometheus.GaugeValue, float64(memoryUsed), baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrvGPUlimitdesc, prometheus.GaugeValue, float64(memoryLimit), baseLabels...)
-			ch <- prometheus.MustNewConstMetric(ctrDeviceUtilizationdesc, prometheus.GaugeValue, hostAICore, baseLabels...)
+			ch <- prometheus.MustNewConstMetric(ctrDeviceUtilizationdesc, prometheus.GaugeValue, utilByUUID[devUUID], baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrDeviceMemoryContextDesc, prometheus.GaugeValue, float64(memoryContextSize), baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrDeviceMemoryModuleDesc, prometheus.GaugeValue, float64(memoryModuleSize), baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrDeviceMemoryBufferDesc, prometheus.GaugeValue, float64(memoryBufferSize), baseLabels...)
