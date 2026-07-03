@@ -34,8 +34,9 @@ import (
 	"github.com/Project-HAMi/HAMi/pkg/util"
 )
 
+// watchAndRegister must be launched with ps.wg.Add(1) already called by the
+// caller (see Start()); doing the Add here would race with Stop()'s wg.Wait().
 func (ps *PluginServer) watchAndRegister() {
-	ps.wg.Add(1)
 	defer ps.wg.Done()
 	timer := time.After(1 * time.Second)
 	for {

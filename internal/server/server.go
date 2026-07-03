@@ -137,13 +137,18 @@ func (ps *PluginServer) Start() error {
 	if err != nil {
 		return err
 	}
+	// Add to the WaitGroup synchronously before launching the goroutines.
+	// sync.WaitGroup requires a positive Add (from a zero counter) to
+	// happen-before Wait; doing Add inside the goroutine races with Stop()'s
+	// Wait and panics with "WaitGroup is reused before previous Wait has returned".
+	ps.wg.Add(1)
 	go ps.startPeriodicCheckIdleVNPUs()
+	ps.wg.Add(1)
 	go ps.watchAndRegister()
 	return nil
 }
 
 func (ps *PluginServer) startPeriodicCheckIdleVNPUs() {
-	ps.wg.Add(1)
 	defer ps.wg.Done()
 	ticker := time.NewTicker(time.Duration(ps.checkIdleVNPUInterval) * time.Second)
 	defer ticker.Stop()
