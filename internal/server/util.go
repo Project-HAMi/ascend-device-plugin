@@ -45,7 +45,6 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
-	// Sync source file permissions (ensure the limiter binary retains executable permission)
 	srcInfo, err := srcFile.Stat()
 	if err != nil {
 		return err
@@ -81,9 +80,7 @@ func prepareHostResources() error {
 		assetsDir = "/usr/local/hami-vnpu-core-assets"
 	}
 
-	// Define files to copy: source path in container -> target path on host
 	filesToCopy := map[string]string{
-		"limiter":       filepath.Join(targetDir, "limiter"),
 		"libvnpu.so":    filepath.Join(targetDir, "libvnpu.so"),
 		"ld.so.preload": filepath.Join(targetDir, "ld.so.preload"),
 	}
