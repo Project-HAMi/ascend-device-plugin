@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/instance: hami-ascend-device-plugin
 data:
   device-config.yaml: |-
-{{ .Values.deviceConfig | nindent 4 }}
+{{ tpl .Values.deviceConfig . | nindent 4 }}
 {{- end }}
 {{- if .Values.nodeConfigMap.create }}
 {{- if .Values.config.create }}

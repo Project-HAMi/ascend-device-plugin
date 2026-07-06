@@ -39,6 +39,17 @@ helm install ascend-device-plugin ./charts/ascend-device-plugin \
 
 With this mode, the chart mounts the existing device config and still manages `hami-device-node-config` by default.
 
+## hami-vnpu-core
+
+Enable the global `vnpus.hamiVnpuCore` switch in the generated device config:
+
+```bash
+helm install ascend-device-plugin ./charts/ascend-device-plugin \
+  --namespace kube-system \
+  --set image.tag=v1.3.0 \
+  --set hamiVnpuCore.enabled=true
+```
+
 ## Node Configuration
 
 Override `nodeConfig` to enable or customize `hami-vnpu-core` per node:

@@ -41,9 +41,12 @@ nodeConfigMap:
   create: true
   name: hami-device-node-config
 
+hamiVnpuCore:
+  enabled: false
+
 deviceConfig: |-
   vnpus:
-    hamiVnpuCore: false
+    hamiVnpuCore: {{ .Values.hamiVnpuCore.enabled }}
     configs:
     - chipName: 910A
       commonWord: Ascend910A
