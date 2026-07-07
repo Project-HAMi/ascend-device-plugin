@@ -4,18 +4,18 @@ metadata:
   name: {{ include "ascend-device-plugin.daemonSetName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/component: hami-ascend-device-plugin
+{{- include "ascend-device-plugin.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/component: hami-ascend-device-plugin
+{{- include "ascend-device-plugin.selectorLabels" . | nindent 6 }}
       hami.io/webhook: ignore
   template:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
-        app.kubernetes.io/component: hami-ascend-device-plugin
+{{- include "ascend-device-plugin.labels" . | nindent 8 }}
         hami.io/webhook: ignore
     spec:
       priorityClassName: system-node-critical
@@ -29,9 +29,15 @@ spec:
           args:
             - --config_file
             - /device-config.yaml
+            - --node_config_file
+            - /node-config.yaml
+          ports:
+            - name: monitorport
+              containerPort: 9395
+              protocol: TCP
           securityContext:
             privileged: true
-            readOnlyRootFilesystem: true
+            readOnlyRootFilesystem: false
           volumeMounts:
             - name: device-plugin
               mountPath: /var/lib/kubelet/device-plugins
@@ -93,4 +99,4 @@ spec:
           configMap:
             name: {{ include "ascend-device-plugin.nodeConfigMapName" . }}
       nodeSelector:
-{{ toYaml .Values.nodeSelector | nindent 8 }}
+{{- toYaml .Values.nodeSelector | nindent 8 }}

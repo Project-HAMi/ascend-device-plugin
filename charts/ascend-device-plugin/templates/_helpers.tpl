@@ -22,6 +22,19 @@
 {{- printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) -}}
 {{- end -}}
 
+{{- define "ascend-device-plugin.selectorLabels" -}}
+app.kubernetes.io/component: hami-ascend-device-plugin
+app.kubernetes.io/name: {{ include "ascend-device-plugin.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "ascend-device-plugin.labels" -}}
+helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+{{ include "ascend-device-plugin.selectorLabels" . }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
 {{- define "ascend-device-plugin.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
 {{- default (include "ascend-device-plugin.fullname" .) .Values.serviceAccount.name -}}

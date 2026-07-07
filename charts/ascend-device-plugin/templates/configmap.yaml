@@ -5,12 +5,10 @@ metadata:
   name: {{ .Values.config.deviceConfigMapName }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/component: hami-ascend-device-plugin
-    app.kubernetes.io/name: hami-ascend-device-plugin
-    app.kubernetes.io/instance: hami-ascend-device-plugin
+{{- include "ascend-device-plugin.labels" . | nindent 4 }}
 data:
   device-config.yaml: |-
-{{ tpl .Values.deviceConfig . | nindent 4 }}
+{{- tpl .Values.deviceConfig . | nindent 4 }}
 {{- end }}
 {{- if .Values.nodeConfigMap.create }}
 {{- if .Values.config.create }}
@@ -22,10 +20,8 @@ metadata:
   name: {{ include "ascend-device-plugin.nodeConfigMapName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/component: hami-ascend-device-plugin
-    app.kubernetes.io/name: hami-ascend-device-plugin
-    app.kubernetes.io/instance: hami-ascend-device-plugin
+{{- include "ascend-device-plugin.labels" . | nindent 4 }}
 data:
   node-config.yaml: |-
-{{ .Values.nodeConfig | nindent 4 }}
+{{- .Values.nodeConfig | nindent 4 }}
 {{- end }}
