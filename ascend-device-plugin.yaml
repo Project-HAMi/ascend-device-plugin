@@ -66,6 +66,8 @@ spec:
           args:
             - --config_file
             - /device-config.yaml
+            - --node_config_file
+            - /node-config.yaml
           ports:
             # Embedded vNPU Prometheus metrics endpoint (/metrics).
             - name: monitorport
