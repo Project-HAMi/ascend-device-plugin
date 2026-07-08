@@ -23,12 +23,7 @@ import (
 )
 
 // TestVDeviceCount verifies that VDeviceCount honors a per-node override
-// (nodeConfig.VDeviceCount) when present, and otherwise falls back to the
-// global default derived from MemoryAllocatable / smallest template.
-//
-// This guards the fix for the bug where VDeviceCount ignored the loaded
-// nodeConfig.VDeviceCount and always used the global default, even though the
-// sibling IsHamiVnpuCore() already preferred nodeConfig.
+// (nodeConfig.VDeviceCount) and otherwise falls back to the global default.
 func TestVDeviceCount(t *testing.T) {
 	// A representative Ascend910B4 config: 32768 MiB allocatable, smallest
 	// template 8192 MiB -> global default = 32768/8192 = 4 vDevices/card.
