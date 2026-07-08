@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "ascend-device-plugin.daemonSetName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{- include "ascend-device-plugin.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{- include "ascend-device-plugin.selectorLabels" . | nindent 6 }}
+      hami.io/webhook: ignore
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      labels:
+{{- include "ascend-device-plugin.labels" . | nindent 8 }}
+        hami.io/webhook: ignore
+    spec:
+      priorityClassName: system-node-critical
+      serviceAccountName: {{ include "ascend-device-plugin.serviceAccountName" . }}
+      containers:
+        - image: {{ include "ascend-device-plugin.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          name: device-plugin
+          resources:
+{{ toYaml .Values.resources | nindent 12 }}
+          args:
+            - --config_file
+            - /device-config.yaml
+            - --node_config_file
+            - /node-config.yaml
+          ports:
+            - name: monitorport
+              containerPort: 9395
+              protocol: TCP
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: false
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: pod-resource
+              mountPath: /var/lib/kubelet/pod-resources
+            - name: hiai-driver
+              mountPath: /usr/local/Ascend/driver
+              readOnly: true
+            - name: log-path
+              mountPath: /var/log/mindx-dl/devicePlugin
+            - name: tmp
+              mountPath: /tmp
+            - name: hami-shared-region
+              mountPath: /usr/local/hami-shared-region
+            - name: hami-vnpu-core
+              mountPath: /usr/local/hami-vnpu-core
+            - name: ascend-config
+              mountPath: /device-config.yaml
+              subPath: device-config.yaml
+              readOnly: true
+            - name: ascend-node-config
+              mountPath: /node-config.yaml
+              subPath: node-config.yaml
+              readOnly: true
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+        - name: pod-resource
+          hostPath:
+            path: /var/lib/kubelet/pod-resources
+        - name: hiai-driver
+          hostPath:
+            path: /usr/local/Ascend/driver
+        - name: log-path
+          hostPath:
+            path: /var/log/mindx-dl/devicePlugin
+            type: DirectoryOrCreate
+        - name: tmp
+          hostPath:
+            path: /tmp
+        - name: hami-shared-region
+          hostPath:
+            path: /usr/local/hami-shared-region
+            type: DirectoryOrCreate
+        - name: hami-vnpu-core
+          hostPath:
+            path: /usr/local/hami-vnpu-core
+            type: DirectoryOrCreate
+        - name: ascend-config
+          configMap:
+            name: {{ include "ascend-device-plugin.deviceConfigMapName" . }}
+        - name: ascend-node-config
+          configMap:
+            name: {{ include "ascend-device-plugin.nodeConfigMapName" . }}
+      nodeSelector:
+{{- toYaml .Values.nodeSelector | nindent 8 }}
