@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -151,7 +152,7 @@ func (c *vNPUCollector) collectPodMetrics(ch chan<- prometheus.Metric, devices [
 				e.Namespace,
 				e.PodName,
 				e.ContainerName,
-				"0",
+				strconv.Itoa(i),
 				devUUID,
 			}
 
