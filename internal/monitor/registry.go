@@ -16,7 +16,7 @@ const (
 	localShmComputePrioOffset   = 16
 	localShmActiveWorkersOffset = 48
 
-	// ProcessSlot inside procs[] array
+	// ProcessSlot: pid@0, hbm_used[8]@8, is_active@72, size 80.
 	procSlotSize      = 80
 	procSlotPID       = 0
 	procSlotHBMOffset = 8 // [AtomicU64; NPU_DEVICE_MAX=8]

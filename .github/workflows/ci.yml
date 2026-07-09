@@ -90,7 +90,6 @@ jobs:
     - name: Prepare artifacts for upload
       run: |
         mkdir -p ./artifacts
-        cp libvnpu/target/release/limiter ./artifacts/
         cp libvnpu/target/release/libvnpu.so ./artifacts/
         echo "/hami-vnpu-core/libvnpu.so" > ./artifacts/ld.so.preload
     - name: upload artifacts
