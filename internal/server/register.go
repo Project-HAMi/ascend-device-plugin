@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"path"
@@ -86,18 +87,24 @@ func (ps *PluginServer) registerHAMi() error {
 			Health:  dev.Health,
 		}
 		if strings.HasPrefix(device.Type, Ascend910Prefix) {
-			NetworkID, err := ps.getDeviceNetworkID(i, device.Type)
+			networkID, err := ps.getDeviceNetworkID(i, device.Type)
 			if err != nil {
 				return fmt.Errorf("get networkID error: %w", err)
 			}
 			device.CustomInfo = map[string]any{
-				"NetworkID": NetworkID,
+				"NetworkID": networkID,
 			}
 		}
 		apiDevices = append(apiDevices, device)
 	}
+
+	data, err := json.Marshal(apiDevices)
+	if err != nil {
+		return fmt.Errorf("marshal node devices error: %w", err)
+	}
+
 	annos := make(map[string]string)
-	annos[ps.registerAnno] = device.MarshalNodeDevices(apiDevices)
+	annos[ps.registerAnno] = string(data)
 	annos[ps.handshakeAnno] = "Reported_" + time.Now().Add(time.Duration(*reportTimeOffset)*time.Second).Format("2006.01.02 15:04:05")
 
 	if ps.mgr.IsHamiVnpuCore() {
