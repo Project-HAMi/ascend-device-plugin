@@ -158,12 +158,12 @@ func (l *ContainerLister) ListContainers() ([]ContainerEntry, error) {
 		pod := podByUID[podUID]
 		if pod == nil {
 			klog.V(3).Infof("Stale container dir (pod gone): %s, removing", name)
-			os.RemoveAll(filepath.Join(l.containersPath, name))
+			_ = os.RemoveAll(filepath.Join(l.containersPath, name))
 			continue
 		}
 		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 			klog.V(3).Infof("Stale container dir (pod %s): %s, removing", pod.Status.Phase, name)
-			os.RemoveAll(filepath.Join(l.containersPath, name))
+			_ = os.RemoveAll(filepath.Join(l.containersPath, name))
 			continue
 		}
 
@@ -197,7 +197,7 @@ func (l *ContainerLister) ListContainers() ([]ContainerEntry, error) {
 			DeviceMemory:  reader.ReadMemoryByDevice(),
 			DeviceUUIDs:   devUUIDs,
 		})
-		reader.Close()
+		_ = reader.Close()
 	}
 	return result, nil
 }

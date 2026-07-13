@@ -186,12 +186,12 @@ func (ps *PluginServer) dial(unixSocketPath string, timeout time.Duration) (*grp
 			return c, nil
 		}
 		if state == connectivity.TransientFailure || state == connectivity.Shutdown {
-			c.Close()
+			_ = c.Close()
 			return nil, fmt.Errorf("connection to %s failed (state: %s)", unixSocketPath, state)
 		}
 		// Block until the state changes or the deadline is exceeded.
 		if !c.WaitForStateChange(ctx, state) {
-			c.Close()
+			_ = c.Close()
 			return nil, fmt.Errorf("timed out waiting for connection to %s", unixSocketPath)
 		}
 	}
