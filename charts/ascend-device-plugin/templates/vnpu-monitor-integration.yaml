@@ -1,0 +1,109 @@
+{{- if .Values.vnpuMonitor.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.vnpuMonitor.service.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{- include "ascend-device-plugin.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+{{- include "ascend-device-plugin.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: monitorport
+      port: 9395
+      targetPort: monitorport
+      protocol: TCP
+{{- if .Values.vnpuMonitor.serviceMonitor.create }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.vnpuMonitor.serviceMonitor.name }}
+  namespace: {{ .Values.vnpuMonitor.serviceMonitor.namespace }}
+  labels:
+{{- include "ascend-device-plugin.labels" . | nindent 4 }}
+{{- with .Values.vnpuMonitor.serviceMonitor.labels }}
+{{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  jobLabel: app.kubernetes.io/name
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+{{- include "ascend-device-plugin.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: monitorport
+      path: {{ .Values.vnpuMonitor.serviceMonitor.path }}
+      interval: {{ .Values.vnpuMonitor.serviceMonitor.interval }}
+      relabelings:
+        - action: replace
+          sourceLabels:
+            - __meta_kubernetes_endpoint_node_name
+          targetLabel: node
+      metricRelabelings:
+        - action: replace
+          sourceLabels:
+            - pod
+          targetLabel: exported_pod
+        - action: replace
+          sourceLabels:
+            - namespace
+          targetLabel: exported_namespace
+{{- end }}
+{{- if .Values.vnpuMonitor.prometheusRule.create }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Values.vnpuMonitor.prometheusRule.name }}
+  namespace: {{ .Values.vnpuMonitor.prometheusRule.namespace }}
+  labels:
+{{- include "ascend-device-plugin.labels" . | nindent 4 }}
+{{- with .Values.vnpuMonitor.prometheusRule.labels }}
+{{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  groups:
+    - name: {{ .Values.vnpuMonitor.prometheusRule.groupName }}
+      interval: {{ .Values.vnpuMonitor.prometheusRule.interval }}
+{{- with .Values.vnpuMonitor.prometheusRule.groupLabels }}
+      labels:
+{{- toYaml . | nindent 8 }}
+{{- end }}
+      rules:
+        - record: kantaloupe_gpu_mem_used
+          expr: |
+            label_replace(
+              hami_host_gpu_memory_used_bytes / 1024 / 1024,
+              "UUID", "$1", "device_uuid", "(.*)"
+            )
+        - record: kantaloupe_gpu_core_used
+          expr: |
+            label_replace(
+              hami_host_gpu_utilization_ratio,
+              "UUID", "$1", "device_uuid", "(.*)"
+            )
+        - record: kantaloupe_workload_gpumem_used
+          expr: |
+            label_replace(
+              hami_vgpu_memory_used_bytes / 1024 / 1024,
+              "UUID", "$1", "device_uuid", "(.*)"
+            )
+        - record: kantaloupe_workload_gpumem_allocated
+          expr: |
+            label_replace(
+              hami_vgpu_memory_limit_bytes / 1024 / 1024,
+              "UUID", "$1", "device_uuid", "(.*)"
+            )
+        - record: kantaloupe_workload_gpucore_used
+          expr: |
+            label_replace(
+              hami_container_device_utilization_ratio,
+              "UUID", "$1", "device_uuid", "(.*)"
+            )
+{{- end }}
+{{- end }}
