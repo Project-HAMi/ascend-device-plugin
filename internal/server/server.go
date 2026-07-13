@@ -56,6 +56,8 @@ var (
 )
 
 type PluginServer struct {
+	v1beta1.UnimplementedDevicePluginServer
+
 	commonWord            string
 	nodeName              string
 	registerAnno          string
