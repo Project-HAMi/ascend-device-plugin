@@ -164,7 +164,7 @@ func TestAllocate(t *testing.T) {
 				},
 				reqs: &v1beta1.AllocateRequest{
 					ContainerRequests: []*v1beta1.ContainerAllocateRequest{
-						{DevicesIDs: []string{"uuid1-0"}},
+						{DevicesIds: []string{"uuid1-0"}},
 					},
 				},
 			},
@@ -187,7 +187,7 @@ func TestAllocate(t *testing.T) {
 				},
 				reqs: &v1beta1.AllocateRequest{
 					ContainerRequests: []*v1beta1.ContainerAllocateRequest{
-						{DevicesIDs: []string{"uuid1-0"}},
+						{DevicesIds: []string{"uuid1-0"}},
 					},
 				},
 			},
@@ -232,7 +232,7 @@ func TestAllocate(t *testing.T) {
 				},
 				reqs: &v1beta1.AllocateRequest{
 					ContainerRequests: []*v1beta1.ContainerAllocateRequest{
-						{DevicesIDs: []string{"uuid1-0"}},
+						{DevicesIds: []string{"uuid1-0"}},
 					},
 				},
 			},
@@ -281,8 +281,8 @@ func TestAllocate(t *testing.T) {
 				},
 				reqs: &v1beta1.AllocateRequest{
 					ContainerRequests: []*v1beta1.ContainerAllocateRequest{
-						{DevicesIDs: []string{"uuid1-0"}},
-						{DevicesIDs: []string{"uuid2-0"}},
+						{DevicesIds: []string{"uuid1-0"}},
+						{DevicesIds: []string{"uuid2-0"}},
 					},
 				},
 			},
@@ -326,7 +326,7 @@ func TestAllocate(t *testing.T) {
 				},
 				reqs: &v1beta1.AllocateRequest{
 					ContainerRequests: []*v1beta1.ContainerAllocateRequest{
-						{DevicesIDs: []string{"unknown-uuid-0"}},
+						{DevicesIds: []string{"unknown-uuid-0"}},
 					},
 				},
 			},
@@ -361,7 +361,7 @@ func TestAllocate(t *testing.T) {
 				},
 				reqs: &v1beta1.AllocateRequest{
 					ContainerRequests: []*v1beta1.ContainerAllocateRequest{
-						{DevicesIDs: []string{"uuid1-0"}},
+						{DevicesIds: []string{"uuid1-0"}},
 					},
 				},
 			},
