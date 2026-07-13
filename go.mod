@@ -85,6 +85,6 @@ require (
 
 replace (
 	ascend-common => ./mind-cluster/component/ascend-common
-	github.com/Project-HAMi/HAMi v0.0.0 => github.com/Project-HAMi/HAMi v0.0.0-20250901013025-61c6cbe7d480
+	github.com/Project-HAMi/HAMi v0.0.0 => github.com/Project-HAMi/HAMi v0.0.0-20260713065729-5f0adaa7a5ba
 	huawei.com/npu-exporter => ./mind-cluster/component/npu-exporter
 )
