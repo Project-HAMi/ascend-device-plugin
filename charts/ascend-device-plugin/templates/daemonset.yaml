@@ -46,6 +46,9 @@ spec:
             - name: hiai-driver
               mountPath: /usr/local/Ascend/driver
               readOnly: true
+            - name: host-sbin
+              mountPath: /usr/local/sbin
+              readOnly: true
             - name: log-path
               mountPath: /var/log/mindx-dl/devicePlugin
             - name: tmp
@@ -77,6 +80,10 @@ spec:
         - name: hiai-driver
           hostPath:
             path: /usr/local/Ascend/driver
+        - name: host-sbin
+          hostPath:
+            path: /usr/local/sbin
+            type: DirectoryOrCreate
         - name: log-path
           hostPath:
             path: /var/log/mindx-dl/devicePlugin
