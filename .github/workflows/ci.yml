@@ -138,7 +138,7 @@ jobs:
       run: |
         if [[ "${{ github.ref }}" == refs/tags/* ]]; then
           TAG_NAME="${GITHUB_REF#refs/tags/}"
-          echo "VERSION=${TAG_NAME#v}" >> $GITHUB_OUTPUT
+          echo "VERSION=${TAG_NAME}" >> $GITHUB_OUTPUT
           echo "Extracted version: ${VERSION}"
         else
           echo "VERSION=latest" >> $GITHUB_OUTPUT
