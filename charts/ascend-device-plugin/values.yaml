@@ -8,6 +8,10 @@ fullnameOverride: ""
 
 daemonSet:
   name: hami-ascend-device-plugin
+  args:
+    - --config_file
+    - /device-config.yaml
+    - --v=4
 
 rbac:
   name: hami-ascend

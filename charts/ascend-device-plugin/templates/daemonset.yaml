@@ -27,10 +27,7 @@ spec:
           resources:
 {{ toYaml .Values.resources | nindent 12 }}
           args:
-            - --config_file
-            - /device-config.yaml
-            - --node_config_file
-            - /node-config.yaml
+{{ toYaml .Values.daemonSet.args | nindent 12 }}
           ports:
             - name: monitorport
               containerPort: 9395
