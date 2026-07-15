@@ -1,12 +1,21 @@
 image:
+  # image.repository -- Container image repository.
   repository: projecthami/ascend-device-plugin
+
+  # image.tag -- Container image tag. Defaults to the chart `appVersion` when empty.
   tag: ""
+
+  # image.pullPolicy -- Kubernetes image pull policy.
   pullPolicy: IfNotPresent
 
+# nameOverride -- Override the chart name used in resource names.
 nameOverride: ""
+
+# fullnameOverride -- Override the fully qualified resource name.
 fullnameOverride: ""
 
 daemonSet:
+  # daemonSet.name -- Device plugin DaemonSet name.
   name: hami-ascend-device-plugin
   args:
     - --config_file
@@ -14,65 +23,118 @@ daemonSet:
     - --v=4
 
 rbac:
+  # rbac.name -- Name shared by the chart-managed RBAC resources.
   name: hami-ascend
 
 runtimeClass:
+  # runtimeClass.create -- Create the Ascend RuntimeClass.
   create: true
+
+  # runtimeClass.name -- RuntimeClass resource name.
   name: ascend
+
+  # runtimeClass.handler -- Container runtime handler used by the RuntimeClass.
   handler: ascend
 
 serviceAccount:
+  # serviceAccount.create -- Create a ServiceAccount for the device plugin.
   create: true
+
+  # serviceAccount.name -- ServiceAccount name. Defaults to the chart fullname when empty and creation is enabled.
   name: hami-ascend
 
 nodeSelector:
+  # nodeSelector.ascend -- Node label value used to schedule the device plugin.
   ascend: "on"
 
 resources:
   requests:
+    # resources.requests.memory -- Requested memory for the device plugin container.
     memory: 500Mi
+
+    # resources.requests.cpu -- Requested CPU for the device plugin container.
     cpu: 500m
   limits:
+    # resources.limits.memory -- Memory limit for the device plugin container.
     memory: 500Mi
+
+    # resources.limits.cpu -- CPU limit for the device plugin container.
     cpu: 500m
 
 config:
+  # config.create -- Create the device configuration ConfigMap.
   create: true
+
+  # config.existingDeviceConfigMapName -- Existing device configuration ConfigMap to mount instead of the chart-managed ConfigMap.
   existingDeviceConfigMapName: ""
+
+  # config.deviceConfigMapName -- Name of the chart-managed device configuration ConfigMap.
   deviceConfigMapName: hami-scheduler-device
 
 nodeConfigMap:
+  # nodeConfigMap.create -- Create the per-node configuration ConfigMap.
   create: true
+
+  # nodeConfigMap.name -- Per-node configuration ConfigMap name.
   name: hami-device-node-config
 
 hamiVnpuCore:
+  # hamiVnpuCore.enabled -- Enable hami-vnpu-core in the generated global device configuration.
   enabled: false
 
 vnpuMonitor:
+  # vnpuMonitor.enabled -- Create vNPU monitoring integration resources.
   enabled: false
   service:
+    # vnpuMonitor.service.name -- Metrics Service name.
     name: hami-ascend-device-plugin-metrics
   serviceMonitor:
+    # vnpuMonitor.serviceMonitor.create -- Create a Prometheus Operator ServiceMonitor.
     create: true
+
+    # vnpuMonitor.serviceMonitor.name -- ServiceMonitor name.
     name: hami-ascend-vnpu-monitor
+
+    # vnpuMonitor.serviceMonitor.namespace -- Namespace in which to create the ServiceMonitor.
     namespace: monitoring
     labels:
+      # vnpuMonitor.serviceMonitor.labels.release -- Prometheus release label applied to the ServiceMonitor.
       release: prometheus
+
+    # vnpuMonitor.serviceMonitor.interval -- Metrics scrape interval.
     interval: 15s
+
+    # vnpuMonitor.serviceMonitor.path -- Metrics HTTP path.
     path: /metrics
   prometheusRule:
+    # vnpuMonitor.prometheusRule.create -- Create a Prometheus Operator PrometheusRule.
     create: true
+
+    # vnpuMonitor.prometheusRule.name -- PrometheusRule name.
     name: hami-ascend-vnpu-monitor
+
+    # vnpuMonitor.prometheusRule.namespace -- Namespace in which to create the PrometheusRule.
     namespace: monitoring
     labels:
+      # vnpuMonitor.prometheusRule.labels.release -- Prometheus release label applied to the PrometheusRule.
       release: prometheus
+
+      # vnpuMonitor.prometheusRule.labels.role -- Role label applied to the PrometheusRule.
       role: recording-rules
-      vendor: ascend
-    groupName: ascend-vnpu
-    interval: 15s
-    groupLabels:
+
+      # vnpuMonitor.prometheusRule.labels.vendor -- Vendor label applied to the PrometheusRule.
       vendor: ascend
 
+    # vnpuMonitor.prometheusRule.groupName -- Prometheus rule group name.
+    groupName: ascend-vnpu
+
+    # vnpuMonitor.prometheusRule.interval -- Prometheus rule evaluation interval.
+    interval: 15s
+    groupLabels:
+      # vnpuMonitor.prometheusRule.groupLabels.vendor -- Vendor label applied to the Prometheus rule group.
+      vendor: ascend
+
+# @ignored
 deviceConfig: |-
   vnpus:
     hamiVnpuCore: {{ .Values.hamiVnpuCore.enabled }}
@@ -201,5 +263,6 @@ deviceConfig: |-
       aiCore: 20
       aiCPU: 7
 
+# nodeConfig -- Per-node hami-vnpu-core configuration written to the node ConfigMap.
 nodeConfig: |-
   nodes: []

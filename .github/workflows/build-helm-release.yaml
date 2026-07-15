@@ -1,0 +1,207 @@
+name: Helm Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - charts/ascend-device-plugin/Chart.yaml
+
+env:
+  HELM_VERSION: "v3.20.0"
+  CHART_PATH: charts/ascend-device-plugin
+
+concurrency:
+  group: helm-release
+  cancel-in-progress: false
+
+jobs:
+  detect-chart-version:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.compare.outputs.version_changed }}
+      previous_version: ${{ steps.compare.outputs.previous_version }}
+      current_version: ${{ steps.compare.outputs.current_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Compare chart version
+        id: compare
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          before_sha="${{ github.event.before }}"
+          if [[ -z "${before_sha}" || "${before_sha}" == "0000000000000000000000000000000000000000" ]]; then
+            echo "github.event.before is not available for this push" >&2
+            exit 1
+          fi
+
+          current_version="$(awk '$1 == "version:" { print $2; exit }' "${{ env.CHART_PATH }}/Chart.yaml")"
+          if [[ -z "${current_version}" ]]; then
+            echo "failed to resolve current chart version from ${{ env.CHART_PATH }}/Chart.yaml" >&2
+            exit 1
+          fi
+
+          if git cat-file -e "${before_sha}:${{ env.CHART_PATH }}/Chart.yaml" 2>/dev/null; then
+            previous_version="$(git show "${before_sha}:${{ env.CHART_PATH }}/Chart.yaml" | awk '$1 == "version:" { print $2; exit }')"
+          else
+            previous_version=""
+          fi
+
+          if [[ -z "${previous_version}" || "${previous_version}" != "${current_version}" ]]; then
+            version_changed=true
+          else
+            version_changed=false
+          fi
+
+          {
+            echo "previous_version=${previous_version}"
+            echo "current_version=${current_version}"
+            echo "version_changed=${version_changed}"
+          } >>"$GITHUB_OUTPUT"
+
+  helm-release-push:
+    if: github.event_name == 'push' && needs.detect-chart-version.outputs.version_changed == 'true'
+    needs:
+      - detect-chart-version
+    permissions:
+      contents: write
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Ensure gh-pages branch exists
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            echo "origin/gh-pages already exists"
+            exit 0
+          fi
+
+          workdir="$(mktemp -d)"
+          git worktree add --detach "${workdir}" HEAD
+
+          pushd "${workdir}"
+          git switch --orphan gh-pages
+          git rm -rf . >/dev/null 2>&1 || true
+          touch .nojekyll
+          git add .nojekyll
+          git commit -m "chore: initialize gh-pages branch"
+          git push origin gh-pages
+          popd
+
+          git worktree remove --force "${workdir}"
+          git fetch origin gh-pages
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5.0.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          charts_dir: charts
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package Helm chart for GHCR
+        run: |
+          mkdir -p dist
+          helm package "${{ env.CHART_PATH }}" --destination dist
+
+      - name: Push Helm chart to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          namespace="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "${GHCR_TOKEN}" | helm registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+          helm push dist/*.tgz "oci://ghcr.io/${namespace}/charts"
+
+  helm-release-manual:
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Ensure gh-pages branch exists
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            echo "origin/gh-pages already exists"
+            exit 0
+          fi
+
+          workdir="$(mktemp -d)"
+          git worktree add --detach "${workdir}" HEAD
+
+          pushd "${workdir}"
+          git switch --orphan gh-pages
+          git rm -rf . >/dev/null 2>&1 || true
+          touch .nojekyll
+          git add .nojekyll
+          git commit -m "chore: initialize gh-pages branch"
+          git push origin gh-pages
+          popd
+
+          git worktree remove --force "${workdir}"
+          git fetch origin gh-pages
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5.0.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          charts_dir: charts
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package Helm chart for GHCR
+        run: |
+          mkdir -p dist
+          helm package "${{ env.CHART_PATH }}" --destination dist
+
+      - name: Push Helm chart to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          namespace="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "${GHCR_TOKEN}" | helm registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+          helm push dist/*.tgz "oci://ghcr.io/${namespace}/charts"
