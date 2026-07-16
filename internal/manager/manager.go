@@ -154,6 +154,10 @@ func (am *AscendManager) ResourceName() string {
 }
 
 func (am *AscendManager) VDeviceCount() int {
+	// Prefer the per-node override when present, mirroring IsHamiVnpuCore().
+	if am.nodeConfig != nil && am.nodeConfig.VDeviceCount > 0 {
+		return am.nodeConfig.VDeviceCount
+	}
 	if len(am.config.Templates) == 0 {
 		return 1
 	}
