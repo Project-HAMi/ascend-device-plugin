@@ -41,20 +41,17 @@ spec:
     - port: monitorport
       path: /metrics
       interval: 15s
+      # honorLabels keeps the exporter's workload namespace/pod (else the Operator overwrites them with the device-plugin pod)
+      honorLabels: true
       relabelings:
         - action: replace
           sourceLabels:
             - __meta_kubernetes_endpoint_node_name
           targetLabel: node
-      metricRelabelings:
         - action: replace
           sourceLabels:
-            - pod
-          targetLabel: exported_pod
-        - action: replace
-          sourceLabels:
-            - namespace
-          targetLabel: exported_namespace
+            - __meta_kubernetes_pod_name
+          targetLabel: plugin_pod
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
