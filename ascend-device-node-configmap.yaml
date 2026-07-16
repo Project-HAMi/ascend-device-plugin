@@ -13,3 +13,6 @@ data:
       - name: "cnst-dev-w2"
         hami-vnpu-core: true
         vDeviceCount: 8
+        filterDevices:
+          index: []
+          uuid: []

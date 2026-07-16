@@ -50,6 +50,21 @@ type Config struct {
 	VNPUs VNPUsConfig `json:"vnpus"`
 }
 
+// FilterDevices defines devices that should be ignored by HAMi.
+// A device is ignored when its UUID is listed in UUID or its index is listed in Index.
+type FilterDevices struct {
+	UUID  []string `json:"uuid,omitempty" yaml:"uuid,omitempty"`
+	Index []int32  `json:"index,omitempty" yaml:"index,omitempty"`
+}
+
+func (fd FilterDevices) IsEmpty() bool {
+	return len(fd.UUID) == 0 && len(fd.Index) == 0
+}
+
+func (fd FilterDevices) HasUUID() bool {
+	return len(fd.UUID) > 0
+}
+
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -64,13 +79,14 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 type NodeConfig struct {
-	Name         string `json:"name"`
-	HamiVnpuCore bool   `json:"hami-vnpu-core"`
-	VDeviceCount int    `json:"vDeviceCount"`
+	Name          string        `json:"name" yaml:"name"`
+	HamiVnpuCore  bool          `json:"hami-vnpu-core" yaml:"hami-vnpu-core"`
+	VDeviceCount  int           `json:"vDeviceCount" yaml:"vDeviceCount"`
+	FilterDevices FilterDevices `json:"filterDevices,omitempty" yaml:"filterDevices,omitempty"`
 }
 
 type NodeListConfig struct {
-	Nodes []NodeConfig `json:"nodes"`
+	Nodes []NodeConfig `json:"nodes" yaml:"nodes"`
 }
 
 func LoadNodeConfig(path string) (*NodeListConfig, error) {
