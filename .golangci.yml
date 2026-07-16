@@ -1,15 +1,21 @@
+version: "2"
+
 linters:
+  enable:
+    - asciicheck
+    - misspell
+    - staticcheck
+
+  exclusions:
+    paths:
+      - mind-cluster
+      - libvnpu
+
+formatters:
   enable:
     - gofmt
     - goimports
-    - stylecheck
-
-issues:
-  exclude-dirs:
-    - mind-cluster
-    - libvnpu
-  exclude-rules:
-    - path: internal/server/server\.go
-      linters:
-        - staticcheck
-      text: "SA1019:.*deprecated"
+  exclusions:
+    paths:
+      - mind-cluster
+      - libvnpu

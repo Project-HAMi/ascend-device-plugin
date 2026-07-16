@@ -56,6 +56,8 @@ var (
 )
 
 type PluginServer struct {
+	v1beta1.UnimplementedDevicePluginServer
+
 	commonWord            string
 	nodeName              string
 	registerAnno          string
@@ -331,8 +333,8 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 		}
 		klog.Infof("containerDevs: %+v", containerDevs)
 
-		if len(containerDevs) != len(req.DevicesIDs) {
-			return nil, fmt.Errorf("device number not matched: annotation has %d, request has %d", len(containerDevs), len(req.DevicesIDs))
+		if len(containerDevs) != len(req.DevicesIds) {
+			return nil, fmt.Errorf("device number not matched: annotation has %d, request has %d", len(containerDevs), len(req.DevicesIds))
 		}
 
 		resp, err := ps.buildContainerAllocateResponse(pod, ctrName, containerDevs, rtInfoLookup)

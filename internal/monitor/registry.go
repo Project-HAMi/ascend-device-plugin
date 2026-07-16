@@ -43,7 +43,9 @@ func OpenLocalShmem(path string) (*ShmemReader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	fi, err := f.Stat()
 	if err != nil {

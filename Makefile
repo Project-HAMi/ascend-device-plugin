@@ -18,7 +18,7 @@ docker:
 	-t ${IMG_NAME}:${VERSION} .
 
 lint:
-	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0
+	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.0
 	golangci-lint run
 
 ascend-device-plugin:

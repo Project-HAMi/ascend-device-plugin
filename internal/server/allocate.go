@@ -119,7 +119,7 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, ctrName stri
 
 		// Per-container local shmem dir (like NVIDIA vgpu/containers/{podUID}_{ctrName})
 		containerShmemDir := fmt.Sprintf("%s/containers/%s_%s", hostHookPath, pod.UID, ctrName)
-		os.RemoveAll(containerShmemDir)
+		_ = os.RemoveAll(containerShmemDir)
 		if err := os.MkdirAll(containerShmemDir, 0777); err != nil {
 			klog.Warningf("MkdirAll %s: %v", containerShmemDir, err)
 		}
