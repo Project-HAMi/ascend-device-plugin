@@ -49,16 +49,10 @@ nodeSelector:
 
 resources:
   requests:
-    # resources.requests.memory -- Requested memory for the device plugin container.
     memory: 500Mi
-
-    # resources.requests.cpu -- Requested CPU for the device plugin container.
     cpu: 500m
   limits:
-    # resources.limits.memory -- Memory limit for the device plugin container.
     memory: 500Mi
-
-    # resources.limits.cpu -- CPU limit for the device plugin container.
     cpu: 500m
 
 config:
