@@ -1,0 +1,85 @@
+name: Helm Lint
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  HELM_VERSION: "v3.20.0"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      helm: ${{ steps.filter.outputs.helm }}
+    steps:
+      - name: Detect Helm changes
+        uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            helm:
+              - 'charts/ascend-device-plugin/**'
+              - 'Makefile'
+              - '.github/workflows/helm-lint.yaml'
+              - '.github/workflows/build-helm-release.yaml'
+
+  lint-test:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.helm == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5.0.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Set up helm-docs
+        uses: gabe565/setup-helm-docs-action@v1
+        with:
+          version: v1.14.2
+
+      - name: Run Helm chart verification
+        run: make verify-helm-chart
+
+  helm-lint-required:
+    runs-on: ubuntu-latest
+    needs:
+      - changes
+      - lint-test
+    if: always()
+    steps:
+      - name: Check Helm workflow result
+        shell: bash
+        run: |
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "Helm change detection did not complete successfully: ${{ needs.changes.result }}"
+            exit 1
+          fi
+
+          if [[ "${{ needs.changes.outputs.helm }}" != "true" ]]; then
+            echo "No Helm-relevant changes."
+            exit 0
+          fi
+
+          if [[ "${{ needs.lint-test.result }}" != "success" ]]; then
+            echo "Helm verification did not complete successfully: ${{ needs.lint-test.result }}"
+            exit 1
+          fi
