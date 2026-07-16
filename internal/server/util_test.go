@@ -423,6 +423,79 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 			},
 		},
 		{
+			name: "NoAnnotation_NodeHamiCore_FollowsNode",
+			setup: func() (*PluginServer, CleanupFunc) {
+				return &PluginServer{
+					mgr: &FakeManager{
+						GetDeviceByUUIDFunc: func(uuid string) *manager.Device {
+							return &manager.Device{UUID: "uuid1", PhyID: 3}
+						},
+						IsHamiVnpuCoreFunc: func() bool { return true },
+					},
+					allocAnno: allocAnno,
+				}, func() {}
+			},
+			args: buildContainerAllocateResponseArgs{
+				pod:           &v1.Pod{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{}}},
+				containerDevs: device.ContainerDevices{cd("uuid1", "Ascend910", 1024, 4)},
+				rtInfoLookup: func() map[string]RuntimeInfo {
+					mem := int64(8738)
+					core := int32(4)
+					return map[string]RuntimeInfo{
+						"uuid1": {UUID: "uuid1", Temp: "vir08", Memory: &mem, Core: &core},
+					}
+				}(),
+			},
+			want: buildContainerAllocateResponseWant{
+				envs: map[string]string{
+					"ASCEND_VISIBLE_DEVICES": "3",
+					"NPU_MEM_QUOTA":          "8738",
+					"NPU_PRIORITY":           "4",
+					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/3_global_registry",
+				},
+				mounts: []*v1beta1.Mount{
+					{HostPath: "/usr/local/bin/npu-smi", ContainerPath: "/usr/local/bin/npu-smi", ReadOnly: true},
+					{HostPath: "/etc/ascend_install.info", ContainerPath: "/etc/ascend_install.info", ReadOnly: true},
+					{HostPath: "/usr/local/Ascend/driver/lib64/driver", ContainerPath: "/usr/local/Ascend/driver/lib64/driver", ReadOnly: true},
+					{HostPath: "/usr/local/Ascend/driver/version.info", ContainerPath: "/usr/local/Ascend/driver/version.info", ReadOnly: true},
+					{HostPath: "/usr/local/hami-vnpu-core", ContainerPath: "/hami-vnpu-core", ReadOnly: true},
+					{HostPath: "/usr/local/hami-vnpu-core/ld.so.preload", ContainerPath: "/etc/ld.so.preload", ReadOnly: true},
+					{HostPath: "/usr/local/hami-shared-region", ContainerPath: "/hami-shared-region", ReadOnly: false},
+				},
+			},
+		},
+		{
+			name: "NoAnnotation_NodeTemplate_FollowsNode",
+			setup: func() (*PluginServer, CleanupFunc) {
+				return &PluginServer{
+					mgr: &FakeManager{
+						GetDeviceByUUIDFunc: func(uuid string) *manager.Device {
+							return &manager.Device{UUID: "uuid1", PhyID: 3}
+						},
+						IsHamiVnpuCoreFunc: func() bool { return false },
+					},
+					allocAnno: allocAnno,
+				}, func() {}
+			},
+			args: buildContainerAllocateResponseArgs{
+				pod:           &v1.Pod{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{}}},
+				containerDevs: device.ContainerDevices{cd("uuid1", "Ascend910", 1024, 4)},
+				rtInfoLookup: func() map[string]RuntimeInfo {
+					mem := int64(8738)
+					core := int32(0)
+					return map[string]RuntimeInfo{
+						"uuid1": {UUID: "uuid1", Temp: "vir08", Memory: &mem, Core: &core},
+					}
+				}(),
+			},
+			want: buildContainerAllocateResponseWant{
+				envs: map[string]string{
+					"ASCEND_VISIBLE_DEVICES": "3",
+					"ASCEND_VNPU_SPECS":      "vir08",
+				},
+			},
+		},
+		{
 			name: "NonHamiCore_EmptyTemp",
 			setup: func() (*PluginServer, CleanupFunc) {
 				return &PluginServer{
