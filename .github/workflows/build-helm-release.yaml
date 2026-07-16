@@ -5,12 +5,15 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
     paths:
       - charts/ascend-device-plugin/Chart.yaml
 
 env:
   HELM_VERSION: "v3.20.0"
   CHART_PATH: charts/ascend-device-plugin
+  CHART_NAME: ascend-device-plugin
 
 concurrency:
   group: helm-release
@@ -18,7 +21,7 @@ concurrency:
 
 jobs:
   detect-chart-version:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       version_changed: ${{ steps.compare.outputs.version_changed }}
@@ -66,10 +69,14 @@ jobs:
             echo "version_changed=${version_changed}"
           } >>"$GITHUB_OUTPUT"
 
-  helm-release-push:
-    if: github.event_name == 'push' && needs.detect-chart-version.outputs.version_changed == 'true'
+  helm-release:
     needs:
       - detect-chart-version
+    if: >-
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/') ||
+      needs.detect-chart-version.outputs.version_changed == 'true')
     permissions:
       contents: write
       packages: write
@@ -115,93 +122,49 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
+      - name: Package Helm chart
+        run: |
+          mkdir -p .cr-release-packages
+          helm package "${{ env.CHART_PATH }}" --destination .cr-release-packages
+
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         with:
           charts_dir: charts
+          skip_existing: true
+          skip_packaging: true
         env:
           CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Package Helm chart for GHCR
-        run: |
-          mkdir -p dist
-          helm package "${{ env.CHART_PATH }}" --destination dist
-
-      - name: Push Helm chart to GHCR
+      - name: Publish Helm chart to GHCR
         shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+
           namespace="${GITHUB_REPOSITORY_OWNER,,}"
+          chart_version="$(awk '$1 == "version:" { print $2; exit }' "${{ env.CHART_PATH }}/Chart.yaml")"
+          package_path=".cr-release-packages/${{ env.CHART_NAME }}-${chart_version}.tgz"
+
+          if [[ -z "${chart_version}" || ! -f "${package_path}" ]]; then
+            echo "failed to resolve packaged chart for ${{ env.CHART_NAME }}" >&2
+            exit 1
+          fi
+
           echo "${GHCR_TOKEN}" | helm registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
-          helm push dist/*.tgz "oci://ghcr.io/${namespace}/charts"
+          chart_ref="oci://ghcr.io/${namespace}/charts/${{ env.CHART_NAME }}"
+          lookup_error="$(mktemp)"
 
-  helm-release-manual:
-    if: github.event_name == 'workflow_dispatch'
-    permissions:
-      contents: write
-      packages: write
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Ensure gh-pages branch exists
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-            echo "origin/gh-pages already exists"
+          if helm show chart "${chart_ref}" --version "${chart_version}" >/dev/null 2>"${lookup_error}"; then
+            echo "${chart_ref}:${chart_version} already exists; skipping GHCR push"
             exit 0
           fi
 
-          workdir="$(mktemp -d)"
-          git worktree add --detach "${workdir}" HEAD
+          if ! grep -Eqi 'not found|manifest unknown' "${lookup_error}"; then
+            echo "failed to query ${chart_ref}:${chart_version}" >&2
+            cat "${lookup_error}" >&2
+            exit 1
+          fi
 
-          pushd "${workdir}"
-          git switch --orphan gh-pages
-          git rm -rf . >/dev/null 2>&1 || true
-          touch .nojekyll
-          git add .nojekyll
-          git commit -m "chore: initialize gh-pages branch"
-          git push origin gh-pages
-          popd
-
-          git worktree remove --force "${workdir}"
-          git fetch origin gh-pages
-
-      - name: Set up Helm
-        uses: azure/setup-helm@v5.0.0
-        with:
-          version: ${{ env.HELM_VERSION }}
-
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
-        with:
-          charts_dir: charts
-        env:
-          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Package Helm chart for GHCR
-        run: |
-          mkdir -p dist
-          helm package "${{ env.CHART_PATH }}" --destination dist
-
-      - name: Push Helm chart to GHCR
-        shell: bash
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          namespace="${GITHUB_REPOSITORY_OWNER,,}"
-          echo "${GHCR_TOKEN}" | helm registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
-          helm push dist/*.tgz "oci://ghcr.io/${namespace}/charts"
+          helm push "${package_path}" "oci://ghcr.io/${namespace}/charts"
