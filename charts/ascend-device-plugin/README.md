@@ -21,7 +21,7 @@ Install the chart:
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --namespace kube-system \
-  --set image.tag=v1.3.0
+  --set image.tag=v1.4.0
 ```
 
 If the HAMi chart already manages the Ascend device plugin DaemonSet, related ConfigMaps, RBAC, or RuntimeClass, do not deploy this standalone chart at the same time.
@@ -33,7 +33,7 @@ If another chart, such as the HAMi chart, already owns the shared `hami-schedule
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --namespace kube-system \
-  --set image.tag=v1.3.0 \
+  --set image.tag=v1.4.0 \
   --set config.create=false \
   --set config.existingDeviceConfigMapName=hami-scheduler-device
 ```
@@ -47,7 +47,7 @@ Enable the global `vnpus.hamiVnpuCore` switch in the generated device config:
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --namespace kube-system \
-  --set image.tag=v1.3.0 \
+  --set image.tag=v1.4.0 \
   --set hamiVnpuCore.enabled=true
 ```
 
@@ -62,7 +62,7 @@ The chart can also create the resources from `ascend-vnpu-monitor-integration.ya
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --namespace kube-system \
-  --set image.tag=v1.3.0 \
+  --set image.tag=v1.4.0 \
   --set hamiVnpuCore.enabled=true \
   --set vnpuMonitor.enabled=true
 ```
