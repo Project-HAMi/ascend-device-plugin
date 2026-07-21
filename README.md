@@ -141,13 +141,14 @@ metadata:
           huawei.com/Ascend910B: "1"
           # if you don't specify Ascend910B-memory, it will use a whole NPU.
           huawei.com/Ascend910B-memory: "4096"
+          huawei.com/Ascend910B-core: "40"
 ```
 
 For more examples, see [examples](https://github.com/Project-HAMi/ascend-device-plugin/tree/main/examples)
 
 ### Soft Slicing Configuration (HAMi)
 
-Use the annotation below whenever you intend **soft** slicing; omitting it keeps **template-based vNPU** behavior (see the note under [Usage in HAMi](#usage-in-hami)).
+Use the annotation below whenever you intend **soft** slicing; omitting it keeps **template-based vNPU** behavior (see the note under [Usage in HAMi](#usage-in-hami)). Soft-sliced workloads should request both **memory** and **core** resources; if only memory is requested, memory may be calculated by hard-slicing template matching, so the actual allocated value may be greater than or equal to the requested value instead of strictly equal to it.
 
 ```yaml
 apiVersion: v1
