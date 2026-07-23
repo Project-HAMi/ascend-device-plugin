@@ -1,5 +1,7 @@
 # Ascend Device Plugin
 
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_shield)
+
 [English](README.md) | **中文**
 
 ## 说明

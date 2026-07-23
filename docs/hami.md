@@ -38,7 +38,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 ### Deploy ConfigMap
 
-* **HAMi and `ascend-device-plugin` in the same namespace** (recommended): skip this step — HAMi's existing `hami-scheduler-device` ConfigMap already covers Ascend.
+* **HAMi and `ascend-device-plugin` in the same namespace(recommended)**: skip this step — HAMi's existing `hami-scheduler-device` ConfigMap already covers Ascend.
 * **Different namespaces**:
   1. Deploy `ascend-device-configmap.yaml` into `ascend-device-plugin`'s own namespace.
   2. Manually merge its `vnpus:` section into HAMi's existing `hami-scheduler-device` ConfigMap, without touching HAMi's other device entries.

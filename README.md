@@ -1,9 +1,8 @@
 # Ascend Device Plugin
 
-**English** | [中文](README_cn.md)
-
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FProject-HAMi%2Fascend-device-plugin?ref=badge_shield)
 
+**English** | [中文](README_cn.md)
 
 ## Introduction
 
@@ -11,11 +10,11 @@ This Ascend device plugin is implemented for NPU-Slicing for [HAMi](https://gith
 
 #### 1. Template-based Hard Slicing (vNPU)
 
-Memory slicing is supported based on virtualization template, least available template is automatically used. For detailed information, check [template](https://github.com/Project-HAMi/ascend-device-plugin/blob/main/ascend-device-configmap.yaml)
+Memory slicing is supported based on virtualization template. For detailed information, check [template](https://github.com/Project-HAMi/ascend-device-plugin/blob/main/ascend-device-configmap.yaml)
 
 #### 2. Soft Slicing with Runtime Interception (hami-vnpu-core)
 
-This project implements  a soft slicing mechanism based on `libvnpu.so` interception and `limiter` token scheduling, enabling fine-grained resource sharing.  For detailed information, check [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core)
+This project implements  a soft slicing mechanism based on `libvnpu.so` interception and `limiter` token scheduling. For detailed information, check [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core)
 
 **Note:** `hami-vnpu-core` currently only supports ARM platforms.
 
@@ -23,8 +22,8 @@ This project implements  a soft slicing mechanism based on `libvnpu.so` intercep
 
 Prerequisites, deployment steps and usage examples differ depending on which scheduler you use:
 
-- [Deploy & use with HAMi](docs/hami.md)
-- [Deploy & use with Volcano](docs/volcano.md)
+- [HAMi](docs/hami.md)
+- [Volcano](docs/volcano.md)
 
 ## Compile
 

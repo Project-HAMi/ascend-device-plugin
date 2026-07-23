@@ -38,7 +38,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 ### 部署 ConfigMap
 
-* **HAMi 和 `ascend-device-plugin` 在同一命名空间**（推荐，默认 `kube-system`）：跳过这一步，HAMi 现有的 `hami-scheduler-device` 已经包含 Ascend 配置。
+* **HAMi 和 `ascend-device-plugin` 在同一命名空间(推荐)**：跳过这一步，HAMi 现有的 `hami-scheduler-device` 已经包含 Ascend 配置。
 * **不同命名空间**：
   1. 把 `ascend-device-configmap.yaml` 部署到 `ascend-device-plugin` 自己的命名空间下。
   2. 手动把其中的 `vnpus:` 部分合并进 HAMi 现有的 `hami-scheduler-device`，不要动 HAMi 其他设备的配置。
@@ -66,16 +66,6 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-plugin.yaml
-```
-
-如上所述，若 HAMi 和 `ascend-device-plugin` 部署在同一个命名空间，在部署 HAMi 时设置 `devices.ascend.enabled` 为 true，除了会自动部署 ConfigMap 之外，还会一并自动部署 `ascend-device-plugin`。参考 <https://github.com/Project-HAMi/HAMi/blob/master/charts/hami/README.md#huawei-ascend>
-
-如果需要 HAMi 为申请 ascend 资源的 Pod 自动添加 runtimeClassName 配置（默认关闭），则应该在 HAMi 的 values.yaml 文件中配置 `devices.ascend.runtimeClassName` 为**一个非空字符串**，并且与 RuntimeClass 资源名称保持一致。例如：
-
-```yaml
-devices:
-  ascend:
-    runtimeClassName: ascend
 ```
 
 ## 使用
