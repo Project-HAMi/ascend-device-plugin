@@ -22,6 +22,8 @@ This guide covers deploying `ascend-device-plugin` for use with the [HAMi](https
 
   Both require `devices.ascend.enabled: true` to be set when deploying HAMi.
 
+**Note:** `hami-vnpu-core` soft slicing currently only supports ARM platforms; template-based hard slicing has no such restriction.
+
 ## Deployment
 
 ### Label the Node with `ascend=on`
@@ -38,15 +40,12 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 ### Deploy ConfigMap
 
-* **HAMi and `ascend-device-plugin` in the same namespace(recommended)**: skip this step — HAMi's existing `hami-scheduler-device` ConfigMap already covers Ascend.
-* **Different namespaces**:
-  1. Deploy `ascend-device-configmap.yaml` into `ascend-device-plugin`'s own namespace.
-  2. Manually merge its `vnpus:` section into HAMi's existing `hami-scheduler-device` ConfigMap, without touching HAMi's other device entries.
-  3. Keep both copies in sync whenever you change templates, resourceNames, or `hamiVnpuCore`.
+* **HAMi and `ascend-device-plugin` in the same namespace (recommended)**: skip this step — HAMi's existing `hami-scheduler-device` ConfigMap already covers Ascend.
+* **Different namespaces**: deploy the Ascend ConfigMap into `ascend-device-plugin`'s own namespace, then manually merge its `vnpus:` section into HAMi's existing `hami-scheduler-device` ConfigMap without touching HAMi's other device entries. Keep both copies in sync whenever you change templates, resourceNames, or `hamiVnpuCore`.
 
-```bash
-kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
-```
+  ```bash
+  kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
+  ```
 
 **Note:** `vnpus.hamiVnpuCore` decides the slicing mode for **all nodes** (unless overridden per node in `hami-device-node-config`): `true` uses `hami-core`-based **soft slicing**; `false` uses template-based **hard slicing**.
 
@@ -80,7 +79,9 @@ metadata:
   name: ascend-soft-slice-pod
   annotations:
     huawei.com/vnpu-mode: 'hami-core' # Enables hami-vnpu-core soft-segmentation for this pod
-    containers:
+spec:
+  runtimeClassName: ascend
+  containers:
     - name: npu_pod
       ...
       resources:
@@ -104,6 +105,7 @@ metadata:
   annotations:
     huawei.com/vnpu-mode: 'hami-core' # Enables hami-vnpu-core soft-segmentation for this pod
 spec:
+  runtimeClassName: ascend
   containers:
     - name: npu_pod
       ...
@@ -128,6 +130,7 @@ metadata:
   annotations:
     huawei.com/vnpu-mode: 'hami-core' # Enable hami-vnpu-core soft partitioning
 spec:
+  runtimeClassName: ascend
   containers:
     - name: vllm-container
       image: vllm-ascend:latest

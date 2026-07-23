@@ -22,6 +22,8 @@
 
   两种模式都需要在部署 HAMi 时设置 `devices.ascend.enabled: true`。
 
+**注意：** `hami-vnpu-core` 软切分目前仅支持 ARM 平台；基于模板的硬切分没有此限制。
+
 ## 部署
 
 ### 给 Node 打 ascend 标签
@@ -39,18 +41,13 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 ### 部署 ConfigMap
 
 * **HAMi 和 `ascend-device-plugin` 在同一命名空间(推荐)**：跳过这一步，HAMi 现有的 `hami-scheduler-device` 已经包含 Ascend 配置。
-* **不同命名空间**：
-  1. 把 `ascend-device-configmap.yaml` 部署到 `ascend-device-plugin` 自己的命名空间下。
-  2. 手动把其中的 `vnpus:` 部分合并进 HAMi 现有的 `hami-scheduler-device`，不要动 HAMi 其他设备的配置。
-  3. 以后修改模板、resourceName 或 `hamiVnpuCore` 时，两边同步更新。
+* **不同命名空间**：把 Ascend 的 ConfigMap 部署到 `ascend-device-plugin` 自己的命名空间下，然后手动把其中的 `vnpus:` 部分合并进 HAMi 现有的 `hami-scheduler-device`，不要动 HAMi 其他设备的配置。以后修改模板、resourceName 或 `hamiVnpuCore` 时，两边同步更新。
+
+  ```bash
+  kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
+  ```
 
 **注意：** `vnpus.hamiVnpuCore` 决定了**所有节点**的切分方式（可被 `hami-device-node-config` 按节点覆盖）：`true` 为基于 `hami-core` 的**软切分**；`false` 为基于模板的**硬切分**。
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
-```
-
-**注意：** 如果该 ConfigMap 已存在，可跳过此步骤。
 
 #### （可选）节点自定义配置说明
 
@@ -82,7 +79,9 @@ metadata:
   name: ascend-soft-slice-pod
   annotations:
     huawei.com/vnpu-mode: 'hami-core' # 添加该注解的走 hami-vnpu-core 软切分
-    containers:
+spec:
+  runtimeClassName: ascend
+  containers:
     - name: npu_pod
       ...
       resources:
@@ -106,6 +105,7 @@ metadata:
   annotations:
     huawei.com/vnpu-mode: 'hami-core' # 添加该注解的走 hami-vnpu-core 软切分
 spec:
+  runtimeClassName: ascend
   containers:
     - name: npu_pod
       ...
@@ -130,6 +130,7 @@ metadata:
   annotations:
     huawei.com/vnpu-mode: 'hami-core' # 启用 hami-vnpu-core 软切分
 spec:
+  runtimeClassName: ascend
   containers:
     - name: vllm-container
       image: vllm-ascend:latest

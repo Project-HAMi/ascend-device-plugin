@@ -17,6 +17,8 @@ This guide covers deploying `ascend-device-plugin` for use with the [Volcano](ht
 
   If your host ships `npu-smi` elsewhere, add a hostPath mount for it in `ascend-device-plugin.yaml`.
 
+**Note:** `hami-core` soft slicing currently only supports ARM platforms; template-based hard slicing has no such restriction.
+
 ## Deployment
 
 ### Install Volcano

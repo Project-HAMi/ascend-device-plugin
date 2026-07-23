@@ -8,11 +8,11 @@
 
 Ascend device plugin 是用来支持在 [HAMi](https://github.com/Project-HAMi/HAMi) 和 [volcano](https://github.com/volcano-sh/volcano) 中调度昇腾 NPU 设备，支持以下两种模式：
 
-#### 1. 基于模板的硬切分 (vNPU)
+### 1. 基于模板的硬切分 (vNPU)
 
 支持基于虚拟化模板的显存切分，系统会自动使用最小可用模板。详细信息请参阅 [template](https://github.com/Project-HAMi/ascend-device-plugin/blob/main/ascend-device-configmap.yaml)。
 
-#### 2. 基于运行时拦截的软切分 (hami-vnpu-core)
+### 2. 基于运行时拦截的软切分 (hami-vnpu-core)
 
 实现了基于 `libvnpu.so` 拦截和 limiter 令牌调度的软切分机制，能够实现精细化的资源共享。详细信息请参阅 [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core)。
 
@@ -40,5 +40,5 @@ make all
 ### 编译镜像
 
 ```bash
-docker buildx build -t $IMAGE_NAME .
+docker buildx build -t $IMAGE_NAME . --load
 ```

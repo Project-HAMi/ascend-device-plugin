@@ -17,6 +17,8 @@
 
   若宿主机的 `npu-smi` 在其他位置，可在 `ascend-device-plugin.yaml` 中为其增加 hostPath 挂载。
 
+**注意：** `hami-core` 软切分目前仅支持 ARM 平台；基于模板的硬切分没有此限制。
+
 ## 部署
 
 ### 安装 Volcano
