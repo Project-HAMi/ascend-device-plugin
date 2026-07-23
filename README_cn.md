@@ -20,8 +20,8 @@ Ascend device plugin 是用来支持在 [HAMi](https://github.com/Project-HAMi/H
 
 不同调度器所需的环境要求、部署步骤和使用示例并不完全相同：
 
-- [在 HAMi 中部署与使用](docs/hami_cn.md)
-- [在 Volcano 中部署与使用](docs/volcano_cn.md)
+- [HAMi](docs/hami_cn.md)
+- [Volcano](docs/volcano_cn.md)
 
 ## 编译
 
