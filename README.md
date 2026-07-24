@@ -40,7 +40,7 @@ make all
 ### Build image
 
 ```bash
-docker buildx build -t $IMAGE_NAME . --load
+docker buildx build -t $IMAGE_NAME .
 ```
 
 ## License

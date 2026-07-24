@@ -39,7 +39,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 ### Deploy ConfigMap
 
-This configMap is used for global configurations, like resourceName, mode, templates.
+This configMap is used for global configurations, like resourceName, mode, and templates.
 * (Optional) Under `vnpus`, set `hamiVnpuCore: true` if you want to enable `hami-vnpu-core` soft slicing on **all nodes** (unless overridden per node in `hami-device-node-config`).
 
 ```bash
@@ -107,6 +107,7 @@ metadata:
   name: ascend-pod
 spec:
   schedulerName: volcano
+  runtimeClassName: ascend
   containers:
     - name: ubuntu-container
       image: swr.cn-south-1.myhuaweicloud.com/ascendhub/ascend-pytorch:24.0.RC1-A2-1.11.0-ubuntu20.04
@@ -120,7 +121,7 @@ spec:
 
 ### `hami-core` soft slicing mode
 
-Add the `huawei.com/vnpu-mode: hami-core` annotation and `runtimeClassName: ascend` (deployed in [Deployment](#deployment) above) to use `hami-vnpu-core` soft slicing:
+`runtimeClassName: ascend` (deployed in [Deployment](#deployment) above) is required for all Ascend Pods regardless of slicing mode. To additionally use `hami-vnpu-core` soft slicing, also add the `huawei.com/vnpu-mode: hami-core` annotation:
 
 ```yaml
 apiVersion: v1

@@ -116,6 +116,8 @@ spec:
           huawei.com/Ascend910B3-core: "40"     # Request 40% core
 ```
 
+**Note:** `-core` is optional. Unlike `-memory` (which defaults to the whole NPU when omitted), omitting `-core` defaults to **0** — no dedicated compute-core reservation. It only takes effect under `huawei.com/vnpu-mode: hami-core`; setting it without that annotation is rejected.
+
 The soft partitioning mechanism supports requesting multiple virtual devices within a same Pod. When performing multi-card parallel inference (e.g., using vLLM), the value of `--gpu-memory-utilization` must not exceed the ratio of the "container's total memory limit" to the "sum of physical memory of the selected cards".
 
 **Example: Enabling 2-Card Tensor Parallelism (TP=2) with vLLM**

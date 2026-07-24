@@ -103,6 +103,7 @@ metadata:
   name: ascend-pod
 spec:
   schedulerName: volcano
+  runtimeClassName: ascend
   containers:
     - name: ubuntu-container
       image: swr.cn-south-1.myhuaweicloud.com/ascendhub/ascend-pytorch:24.0.RC1-A2-1.11.0-ubuntu20.04
@@ -116,7 +117,7 @@ spec:
 
 ### `hami-core` 软切分模式
 
-添加 `huawei.com/vnpu-mode: hami-core` 注解，并加上 `runtimeClassName: ascend`（对应上文[部署](#部署)中部署的 RuntimeClass），即可使用 `hami-vnpu-core` 软切分：
+无论使用哪种切分方式，都需要加上 `runtimeClassName: ascend`（对应上文[部署](#部署)中部署的 RuntimeClass）。如果还想使用 `hami-vnpu-core` 软切分，再额外添加 `huawei.com/vnpu-mode: hami-core` 注解：
 
 ```yaml
 apiVersion: v1
@@ -146,7 +147,7 @@ spec:
 
 ## 监控
 
-当节点运行在 **hami-vnpu-core(软切)模式**时,设备插件会在 **`:9395/metrics`** 启动内置 **Prometheus exporter**,上报物理设备级和每容器的 vNPU 使用指标。传统的模板 vNPU(或整卡)模式**不会**启动它——那种模式没有软切数据可导出。
+当节点运行在 **hami-vnpu-core(软切)模式**时，设备插件会在 **`:9395/metrics`** 启动内置 **Prometheus exporter**，上报物理设备级和每容器的 vNPU 使用指标。传统的模板 vNPU(或整卡)模式**不会**启动它——那种模式没有软切数据可导出。
 
 在集群内部快速验证：
 

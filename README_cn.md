@@ -40,5 +40,5 @@ make all
 ### 编译镜像
 
 ```bash
-docker buildx build -t $IMAGE_NAME . --load
+docker buildx build -t $IMAGE_NAME .
 ```
