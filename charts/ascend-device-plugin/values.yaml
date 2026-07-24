@@ -48,31 +48,6 @@ nodeConfigMap:
 hamiVnpuCore:
   enabled: false
 
-vnpuMonitor:
-  enabled: false
-  service:
-    name: hami-ascend-device-plugin-metrics
-  serviceMonitor:
-    create: true
-    name: hami-ascend-vnpu-monitor
-    namespace: monitoring
-    labels:
-      release: prometheus
-    interval: 15s
-    path: /metrics
-  prometheusRule:
-    create: true
-    name: hami-ascend-vnpu-monitor
-    namespace: monitoring
-    labels:
-      release: prometheus
-      role: recording-rules
-      vendor: ascend
-    groupName: ascend-vnpu
-    interval: 15s
-    groupLabels:
-      vendor: ascend
-
 deviceConfig: |-
   vnpus:
     hamiVnpuCore: {{ .Values.hamiVnpuCore.enabled }}
