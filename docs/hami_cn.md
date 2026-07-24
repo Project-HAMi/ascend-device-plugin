@@ -11,10 +11,10 @@
 - Ascend 驱动版本：≥ 25.5
 - **`npu-smi` 必须在宿主机上可访问**，按以下顺序查找：
   1. `/usr/local/Ascend/driver/tools/npu-smi`（由已有的 driver hostPath 挂载提供）
-  2. `/usr/local/sbin/npu-smi`
+  2. `/usr/local/sbin/npu-smi` (默认挂载路径)
   3. `/usr/local/bin/npu-smi`
 
-  若宿主机的 `npu-smi` 在其他位置，可在 `ascend-device-plugin.yaml` 中为其增加 hostPath 挂载。
+  若宿主机的 `npu-smi` 在 `/usr/local/bin/npu-smi`，需要在 `ascend-device-plugin.yaml` 中为其增加 hostPath 挂载。
 
 - **HAMi 版本**：
   - 基于模板的硬切分 (vNPU) 最低版本：≥ 2.7.0

@@ -11,10 +11,10 @@ This guide covers deploying `ascend-device-plugin` for use with the [HAMi](https
 - **Ascend Driver Version**: ≥ 25.5
 - **`npu-smi` must be reachable on the host**, at one of the following paths (checked in order):
   1. `/usr/local/Ascend/driver/tools/npu-smi` (from the existing driver hostPath mount)
-  2. `/usr/local/sbin/npu-smi`
+  2. `/usr/local/sbin/npu-smi` (mounted by default)
   3. `/usr/local/bin/npu-smi`
 
-  If your host ships `npu-smi` elsewhere, add a hostPath mount for it in `ascend-device-plugin.yaml`.
+  If `npu-smi` is located at `/usr/local/bin/npu-smi`, please add the path mount in `ascend-device-plugin.yaml`.
 
 - **HAMi Version**:
   - ≥ 2.7.0 for template-based hard slicing (vNPU)
