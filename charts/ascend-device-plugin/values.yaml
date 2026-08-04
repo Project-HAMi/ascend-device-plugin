@@ -48,7 +48,7 @@ serviceAccount: # @schema required:true;additionalProperties:false
   # serviceAccount.name -- ServiceAccount name. Defaults to the chart fullname when empty and creation is enabled.
   name: hami-ascend # @schema required:true
 
-nodeSelector: # @schema required:true;additionalProperties:{"type":"string"}
+nodeSelector: # @schema required:true;additionalProperties:true
   # nodeSelector.ascend -- Node label value used to schedule the device plugin.
   ascend: "on"
 

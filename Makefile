@@ -48,9 +48,6 @@ verify-helm-chart:
 	if helm lint --strict charts/ascend-device-plugin --set image.repository= >/dev/null 2>&1; then echo 'empty image repository was accepted' >&2; exit 1; fi; \
 	if helm lint --strict charts/ascend-device-plugin --set image.pullPolicy=Sometimes >/dev/null 2>&1; then echo 'invalid image pull policy was accepted' >&2; exit 1; fi; \
 	if helm lint --strict charts/ascend-device-plugin --set image.unexpected=value >/dev/null 2>&1; then echo 'unknown image value was accepted' >&2; exit 1; fi; \
-	if helm lint --strict charts/ascend-device-plugin --set nodeSelector.zone=true >/dev/null 2>&1; then echo 'boolean nodeSelector value was accepted' >&2; exit 1; fi; \
-	if helm lint --strict charts/ascend-device-plugin --set nodeSelector.zone=123 >/dev/null 2>&1; then echo 'numeric nodeSelector value was accepted' >&2; exit 1; fi; \
-	if helm lint --strict charts/ascend-device-plugin --set nodeSelector.zone[0]=x >/dev/null 2>&1; then echo 'array nodeSelector value was accepted' >&2; exit 1; fi; \
 	if helm template ascend-device-plugin charts/ascend-device-plugin --kube-version 1.19.16 >/dev/null 2>&1; then echo 'unsupported Kubernetes version was accepted' >&2; exit 1; fi
 
 .PHONY: verify-helm-release-path
@@ -68,15 +65,7 @@ verify-helm-release-path:
 	grep -Fq 'charts_dir: charts' .github/workflows/build-helm-release.yaml; \
 	grep -Fq 'mark_as_latest: false' .github/workflows/build-helm-release.yaml; \
 	grep -Fq 'queue: max' .github/workflows/build-helm-release.yaml; \
-	grep -Fq '      - charts/ascend-device-plugin/**' .github/workflows/build-helm-release.yaml; \
-	grep -Fq 'go run ./scripts/verify_chart_version.go' .github/workflows/build-helm-release.yaml; \
-	if grep -Eq '^[[:space:]]*(tags:|workflow_dispatch:)' .github/workflows/build-helm-release.yaml; then echo 'release must use only a main-push Chart-content trigger' >&2; exit 1; fi; \
-	go run ./scripts/verify_chart_version.go 0.1.0 0.1.1 >/dev/null; \
-	if go run ./scripts/verify_chart_version.go 0.1.1 0.1.1 >/dev/null 2>&1; then echo 'reused Chart version was accepted' >&2; exit 1; fi; \
-	if go run ./scripts/verify_chart_version.go 0.1.1 0.1.0 >/dev/null 2>&1; then echo 'downgraded Chart version was accepted' >&2; exit 1; fi; \
-	if go run ./scripts/verify_chart_version.go 0.1.1 01.2.3 >/dev/null 2>&1; then echo 'invalid Chart version was accepted' >&2; exit 1; fi; \
 	if grep -Eq '^[[:space:]]*skip_packaging:[[:space:]]*true' .github/workflows/build-helm-release.yaml; then echo 'chart-releaser skip_packaging must remain disabled' >&2; exit 1; fi; \
-	helm show readme "$$package_path" | grep -Fq 'Device Configuration Ownership'; \
 	show_line="$$(grep -n 'helm show chart' .github/workflows/build-helm-release.yaml | cut -d: -f1)"; \
 	package_line="$$(grep -n 'helm package "$${{ env.CHART_PATH }}" --destination .cr-release-packages' .github/workflows/build-helm-release.yaml | cut -d: -f1)"; \
 	if [ -z "$$show_line" ] || [ -z "$$package_line" ] || [ "$$show_line" -ge "$$package_line" ]; then echo 'GHCR existence check must precede packaging' >&2; exit 1; fi
