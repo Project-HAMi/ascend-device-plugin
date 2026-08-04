@@ -19,7 +19,11 @@
 {{- end -}}
 
 {{- define "ascend-device-plugin.image" -}}
+{{- if .Values.image.digest -}}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- else -}}
 {{- printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "ascend-device-plugin.selectorLabels" -}}
@@ -44,7 +48,11 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{- define "ascend-device-plugin.deviceConfigMapName" -}}
-{{- default .Values.config.deviceConfigMapName .Values.config.existingDeviceConfigMapName -}}
+{{- if .Values.config.create -}}
+{{- required "config.deviceConfigMapName is required when config.create=true" .Values.config.deviceConfigMapName -}}
+{{- else -}}
+{{- required "config.existingDeviceConfigMapName is required when config.create=false" .Values.config.existingDeviceConfigMapName -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "ascend-device-plugin.nodeConfigMapName" -}}

@@ -41,7 +41,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Require chart version bump
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          chart_path="charts/ascend-device-plugin"
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          current_version="$(awk '$1 == "version:" { print $2; exit }' "${chart_path}/Chart.yaml")"
+
+          if [[ -z "${current_version}" ]]; then
+            echo "failed to resolve current chart version" >&2
+            exit 1
+          fi
+
+          if git diff --quiet "${base_sha}" HEAD -- "${chart_path}"; then
+            echo "No chart content changes."
+            exit 0
+          fi
+
+          if ! git cat-file -e "${base_sha}:${chart_path}/Chart.yaml" 2>/dev/null; then
+            echo "Chart is new; current version is ${current_version}."
+            exit 0
+          fi
+
+          previous_version="$(git show "${base_sha}:${chart_path}/Chart.yaml" | awk '$1 == "version:" { print $2; exit }')"
+          echo "Chart version: ${previous_version:-<none>} -> ${current_version}"
+
+          if [[ -z "${previous_version}" || "${previous_version}" == "${current_version}" ]]; then
+            echo "Chart content changed without a Chart.yaml version bump" >&2
+            exit 1
+          fi
 
       - name: Set up Helm
         uses: azure/setup-helm@v5.0.0

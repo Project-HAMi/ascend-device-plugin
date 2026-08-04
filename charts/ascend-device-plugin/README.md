@@ -1,6 +1,6 @@
 # ascend-device-plugin
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: v1.4.0](https://img.shields.io/badge/AppVersion-v1.4.0-informational?style=flat-square)
+![Version: 0.1.1](https://img.shields.io/badge/Version-0.1.1-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: v1.4.0](https://img.shields.io/badge/AppVersion-v1.4.0-informational?style=flat-square)
 
 HAMi Ascend device plugin
 
@@ -28,9 +28,11 @@ helm install ascend-device-plugin ./charts/ascend-device-plugin \
 
 If the HAMi chart already manages the Ascend device plugin DaemonSet, related ConfigMaps, RBAC, or RuntimeClass, do not deploy this standalone chart at the same time.
 
-## Existing Device Configuration
+## Device Configuration Ownership
 
-If another chart, such as the HAMi chart, already owns the shared `hami-scheduler-device` ConfigMap, reuse it instead of creating another one:
+By default, this chart creates the global device configuration ConfigMap. Set
+`config.create=false` only when another chart, such as the HAMi chart, owns
+the configuration. The external ConfigMap must be in the release namespace:
 
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
@@ -39,17 +41,27 @@ helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --set config.existingDeviceConfigMapName=hami-scheduler-device
 ```
 
-With this mode, the chart mounts the existing device config and still manages `hami-device-node-config` by default.
+With this mode, the chart mounts the existing device config and still manages
+`hami-device-node-config` by default. The device configuration uses a
+`subPath` mount, so update the DaemonSet manually after changing an external
+ConfigMap.
 
 ## hami-vnpu-core
 
-Enable the global `vnpus.hamiVnpuCore` switch in the generated device config:
+When `config.create=true`, enable the global `vnpus.hamiVnpuCore` switch in
+the generated device config:
 
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --namespace kube-system \
   --set hamiVnpuCore.enabled=true
 ```
+
+When `config.create=false`, configure the global switch in the external
+ConfigMap instead. A matching node entry in `nodeConfig` overrides the global
+setting for that node. A workload still needs the
+`huawei.com/vnpu-mode: hami-core` annotation to use the soft-slicing Allocate
+path.
 
 ## Node Configuration
 
@@ -68,8 +80,8 @@ nodeConfig: |-
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | config.create | bool | `true` | Create the device configuration ConfigMap. |
-| config.deviceConfigMapName | string | `"hami-scheduler-device"` | Name of the chart-managed device configuration ConfigMap. |
-| config.existingDeviceConfigMapName | string | `""` | Existing device configuration ConfigMap to mount instead of the chart-managed ConfigMap. |
+| config.deviceConfigMapName | string | `"hami-scheduler-device"` | Name of the chart-managed device configuration ConfigMap when `config.create=true`. |
+| config.existingDeviceConfigMapName | string | `""` | Existing device configuration ConfigMap to mount when `config.create=false`; it must be in the release namespace. |
 | daemonSet.args[0] | string | `"--config_file"` |  |
 | daemonSet.args[1] | string | `"/device-config.yaml"` |  |
 | daemonSet.args[2] | string | `"--node_config_file"` |  |
@@ -78,6 +90,7 @@ nodeConfig: |-
 | daemonSet.name | string | `"hami-ascend-device-plugin"` | Device plugin DaemonSet name. |
 | fullnameOverride | string | `""` | Override the fully qualified resource name. |
 | hamiVnpuCore.enabled | bool | `false` | Enable hami-vnpu-core in the generated global device configuration. |
+| image.digest | string | `""` | Optional immutable OCI manifest digest. When set, it takes precedence over `image.tag`. |
 | image.pullPolicy | string | `"IfNotPresent"` | Kubernetes image pull policy. |
 | image.repository | string | `"projecthami/ascend-device-plugin"` | Container image repository. |
 | image.tag | string | `""` | Container image tag. Defaults to the chart `appVersion` when empty. |

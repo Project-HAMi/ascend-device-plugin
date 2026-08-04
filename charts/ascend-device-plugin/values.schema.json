@@ -80,6 +80,10 @@
                 "pullPolicy"
             ],
             "properties": {
+                "digest": {
+                    "type": "string",
+                    "pattern": "^(|sha256:[a-f0-9]{64})$"
+                },
                 "pullPolicy": {
                     "type": "string",
                     "enum": [
@@ -126,7 +130,8 @@
                 "ascend": {
                     "type": "string"
                 }
-            }
+            },
+            "additionalProperties": true
         },
         "rbac": {
             "type": "object",
@@ -156,7 +161,8 @@
                         "memory": {
                             "type": "string"
                         }
-                    }
+                    },
+                    "additionalProperties": false
                 },
                 "requests": {
                     "type": "object",
@@ -167,7 +173,8 @@
                         "memory": {
                             "type": "string"
                         }
-                    }
+                    },
+                    "additionalProperties": false
                 }
             },
             "additionalProperties": false
@@ -208,5 +215,6 @@
             },
             "additionalProperties": false
         }
-    }
+    },
+    "additionalProperties": false
 }

@@ -1,0 +1,6 @@
+paths:
+  .github/workflows/build-helm-release.yaml:
+    # GitHub Actions supports `concurrency.queue`; actionlint v1.7.12 does not
+    # yet recognize this key.
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'
