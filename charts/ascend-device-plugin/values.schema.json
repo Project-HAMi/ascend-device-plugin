@@ -131,7 +131,9 @@
                     "type": "string"
                 }
             },
-            "additionalProperties": true
+            "additionalProperties": {
+                "type": "string"
+            }
         },
         "rbac": {
             "type": "object",

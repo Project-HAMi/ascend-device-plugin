@@ -1,14 +1,11 @@
 name: Helm Release
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
-    tags:
-      - "v*"
     paths:
-      - charts/ascend-device-plugin/Chart.yaml
+      - charts/ascend-device-plugin/**
 
 env:
   HELM_VERSION: "v3.20.0"
@@ -24,20 +21,19 @@ concurrency:
 
 jobs:
   detect-chart-version:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    outputs:
-      version_changed: ${{ steps.compare.outputs.version_changed }}
-      previous_version: ${{ steps.compare.outputs.previous_version }}
-      current_version: ${{ steps.compare.outputs.current_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
       - name: Compare chart version
-        id: compare
         shell: bash
         run: |
           set -euo pipefail
@@ -54,34 +50,17 @@ jobs:
             exit 1
           fi
 
-          if git cat-file -e "${before_sha}:${{ env.CHART_PATH }}/Chart.yaml" 2>/dev/null; then
-            previous_version="$(git show "${before_sha}:${{ env.CHART_PATH }}/Chart.yaml" | awk '$1 == "version:" { print $2; exit }')"
-          else
-            previous_version=""
+          if ! git cat-file -e "${before_sha}:${{ env.CHART_PATH }}/Chart.yaml" 2>/dev/null; then
+            echo "previous Chart.yaml is not available for this main push" >&2
+            exit 1
           fi
 
-          if [[ -z "${previous_version}" || "${previous_version}" != "${current_version}" ]]; then
-            version_changed=true
-          else
-            version_changed=false
-          fi
-
-          {
-            echo "previous_version=${previous_version}"
-            echo "current_version=${current_version}"
-            echo "version_changed=${version_changed}"
-          } >>"$GITHUB_OUTPUT"
-
-          echo "Chart version: ${previous_version:-<none>} -> ${current_version}; changed=${version_changed}"
+          previous_version="$(git show "${before_sha}:${{ env.CHART_PATH }}/Chart.yaml" | awk '$1 == "version:" { print $2; exit }')"
+          go run ./scripts/verify_chart_version.go "${previous_version}" "${current_version}"
 
   helm-release:
     needs:
       - detect-chart-version
-    if: >-
-      always() &&
-      (github.event_name == 'workflow_dispatch' ||
-      startsWith(github.ref, 'refs/tags/') ||
-      needs.detect-chart-version.outputs.version_changed == 'true')
     permissions:
       contents: write
       packages: write
