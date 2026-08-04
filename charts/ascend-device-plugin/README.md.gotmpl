@@ -28,11 +28,9 @@ helm install ascend-device-plugin ./charts/ascend-device-plugin \
 
 If the HAMi chart already manages the Ascend device plugin DaemonSet, related ConfigMaps, RBAC, or RuntimeClass, do not deploy this standalone chart at the same time.
 
-## Device Configuration Ownership
+## Existing Device Configuration
 
-By default, this chart creates the global device configuration ConfigMap. Set
-`config.create=false` only when another chart, such as the HAMi chart, owns
-the configuration. The external ConfigMap must be in the release namespace:
+If another chart, such as the HAMi chart, already owns the shared `hami-scheduler-device` ConfigMap, reuse it instead of creating another one:
 
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
@@ -41,27 +39,17 @@ helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --set config.existingDeviceConfigMapName=hami-scheduler-device
 ```
 
-With this mode, the chart mounts the existing device config and still manages
-`hami-device-node-config` by default. The device configuration uses a
-`subPath` mount, so update the DaemonSet manually after changing an external
-ConfigMap.
+With this mode, the chart mounts the existing device config and still manages `hami-device-node-config` by default.
 
 ## hami-vnpu-core
 
-When `config.create=true`, enable the global `vnpus.hamiVnpuCore` switch in
-the generated device config:
+Enable the global `vnpus.hamiVnpuCore` switch in the generated device config:
 
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --namespace kube-system \
   --set hamiVnpuCore.enabled=true
 ```
-
-When `config.create=false`, configure the global switch in the external
-ConfigMap instead. A matching node entry in `nodeConfig` overrides the global
-setting for that node. A workload still needs the
-`huawei.com/vnpu-mode: hami-core` annotation to use the soft-slicing Allocate
-path.
 
 ## Node Configuration
 

@@ -20,7 +20,7 @@ permissions:
 
 concurrency:
   group: helm-release
-  queue: max
+  cancel-in-progress: false
 
 jobs:
   detect-chart-version:
@@ -71,8 +71,6 @@ jobs:
             echo "current_version=${current_version}"
             echo "version_changed=${version_changed}"
           } >>"$GITHUB_OUTPUT"
-
-          echo "Chart version: ${previous_version:-<none>} -> ${current_version}; changed=${version_changed}"
 
   helm-release:
     needs:
@@ -147,7 +145,6 @@ jobs:
         with:
           charts_dir: charts
           skip_existing: true
-          mark_as_latest: false
         env:
           CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -5,9 +5,6 @@ image: # @schema required:true;additionalProperties:false
   # image.tag -- Container image tag. Defaults to the chart `appVersion` when empty.
   tag: ""
 
-  # image.digest -- Optional immutable OCI manifest digest. When set, it takes precedence over `image.tag`.
-  digest: "" # @schema pattern:^(|sha256:[a-f0-9]{64})$
-
   # image.pullPolicy -- Kubernetes image pull policy.
   pullPolicy: IfNotPresent # @schema required:true;enum:[Always, IfNotPresent, Never]
 
@@ -48,7 +45,7 @@ serviceAccount: # @schema required:true;additionalProperties:false
   # serviceAccount.name -- ServiceAccount name. Defaults to the chart fullname when empty and creation is enabled.
   name: hami-ascend # @schema required:true
 
-nodeSelector: # @schema required:true;additionalProperties:true
+nodeSelector: # @schema required:true
   # nodeSelector.ascend -- Node label value used to schedule the device plugin.
   ascend: "on"
 
@@ -64,10 +61,10 @@ config: # @schema required:true;additionalProperties:false
   # config.create -- Create the device configuration ConfigMap.
   create: true # @schema required:true
 
-  # config.existingDeviceConfigMapName -- Existing device configuration ConfigMap to mount when `config.create=false`; it must be in the release namespace.
+  # config.existingDeviceConfigMapName -- Existing device configuration ConfigMap to mount instead of the chart-managed ConfigMap.
   existingDeviceConfigMapName: "" # @schema required:true
 
-  # config.deviceConfigMapName -- Name of the chart-managed device configuration ConfigMap when `config.create=true`.
+  # config.deviceConfigMapName -- Name of the chart-managed device configuration ConfigMap.
   deviceConfigMapName: hami-scheduler-device # @schema required:true
 
 nodeConfigMap: # @schema required:true;additionalProperties:false

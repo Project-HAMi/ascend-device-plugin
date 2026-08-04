@@ -24,18 +24,14 @@ lint:
 ascend-device-plugin:
 	$(GO) build $(BUILDARGS) -o ./ascend-device-plugin ./cmd/main.go
 
-.PHONY: update-helm-artifacts
-update-helm-artifacts:
-	cd charts/ascend-device-plugin && helm-docs --skip-version-footer
-	cd charts/ascend-device-plugin && $(GO) run github.com/losisin/helm-values-schema-json/v2@v2.5.0 --values values.yaml --output values.schema.json --no-additional-properties --no-default-global
-
 .PHONY: update-chart-docs
-update-chart-docs: update-helm-artifacts
+update-chart-docs:
+	cd charts/ascend-device-plugin && helm-docs --skip-version-footer
+	cd charts/ascend-device-plugin && $(GO) run github.com/losisin/helm-values-schema-json@v1.9.2 -input values.yaml -output values.schema.json
 
 .PHONY: verify-helm-chart
 verify-helm-chart:
-	$(MAKE) update-helm-artifacts
-	git ls-files --error-unmatch -- charts/ascend-device-plugin/README.md charts/ascend-device-plugin/values.schema.json >/dev/null
+	$(MAKE) update-chart-docs
 	git diff --exit-code -- charts/ascend-device-plugin/README.md charts/ascend-device-plugin/values.schema.json
 	@set -eu; \
 	manifest="$$(mktemp)"; \
@@ -63,8 +59,6 @@ verify-helm-release-path:
 	helm show chart "$$package_path" >/dev/null; \
 	grep -Fq 'uses: helm/chart-releaser-action@v1.6.0' .github/workflows/build-helm-release.yaml; \
 	grep -Fq 'charts_dir: charts' .github/workflows/build-helm-release.yaml; \
-	grep -Fq 'mark_as_latest: false' .github/workflows/build-helm-release.yaml; \
-	grep -Fq 'queue: max' .github/workflows/build-helm-release.yaml; \
 	if grep -Eq '^[[:space:]]*skip_packaging:[[:space:]]*true' .github/workflows/build-helm-release.yaml; then echo 'chart-releaser skip_packaging must remain disabled' >&2; exit 1; fi; \
 	show_line="$$(grep -n 'helm show chart' .github/workflows/build-helm-release.yaml | cut -d: -f1)"; \
 	package_line="$$(grep -n 'helm package "$${{ env.CHART_PATH }}" --destination .cr-release-packages' .github/workflows/build-helm-release.yaml | cut -d: -f1)"; \
@@ -73,4 +67,4 @@ verify-helm-release-path:
 clean:
 	rm -rf ./ascend-device-plugin
 
-.PHONY: all tidy test lint clean update-helm-artifacts update-chart-docs verify-helm-chart verify-helm-release-path
+.PHONY: all tidy test lint clean update-chart-docs verify-helm-chart verify-helm-release-path
