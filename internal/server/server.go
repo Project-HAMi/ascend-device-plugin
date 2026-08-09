@@ -271,13 +271,19 @@ func (ps *PluginServer) GetDevicePluginOptions(context.Context, *v1beta1.Empty) 
 }
 
 func (ps *PluginServer) ListAndWatch(e *v1beta1.Empty, s v1beta1.DevicePlugin_ListAndWatchServer) error {
-	_ = s.Send(&v1beta1.ListAndWatchResponse{Devices: ps.apiDevices()})
+	if err := s.Send(&v1beta1.ListAndWatchResponse{Devices: ps.apiDevices()}); err != nil {
+		return fmt.Errorf("send initial device list: %w", err)
+	}
 	for {
 		select {
 		case <-ps.stopCh:
 			return nil
+		case <-s.Context().Done():
+			return s.Context().Err()
 		case <-ps.healthCh:
-			_ = s.Send(&v1beta1.ListAndWatchResponse{Devices: ps.apiDevices()})
+			if err := s.Send(&v1beta1.ListAndWatchResponse{Devices: ps.apiDevices()}); err != nil {
+				return fmt.Errorf("send device health update: %w", err)
+			}
 		}
 	}
 }
