@@ -92,6 +92,7 @@ func TestListAndWatchReturnsHealthUpdateSendError(t *testing.T) {
 func TestListAndWatchReturnsWhenStreamIsCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
+	sendCount := 0
 	ps := &PluginServer{
 		mgr:      &FakeManager{},
 		stopCh:   make(chan any),
@@ -100,6 +101,7 @@ func TestListAndWatchReturnsWhenStreamIsCanceled(t *testing.T) {
 	stream := &fakeListAndWatchServer{
 		ctx: ctx,
 		sendFunc: func(*v1beta1.ListAndWatchResponse) error {
+			sendCount++
 			return nil
 		},
 	}
@@ -107,5 +109,8 @@ func TestListAndWatchReturnsWhenStreamIsCanceled(t *testing.T) {
 	err := ps.ListAndWatch(&v1beta1.Empty{}, stream)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("ListAndWatch() error = %v, want %v", err, context.Canceled)
+	}
+	if sendCount != 0 {
+		t.Fatalf("Send() calls = %d, want 0", sendCount)
 	}
 }
