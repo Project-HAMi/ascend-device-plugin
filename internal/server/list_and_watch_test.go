@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
@@ -112,5 +113,50 @@ func TestListAndWatchReturnsWhenStreamIsCanceled(t *testing.T) {
 	}
 	if sendCount != 0 {
 		t.Fatalf("Send() calls = %d, want 0", sendCount)
+	}
+}
+
+func TestListAndWatchReturnsWhenStreamIsCanceledWhileWaiting(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ps := &PluginServer{
+		mgr:      &FakeManager{},
+		stopCh:   make(chan any),
+		healthCh: make(chan int32),
+	}
+	initialSent := make(chan struct{}, 1)
+	sendCount := 0
+	stream := &fakeListAndWatchServer{
+		ctx: ctx,
+		sendFunc: func(*v1beta1.ListAndWatchResponse) error {
+			sendCount++
+			initialSent <- struct{}{}
+			return nil
+		},
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- ps.ListAndWatch(&v1beta1.Empty{}, stream)
+	}()
+
+	select {
+	case <-initialSent:
+	case <-time.After(time.Second):
+		t.Fatal("initial Send() was not called")
+	}
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("ListAndWatch() error = %v, want %v", err, context.Canceled)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ListAndWatch() did not return after stream cancellation")
+	}
+	if sendCount != 1 {
+		t.Fatalf("Send() calls = %d, want 1", sendCount)
 	}
 }
