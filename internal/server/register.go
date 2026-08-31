@@ -33,6 +33,7 @@ import (
 
 	"github.com/Project-HAMi/HAMi/pkg/device"
 	"github.com/Project-HAMi/HAMi/pkg/util"
+	"github.com/Project-HAMi/ascend-device-plugin/internal"
 )
 
 // healthUpdateSendTimeout bounds how long watchAndRegister waits for a
@@ -108,10 +109,7 @@ func (ps *PluginServer) registerHAMi() error {
 	apiDevices := make([]*device.DeviceInfo, 0, len(devs))
 	// hami currently believes that the index starts from 0 and is continuous.
 	for i, dev := range devs {
-		devcore := dev.AICore
-		if ps.mgr.IsHamiVnpuCore() {
-			devcore = HamiVnpuCoreMaxPercent
-		}
+		devcore := internal.AdvertisedDevcore(ps.mgr.IsHamiVnpuCore(), ps.mgr.DeviceCoreScaling(), dev.AICore)
 		device := &device.DeviceInfo{
 			Index:   uint(i),
 			ID:      dev.UUID,

@@ -82,6 +82,7 @@ hamiVnpuCore: # @schema required:true;additionalProperties:false
 deviceConfig: |- # @schema required:true
   vnpus:
     hamiVnpuCore: {{ .Values.hamiVnpuCore.enabled }}
+    deviceCoreScaling: 1
     configs:
     - chipName: 910A
       commonWord: Ascend910A

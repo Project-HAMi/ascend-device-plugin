@@ -424,6 +424,37 @@ func TestRegisterHAMi(t *testing.T) {
 			},
 		},
 		{
+			name: "IsHamiVnpuCore_Devcore150",
+			args: registerHAMiArgs{
+				nodeName:      "test-node",
+				registerAnno:  "hami.io/node-register-Ascend310P",
+				handshakeAnno: "hami.io/node-handshake-Ascend310P",
+				mgr: &FakeManager{
+					GetDevicesFunc: func() []*manager.Device {
+						return []*manager.Device{
+							{UUID: "uuid1", Memory: 21527, AICore: 8, Health: true},
+						}
+					},
+					VDeviceCountFunc:      func() int { return 1 },
+					CommonWordFunc:        func() string { return "Ascend310P" },
+					IsHamiVnpuCoreFunc:    func() bool { return true },
+					DeviceCoreScalingFunc: func() float64 { return 1.5 },
+				},
+				nodes: []*v1.Node{
+					{ObjectMeta: metav1.ObjectMeta{Name: "test-node", Annotations: map[string]string{}}},
+				},
+			},
+			want: registerHAMiWant{
+				deviceCount: 1,
+				deviceCheck: func(t *testing.T, devs []*device.DeviceInfo) {
+					t.Helper()
+					if devs[0].Devcore != 150 {
+						t.Fatalf("device Devcore = %d, want 150 when deviceCoreScaling=1.5", devs[0].Devcore)
+					}
+				},
+			},
+		},
+		{
 			name: "IsHamiVnpuCore_False",
 			args: registerHAMiArgs{
 				nodeName:      "test-node",

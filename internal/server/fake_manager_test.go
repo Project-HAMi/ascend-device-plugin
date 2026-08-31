@@ -24,15 +24,16 @@ import (
 // Each method delegates to the corresponding Func field if set;
 // otherwise it returns a zero value.
 type FakeManager struct {
-	CommonWordFunc       func() string
-	ResourceNameFunc     func() string
-	VDeviceCountFunc     func() int
-	UpdateDeviceFunc     func() error
-	GetDevicesFunc       func() []*manager.Device
-	GetDeviceByUUIDFunc  func(UUID string) *manager.Device
-	GetUnHealthIDsFunc   func() []int32
-	CleanupIdleVNPUsFunc func() error
-	IsHamiVnpuCoreFunc   func() bool
+	CommonWordFunc        func() string
+	ResourceNameFunc      func() string
+	VDeviceCountFunc      func() int
+	UpdateDeviceFunc      func() error
+	GetDevicesFunc        func() []*manager.Device
+	GetDeviceByUUIDFunc   func(UUID string) *manager.Device
+	GetUnHealthIDsFunc    func() []int32
+	CleanupIdleVNPUsFunc  func() error
+	IsHamiVnpuCoreFunc    func() bool
+	DeviceCoreScalingFunc func() float64
 }
 
 func (f *FakeManager) CommonWord() string {
@@ -96,4 +97,11 @@ func (f *FakeManager) IsHamiVnpuCore() bool {
 		return f.IsHamiVnpuCoreFunc()
 	}
 	return false
+}
+
+func (f *FakeManager) DeviceCoreScaling() float64 {
+	if f.DeviceCoreScalingFunc != nil {
+		return f.DeviceCoreScalingFunc()
+	}
+	return 0
 }

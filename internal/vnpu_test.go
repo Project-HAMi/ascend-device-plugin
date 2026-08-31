@@ -277,3 +277,29 @@ func TestIsLegacyVNPUsLayout(t *testing.T) {
 		})
 	}
 }
+
+func TestAdvertisedDevcore(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		hami     bool
+		scale    float64
+		hardware int32
+		want     int32
+	}{
+		{name: "template keeps hardware", hami: false, scale: 1.5, hardware: 20, want: 20},
+		{name: "hami-core default", hami: true, scale: 0, hardware: 20, want: 100},
+		{name: "hami-core 1.0", hami: true, scale: 1, hardware: 20, want: 100},
+		{name: "hami-core 1.5", hami: true, scale: 1.5, hardware: 20, want: 150},
+		{name: "hami-core 2.0", hami: true, scale: 2, hardware: 20, want: 200},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := AdvertisedDevcore(tc.hami, tc.scale, tc.hardware)
+			if got != tc.want {
+				t.Fatalf("AdvertisedDevcore(%v, %v, %d)=%d, want %d", tc.hami, tc.scale, tc.hardware, got, tc.want)
+			}
+		})
+	}
+}

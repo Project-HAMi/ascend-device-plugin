@@ -51,6 +51,7 @@ type Manager interface {
 	GetUnHealthIDs() []int32
 	CleanupIdleVNPUs() error
 	IsHamiVnpuCore() bool
+	DeviceCoreScaling() float64
 }
 
 type AscendManager struct {
@@ -372,4 +373,11 @@ func (am *AscendManager) IsHamiVnpuCore() bool {
 		return am.nodeConfig.HamiVnpuCore
 	}
 	return am.globalConfig.VNPUs.HamiVnpuCore
+}
+
+func (am *AscendManager) DeviceCoreScaling() float64 {
+	if am.nodeConfig != nil && am.nodeConfig.DeviceCoreScaling > 0 {
+		return am.nodeConfig.DeviceCoreScaling
+	}
+	return am.globalConfig.VNPUs.DeviceCoreScaling
 }

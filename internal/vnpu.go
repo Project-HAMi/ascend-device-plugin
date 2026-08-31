@@ -19,6 +19,7 @@ package internal
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -45,8 +46,12 @@ type VNPUConfig struct {
 }
 
 type VNPUsConfig struct {
-	HamiVnpuCore bool         `json:"hamiVnpuCore,omitempty"`
-	Configs      []VNPUConfig `json:"configs"`
+	HamiVnpuCore bool `json:"hamiVnpuCore,omitempty"`
+	// DeviceCoreScaling is the hami-core compute oversell ratio.
+	// When hami-core is on, registerHAMi advertises Devcore = round(100 * DeviceCoreScaling).
+	// Default 1 keeps a 100-point budget. Zero or negative is treated as 1.
+	DeviceCoreScaling float64      `json:"deviceCoreScaling,omitempty"`
+	Configs           []VNPUConfig `json:"configs"`
 }
 
 type Config struct {
@@ -110,14 +115,32 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 type NodeConfig struct {
-	Name          string        `json:"name" yaml:"name"`
-	HamiVnpuCore  bool          `json:"hami-vnpu-core" yaml:"hami-vnpu-core"`
-	VDeviceCount  int           `json:"vDeviceCount" yaml:"vDeviceCount"`
-	FilterDevices FilterDevices `json:"filterDevices,omitempty" yaml:"filterDevices,omitempty"`
+	Name              string        `json:"name" yaml:"name"`
+	HamiVnpuCore      bool          `json:"hami-vnpu-core" yaml:"hami-vnpu-core"`
+	VDeviceCount      int           `json:"vDeviceCount" yaml:"vDeviceCount"`
+	DeviceCoreScaling float64       `json:"deviceCoreScaling,omitempty" yaml:"deviceCoreScaling,omitempty"`
+	FilterDevices     FilterDevices `json:"filterDevices,omitempty" yaml:"filterDevices,omitempty"`
 }
 
 type NodeListConfig struct {
 	Nodes []NodeConfig `json:"nodes" yaml:"nodes"`
+}
+
+// AdvertisedDevcore is the core capacity registered to HAMi.
+// Template/hard-slice mode keeps the hardware AICore. hami-core uses a
+// 100-point percentage scale, optionally oversold by deviceCoreScaling.
+func AdvertisedDevcore(isHamiCore bool, scale float64, hardwareAICore int32) int32 {
+	if !isHamiCore {
+		return hardwareAICore
+	}
+	if scale <= 0 || math.IsNaN(scale) || math.IsInf(scale, 0) {
+		scale = 1
+	}
+	budget := math.Round(100 * scale)
+	if budget < 1 || budget > math.MaxInt32 {
+		return 100
+	}
+	return int32(budget)
 }
 
 func LoadNodeConfig(path string) (*NodeListConfig, error) {
