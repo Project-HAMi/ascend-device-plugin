@@ -78,11 +78,14 @@ hamiVnpuCore: # @schema required:true;additionalProperties:false
   # hamiVnpuCore.enabled -- Enable hami-vnpu-core in the generated global device configuration.
   enabled: false # @schema required:true
 
+  # hamiVnpuCore.deviceCoreScaling -- (float) hami-core compute oversell ratio. The plugin advertises `Devcore = round(100 * deviceCoreScaling)` so HAMi can admit more than 100% of `-core` on one card. Values below 1 are not supported.
+  deviceCoreScaling: 1 # @schema required:true;type:number;minimum:1
+
 # @ignored
 deviceConfig: |- # @schema required:true
   vnpus:
     hamiVnpuCore: {{ .Values.hamiVnpuCore.enabled }}
-    deviceCoreScaling: 1
+    deviceCoreScaling: {{ .Values.hamiVnpuCore.deviceCoreScaling }}
     configs:
     - chipName: 910A
       commonWord: Ascend910A

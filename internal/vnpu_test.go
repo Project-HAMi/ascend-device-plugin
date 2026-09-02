@@ -17,6 +17,7 @@
 package internal
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -292,6 +293,12 @@ func TestAdvertisedDevcore(t *testing.T) {
 		{name: "hami-core 1.0", hami: true, scale: 1, hardware: 20, want: 100},
 		{name: "hami-core 1.5", hami: true, scale: 1.5, hardware: 20, want: 150},
 		{name: "hami-core 2.0", hami: true, scale: 2, hardware: 20, want: 200},
+		{name: "hami-core rounds to the nearest percent", hami: true, scale: 1.234, hardware: 20, want: 123},
+		{name: "hami-core below 1 falls back", hami: true, scale: 0.5, hardware: 20, want: 100},
+		{name: "hami-core negative falls back", hami: true, scale: -2, hardware: 20, want: 100},
+		{name: "hami-core NaN falls back", hami: true, scale: math.NaN(), hardware: 20, want: 100},
+		{name: "hami-core Inf falls back", hami: true, scale: math.Inf(1), hardware: 20, want: 100},
+		{name: "hami-core out of int32 range falls back", hami: true, scale: 1e9, hardware: 20, want: 100},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
