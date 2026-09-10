@@ -51,6 +51,7 @@ type Manager interface {
 	GetUnHealthIDs() []int32
 	CleanupIdleVNPUs() error
 	IsHamiVnpuCore() bool
+	DeviceCoreScaling() float64
 }
 
 type AscendManager struct {
@@ -372,4 +373,17 @@ func (am *AscendManager) IsHamiVnpuCore() bool {
 		return am.nodeConfig.HamiVnpuCore
 	}
 	return am.globalConfig.VNPUs.HamiVnpuCore
+}
+
+// DeviceCoreScaling returns the hami-core oversell ratio in effect, preferring
+// a per-node override over the global value. An override of 0 reads as "not
+// set", matching the omitempty encoding of the field. Every other override is
+// returned as it was written, an invalid one included, so that AdvertisedDevcore
+// reports it and falls back to the percentage base instead of the node silently
+// inheriting the global ratio.
+func (am *AscendManager) DeviceCoreScaling() float64 {
+	if am.nodeConfig != nil && am.nodeConfig.DeviceCoreScaling != 0 {
+		return am.nodeConfig.DeviceCoreScaling
+	}
+	return am.globalConfig.VNPUs.DeviceCoreScaling
 }

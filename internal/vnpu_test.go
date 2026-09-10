@@ -17,6 +17,7 @@
 package internal
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -273,6 +274,38 @@ func TestIsLegacyVNPUsLayout(t *testing.T) {
 			err := yaml.Unmarshal([]byte(tc.content), &config)
 			if got := isLegacyVNPUsLayout(err); got != tc.want {
 				t.Errorf("isLegacyVNPUsLayout(%v) = %v, want %v", err, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAdvertisedDevcore(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		hami     bool
+		scale    float64
+		hardware int32
+		want     int32
+	}{
+		{name: "template keeps hardware", hami: false, scale: 1.5, hardware: 20, want: 20},
+		{name: "hami-core default", hami: true, scale: 0, hardware: 20, want: 100},
+		{name: "hami-core 1.0", hami: true, scale: 1, hardware: 20, want: 100},
+		{name: "hami-core 1.5", hami: true, scale: 1.5, hardware: 20, want: 150},
+		{name: "hami-core 2.0", hami: true, scale: 2, hardware: 20, want: 200},
+		{name: "hami-core rounds to the nearest percent", hami: true, scale: 1.234, hardware: 20, want: 123},
+		{name: "hami-core below 1 falls back", hami: true, scale: 0.5, hardware: 20, want: 100},
+		{name: "hami-core negative falls back", hami: true, scale: -2, hardware: 20, want: 100},
+		{name: "hami-core NaN falls back", hami: true, scale: math.NaN(), hardware: 20, want: 100},
+		{name: "hami-core Inf falls back", hami: true, scale: math.Inf(1), hardware: 20, want: 100},
+		{name: "hami-core out of int32 range falls back", hami: true, scale: 1e9, hardware: 20, want: 100},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := AdvertisedDevcore(tc.hami, tc.scale, tc.hardware)
+			if got != tc.want {
+				t.Fatalf("AdvertisedDevcore(%v, %v, %d)=%d, want %d", tc.hami, tc.scale, tc.hardware, got, tc.want)
 			}
 		})
 	}

@@ -51,9 +51,34 @@ helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --set hamiVnpuCore.enabled=true
 ```
 
+### Compute Oversell
+
+`hamiVnpuCore.deviceCoreScaling` sets how much compute the plugin advertises for
+hami-core. The plugin registers `Devcore = round(100 * deviceCoreScaling)` and HAMi
+admits `-core` requests against that budget:
+
+```bash
+helm install ascend-device-plugin ./charts/ascend-device-plugin \
+  --namespace kube-system \
+  --set hamiVnpuCore.enabled=true \
+  --set-json hamiVnpuCore.deviceCoreScaling=1.5
+```
+
+Use `--set-json` or a values file for fractional ratios. Plain `--set` parses `1.5` as a
+string, which the chart schema rejects.
+
+With `1.5` the advertised budget is 150, so three pods requesting `-core: "30"` plus one
+requesting `-core: "20"` fit on the same card. The default `1` keeps the 100-point budget
+and preserves current behavior. Ratios below `1` are rejected by the chart schema, and the
+plugin falls back to `1` if the device config sets one directly.
+
+Only compute is oversold. Device memory is never scaled, and pod density per card is
+still capped by `vDeviceCount`, so raising the ratio alone may not admit more pods.
+
 ## Node Configuration
 
-Override `nodeConfig` to enable or customize `hami-vnpu-core` per node:
+Override `nodeConfig` to enable or customize `hami-vnpu-core` per node. Each node may
+also override `deviceCoreScaling`:
 
 ```yaml
 nodeConfig: |-
@@ -61,6 +86,7 @@ nodeConfig: |-
     - name: "ascend-node-1"
       hami-vnpu-core: true
       vDeviceCount: 8
+      deviceCoreScaling: 1.5
 ```
 
 ## Values
@@ -77,6 +103,7 @@ nodeConfig: |-
 | daemonSet.args[4] | string | `"--v=4"` |  |
 | daemonSet.name | string | `"hami-ascend-device-plugin"` | Device plugin DaemonSet name. |
 | fullnameOverride | string | `""` | Override the fully qualified resource name. |
+| hamiVnpuCore.deviceCoreScaling | float | `1` | hami-core compute oversell ratio. The plugin advertises `Devcore = round(100 * deviceCoreScaling)` so HAMi can admit more than 100% of `-core` on one card. Values below 1 are not supported. |
 | hamiVnpuCore.enabled | bool | `false` | Enable hami-vnpu-core in the generated global device configuration. |
 | image.pullPolicy | string | `"IfNotPresent"` | Kubernetes image pull policy. |
 | image.repository | string | `"projecthami/ascend-device-plugin"` | Container image repository. |
