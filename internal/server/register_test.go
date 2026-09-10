@@ -411,8 +411,8 @@ func TestRegisterHAMi(t *testing.T) {
 				deviceCount: 1,
 				deviceCheck: func(t *testing.T, devs []*device.DeviceInfo) {
 					t.Helper()
-					if devs[0].Devcore != HamiVnpuCoreMaxPercent {
-						t.Fatalf("device Devcore = %d, want %d in hami-vnpu-core mode", devs[0].Devcore, HamiVnpuCoreMaxPercent)
+					if devs[0].Devcore != 100 {
+						t.Fatalf("device Devcore = %d, want 100 in hami-vnpu-core mode", devs[0].Devcore)
 					}
 				},
 				annotationCheck: func(t *testing.T, annos map[string]string) {

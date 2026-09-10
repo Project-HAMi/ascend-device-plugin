@@ -46,11 +46,6 @@ const (
 	VNPUModeAnnotation         = "huawei.com/vnpu-mode"
 	VNPUModeHamiCore           = "hami-core"
 	VNPUNodeSelectorAnnotation = "hami-vnpu-core"
-	// HamiVnpuCoreMaxPercent is the base allocatable core percentage per device
-	// in soft-slice (hami-vnpu-core) mode, where core requests are percentages.
-	// The capacity advertised to HAMi rises above it when deviceCoreScaling
-	// oversells compute; see internal.AdvertisedDevcore.
-	HamiVnpuCoreMaxPercent = 100
 )
 
 var (
