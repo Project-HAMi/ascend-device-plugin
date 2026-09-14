@@ -78,6 +78,14 @@ type PluginServer struct {
 	// when the set actually changed.
 	lastPublishedDevices string
 
+	// pendingDeviceShare lists the chips whose device-share could not be
+	// enabled because the driver reported a workload still running on them.
+	// Written by Start and then by watchAndRegister on every tick, and read by
+	// ListAndWatch and registerHAMi, which leave these chips unregistered, so
+	// every access goes through pendingMu.
+	pendingDeviceShare []shareTarget
+	pendingMu          sync.RWMutex
+
 	// test hooks — injected by tests to avoid real socket/kubelet dependencies
 	dialFunc                 func(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error)
 	registerKubeletFunc      func() error
@@ -176,11 +184,13 @@ func (ps *PluginServer) Start() error {
 	if err != nil {
 		return err
 	}
-	// The device set below is what the first ListAndWatch response publishes.
-	ps.lastPublishedDevices = ps.deviceFingerprint()
 	if err := ps.enableNodeDeviceShare(); err != nil {
 		return err
 	}
+	// The device set below is what the first ListAndWatch response publishes.
+	// Taken after device-share so that chips withheld for a running workload
+	// are already excluded.
+	ps.lastPublishedDevices = ps.deviceFingerprint()
 	err = ps.serve()
 	if err != nil {
 		return err
@@ -297,7 +307,11 @@ func (ps *PluginServer) apiDevices() []*v1beta1.Device {
 	devs := ps.mgr.GetDevices()
 	devices := make([]*v1beta1.Device, 0, len(devs))
 	vCount := ps.mgr.VDeviceCount()
+	pending := ps.pendingShareChips()
 	for _, dev := range devs {
+		if pending[chipKey{Card: dev.CardID, Chip: dev.DeviceID}] {
+			continue
+		}
 		health := v1beta1.Unhealthy
 		if dev.Health {
 			health = v1beta1.Healthy
