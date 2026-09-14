@@ -78,6 +78,12 @@ type PluginServer struct {
 	// when the set actually changed.
 	lastPublishedDevices string
 
+	// pendingDeviceShare lists the chips whose device-share flip the driver
+	// refused at startup because a workload was still running on them (npu-smi
+	// exit 203). Set by Start before the background goroutines exist and then
+	// owned by watchAndRegister, which retries them on every tick.
+	pendingDeviceShare []chipKey
+
 	// test hooks — injected by tests to avoid real socket/kubelet dependencies
 	dialFunc                 func(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error)
 	registerKubeletFunc      func() error

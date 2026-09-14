@@ -62,6 +62,10 @@ func (ps *PluginServer) watchAndRegister() {
 			timer = time.After(5 * time.Second)
 			continue
 		}
+		// Chips that were still busy when Start() enabled device-share are
+		// re-driven here; the driver accepts the switch once their workloads
+		// have finished.
+		ps.retryPendingDeviceShare()
 		// Publish to kubelet whenever the device set changed, in either
 		// direction. The send is bounded so that a missing ListAndWatch
 		// consumer cannot stall this loop, which would also stop the HAMi node
