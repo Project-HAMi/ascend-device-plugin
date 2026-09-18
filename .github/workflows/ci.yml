@@ -152,6 +152,24 @@ jobs:
           echo "VERSION=latest" >> $GITHUB_OUTPUT
         fi
 
+    - name: Verify release tag matches shipped manifests
+      if: ${{ startsWith(github.ref, 'refs/tags/') }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Compare against the literal repository the manifest pins, not IMAGE_NAME: that may come from a secret
+        # (docker.io/ prefix, mirror) while the manifest is checked-in text; helm-lint.yaml uses the same literal.
+        tag_name="${GITHUB_REF#refs/tags/}"
+        app_version="$(awk '$1 == "appVersion:" { gsub(/"/, "", $2); print $2; exit }' charts/ascend-device-plugin/Chart.yaml)"
+        manifest_image="$(awk '$1 == "-" && $2 == "image:" { gsub(/"/, "", $3); print $3; exit }' ascend-device-plugin.yaml)"
+
+        if [[ "${app_version}" != "${tag_name}" || "${manifest_image}" != "projecthami/ascend-device-plugin:${tag_name}" ]]; then
+          echo "release tag ${tag_name} does not match Chart.yaml appVersion ${app_version} and ascend-device-plugin.yaml image ${manifest_image}" >&2
+          echo "bump the manifest and chart before tagging so users get the released image" >&2
+          exit 1
+        fi
+
     - name: Build and push
       uses: docker/build-push-action@v6
       with:
