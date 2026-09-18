@@ -64,9 +64,16 @@
         "hamiVnpuCore": {
             "type": "object",
             "required": [
-                "enabled"
+                "enabled",
+                "deviceCoreScaling"
             ],
             "properties": {
+                "deviceCoreScaling": {
+                    "type": [
+                        "number"
+                    ],
+                    "minimum": 1
+                },
                 "enabled": {
                     "type": "boolean"
                 }

@@ -214,3 +214,71 @@ func TestLoadConfigChipNotFound(t *testing.T) {
 		t.Errorf("LoadConfig() error = %v, want it to name the missing chip", err)
 	}
 }
+
+// TestDeviceCoreScaling checks that a per-node override wins over the global
+// ratio and that an invalid override still reaches AdvertisedDevcore's
+// validation instead of silently inheriting the global ratio.
+func TestDeviceCoreScaling(t *testing.T) {
+	const hardwareAICore = 20
+
+	tests := []struct {
+		name        string
+		global      float64
+		nodeConfig  *internal.NodeConfig
+		wantScaling float64
+		wantDevcore int32
+	}{
+		{
+			name:        "no node config -> global ratio",
+			global:      2,
+			nodeConfig:  nil,
+			wantScaling: 2,
+			wantDevcore: 200,
+		},
+		{
+			name:        "node override unset -> global ratio",
+			global:      2,
+			nodeConfig:  &internal.NodeConfig{Name: "node-001"},
+			wantScaling: 2,
+			wantDevcore: 200,
+		},
+		{
+			name:        "node override 1.5 -> honored over the global ratio",
+			global:      2,
+			nodeConfig:  &internal.NodeConfig{Name: "node-001", DeviceCoreScaling: 1.5},
+			wantScaling: 1.5,
+			wantDevcore: 150,
+		},
+		{
+			name:        "negative node override -> percentage base, not the global ratio",
+			global:      2,
+			nodeConfig:  &internal.NodeConfig{Name: "node-001", DeviceCoreScaling: -1},
+			wantScaling: -1,
+			wantDevcore: 100,
+		},
+		{
+			name:        "node override below 1 -> percentage base",
+			global:      2,
+			nodeConfig:  &internal.NodeConfig{Name: "node-001", DeviceCoreScaling: 0.5},
+			wantScaling: 0.5,
+			wantDevcore: 100,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			am := &AscendManager{
+				nodeConfig:   tt.nodeConfig,
+				globalConfig: internal.Config{VNPUs: internal.VNPUsConfig{DeviceCoreScaling: tt.global}},
+			}
+			if got := am.DeviceCoreScaling(); got != tt.wantScaling {
+				t.Fatalf("DeviceCoreScaling() = %v, want %v", got, tt.wantScaling)
+			}
+			got := internal.AdvertisedDevcore(true, am.DeviceCoreScaling(), hardwareAICore)
+			if got != tt.wantDevcore {
+				t.Fatalf("AdvertisedDevcore(true, %v, %d) = %d, want %d",
+					am.DeviceCoreScaling(), hardwareAICore, got, tt.wantDevcore)
+			}
+		})
+	}
+}
