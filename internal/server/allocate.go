@@ -67,7 +67,49 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, ctrName stri
 
 	vnpuMode := pod.Annotations[VNPUModeAnnotation]
 	effectiveHamiCore := vnpuMode == VNPUModeHamiCore || (vnpuMode == "" && ps.mgr.IsHamiVnpuCore())
-	klog.V(4).Infof("Pod %s vnpu mode: %q, effectiveHamiCore: %v", pod.Name, vnpuMode, effectiveHamiCore)
+	effectiveENPU := podUsesENPU(pod)
+	klog.V(4).Infof("Pod %s vnpu mode: %q, effectiveHamiCore: %v, effectiveENPU: %v", pod.Name, vnpuMode, effectiveHamiCore, effectiveENPU)
+	if effectiveENPU {
+		if len(containerDevs) != 1 {
+			return nil, fmt.Errorf("ENPU mode supports exactly one physical NPU per container, got %d", len(containerDevs))
+		}
+		dev := ps.mgr.GetDeviceByUUID(containerDevs[0].UUID)
+		if dev == nil {
+			return nil, fmt.Errorf("unknown uuid: %s", containerDevs[0].UUID)
+		}
+		if err := ps.ensureENPUSingleDieMode(); err != nil {
+			return nil, err
+		}
+		policy, err := enpuPolicy(pod, managerENPUPolicy(ps.mgr))
+		if err != nil {
+			return nil, err
+		}
+		info := rtInfoLookup[containerDevs[0].UUID]
+		memory, core, err := enpuQuota(info, dev)
+		if err != nil {
+			return nil, err
+		}
+		request, limit, err := enpuMemoryRequestLimit(pod, memory, policy)
+		if err != nil {
+			return nil, err
+		}
+		configPath := ""
+		if enpuManagerEndpoint() != "" {
+			allocation, managerErr := allocateENPUManager(pod, ctrName, dev, request, limit, core, policy)
+			if managerErr != nil {
+				return nil, managerErr
+			}
+			configPath = managerConfigPath(allocation)
+		} else {
+			configPath, err = ps.writeENPUConfig(pod, ctrName, dev, info, policy)
+			if err != nil {
+				return nil, err
+			}
+		}
+		resp.Mounts = enpuMounts(configPath)
+		resp.Devices = enpuDeviceSpecs(ps.mgr.GetDevices())
+		return resp, nil
+	}
 	if effectiveHamiCore {
 		// 1. Handle volume mount injection
 		var mounts []*v1beta1.Mount

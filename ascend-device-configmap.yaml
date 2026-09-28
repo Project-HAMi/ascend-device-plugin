@@ -11,6 +11,8 @@ data:
   device-config.yaml: |-
     vnpus:
       hamiVnpuCore: false
+      enpu: false
+      enpuPolicy: elastic
       deviceCoreScaling: 1
       configs:
       - chipName: 910A

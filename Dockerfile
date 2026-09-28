@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=ubuntu:20.04
 FROM $BASE_IMAGE AS build
 
-ARG GO_VERSION=1.24.6
+ARG GO_VERSION=1.26.2
 ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update -y && apt install -y gcc make wget ca-certificates
@@ -27,5 +27,10 @@ FROM $BASE_IMAGE
 ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/driver/lib64/common
 COPY --from=build /build/ascend-device-plugin /usr/local/bin/ascend-device-plugin
 COPY --from=build /build/lib/hami-vnpu-core/* /usr/local/hami-vnpu-core-assets/
+# ENPU assets are installed on the node and mounted into workloads.
+COPY enpu-runtime-assets/ /usr/local/enpu-runtime-assets/
+RUN if [ -e /usr/local/enpu-runtime-assets/libvruntime.so ] || [ -e /usr/local/enpu-runtime-assets/enpu-monitor ]; then \
+      cd /usr/local/enpu-runtime-assets && sha256sum -c SHA256SUMS; \
+    fi
 
 ENTRYPOINT ["ascend-device-plugin"]

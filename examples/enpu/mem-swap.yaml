@@ -1,0 +1,54 @@
+# Requires mem-swap runtime and a local manager; see README.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: enpu-mem-swap
+  annotations:
+    huawei.com/vnpu-mode: enpu
+    huawei.com/enpu-policy: best-effort
+    huawei.com/enpu-memory-limit: "65536" # MiB limit
+    # Request defaults to the HAMi memory resource.
+    # Optional: pin instances to the same DIE UUID.
+    # hami.io/use-Ascend910C-uuid: "REPLACE_WITH_DIE_UUID"
+spec:
+  schedulerName: hami-scheduler # Match the deployed scheduler.
+  runtimeClassName: ascend
+  restartPolicy: Never
+  containers:
+    - name: vllm
+      # Requires CANN, vLLM-Ascend and systemd-detect-virt.
+      image: registry.example.com/your-project/vllm-ascend:replace-me
+      command: ["vllm", "serve"]
+      args:
+        - /models/your-model
+        - --served-model-name
+        - enpu-model
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8000"
+        - --tensor-parallel-size
+        - "1"
+        - --enforce-eager
+        - --gpu-memory-utilization
+        - "0.9"
+        - --max-model-len
+        - "4096"
+        - --max-num-seqs
+        - "1"
+      ports:
+        - name: http
+          containerPort: 8000
+      resources:
+        limits:
+          huawei.com/Ascend910C: "1"
+          huawei.com/Ascend910C-memory: "256" # MiB reservation
+          huawei.com/Ascend910C-core: "30"
+      volumeMounts:
+        - name: models
+          mountPath: /models
+          readOnly: true
+  volumes:
+    - name: models
+      persistentVolumeClaim:
+        claimName: replace-with-model-pvc

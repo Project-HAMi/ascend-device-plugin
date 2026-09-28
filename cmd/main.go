@@ -151,17 +151,17 @@ func main() {
 	}
 	client.InitGlobalClient()
 
-	if mgr.IsHamiVnpuCore() {
+	if mgr.IsHamiVnpuCore() || mgr.IsEnpu() {
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
 					klog.Errorf("recovered from panic in vNPU metrics server: %v", r)
 				}
 			}()
-			monitor.StartMetricsServer(":9395", "/usr/local/hami-vnpu-core/containers")
+			monitor.StartMetricsServerForModes(":9395", "/usr/local/hami-vnpu-core/containers", mgr.IsHamiVnpuCore(), mgr.IsEnpu())
 		}()
 	} else {
-		klog.Info("hami-vnpu-core disabled on this node; not starting the vNPU metrics server")
+		klog.Info("hami-vnpu-core and ENPU disabled on this node; not starting the vNPU metrics server")
 	}
 
 	if err = start(server); err != nil {

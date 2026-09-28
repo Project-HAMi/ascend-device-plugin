@@ -17,11 +17,13 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"k8s.io/klog/v2"
 )
@@ -52,6 +54,17 @@ var runNpuSmi = func(args ...string) ([]byte, error) {
 		return nil, err
 	}
 	cmd := exec.Command(bin, args...)
+	if len(args) == 3 && args[0] == "info" && args[1] == "-t" && args[2] == "multi-die-policy" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		cmd = exec.CommandContext(ctx, bin, args...)
+		cmd.WaitDelay = time.Second
+		out, err := cmd.CombinedOutput()
+		if ctx.Err() != nil {
+			return out, fmt.Errorf("multi-die-policy query timed out after 10s: %w", ctx.Err())
+		}
+		return out, err
+	}
 	cmd.Stdin = strings.NewReader("Y\n")
 	return cmd.CombinedOutput()
 }
@@ -94,14 +107,10 @@ func applyDeviceShare(chips []chipKey, enabled bool) error {
 	return nil
 }
 
-// enableNodeDeviceShare turns device-share on for every chip on the node when
-// it runs in hami-vnpu-core soft-slice mode. Called once at startup and
-// idempotent (npu-smi accepts redundant set commands). On a non-hami-vnpu-core
-// node it is a no-op and never writes -d 0. Any per-chip failure aborts startup
-// so kubelet restarts and retries.
+// enableNodeDeviceShare enables device sharing for hami-core or ENPU.
 func (ps *PluginServer) enableNodeDeviceShare() error {
-	if !ps.mgr.IsHamiVnpuCore() {
-		klog.V(3).Infof("node %s is not hami-vnpu-core, skipping device-share", ps.nodeName)
+	if !ps.mgr.IsHamiVnpuCore() && !managerUsesENPU(ps.mgr) {
+		klog.V(3).Infof("node %s has no runtime soft-slice backend, skipping device-share", ps.nodeName)
 		return nil
 	}
 	chipSet := map[chipKey]struct{}{}

@@ -1,0 +1,16 @@
+# Plugin chart overlay; reuse HAMi config in the same namespace.
+config:
+  create: false
+  existingDeviceConfigMapName: hami-scheduler-device
+runtimeClass:
+  create: false # Reuse the existing ascend RuntimeClass.
+enpu:
+  defaultPolicy: elastic # Match vnpus.enpuPolicy.
+  exposeAllDevices: false
+# Helm replaces this string; preserve existing node entries.
+nodeConfig: |-
+  nodes:
+    - name: replace-with-enpu-node-name
+      hami-vnpu-core: false
+      enpu: true
+      vDeviceCount: 100

@@ -36,6 +36,9 @@ spec:
             privileged: true
             readOnlyRootFilesystem: false
           volumeMounts:
+            - name: host-proc
+              mountPath: /host/proc
+              readOnly: true
             - name: device-plugin
               mountPath: /var/lib/kubelet/device-plugins
             - name: pod-resource
@@ -54,6 +57,14 @@ spec:
               mountPath: /usr/local/hami-shared-region
             - name: hami-vnpu-core
               mountPath: /usr/local/hami-vnpu-core
+            - name: enpu-config
+              mountPath: {{ .Values.enpu.configRoot }}
+            {{- if and .Values.enpu.managerConfigRoot (ne .Values.enpu.managerConfigRoot .Values.enpu.configRoot) }}
+            - name: enpu-manager-config
+              mountPath: {{ .Values.enpu.managerConfigRoot }}
+            {{- end }}
+            - name: enpu-runtime
+              mountPath: /usr/local/enpu/vcann-rt
             - name: ascend-config
               mountPath: /device-config.yaml
               subPath: device-config.yaml
@@ -67,7 +78,33 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: ENPU_RUNTIME_PATH
+              value: {{ .Values.enpu.runtimePath | quote }}
+            - name: ENPU_MONITOR_PATH
+              value: {{ .Values.enpu.monitorPath | quote }}
+            - name: ENPU_PRELOAD_PATH
+              value: {{ .Values.enpu.preloadPath | quote }}
+            - name: ENPU_SYSTEMD_DETECT_VIRT_PATH
+              value: {{ .Values.enpu.systemdDetectVirtPath | quote }}
+            - name: ENPU_CONFIG_ROOT
+              value: {{ .Values.enpu.configRoot | quote }}
+            - name: ENPU_SCHEDULING_POLICY
+              value: {{ .Values.enpu.defaultPolicy | quote }}
+            - name: ENPU_EXPOSE_ALL_DEVICES
+              value: {{ .Values.enpu.exposeAllDevices | quote }}
+            {{- if .Values.enpu.managerURL }}
+            - name: ENPU_MANAGER_URL
+              value: {{ .Values.enpu.managerURL | quote }}
+            {{- end }}
+            {{- if .Values.enpu.managerConfigRoot }}
+            - name: ENPU_MANAGER_CONFIG_ROOT
+              value: {{ .Values.enpu.managerConfigRoot | quote }}
+            {{- end }}
       volumes:
+        - name: host-proc
+          hostPath:
+            path: /proc
+            type: Directory
         - name: device-plugin
           hostPath:
             path: /var/lib/kubelet/device-plugins
@@ -95,6 +132,20 @@ spec:
         - name: hami-vnpu-core
           hostPath:
             path: /usr/local/hami-vnpu-core
+            type: DirectoryOrCreate
+        - name: enpu-config
+          hostPath:
+            path: {{ .Values.enpu.configRoot }}
+            type: DirectoryOrCreate
+        {{- if and .Values.enpu.managerConfigRoot (ne .Values.enpu.managerConfigRoot .Values.enpu.configRoot) }}
+        - name: enpu-manager-config
+          hostPath:
+            path: {{ .Values.enpu.managerConfigRoot }}
+            type: DirectoryOrCreate
+        {{- end }}
+        - name: enpu-runtime
+          hostPath:
+            path: /usr/local/enpu/vcann-rt
             type: DirectoryOrCreate
         - name: ascend-config
           configMap:

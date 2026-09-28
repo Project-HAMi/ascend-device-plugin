@@ -118,3 +118,55 @@ func prepareHostResources() error {
 	klog.Info("Host resource preparation completed successfully.")
 	return nil
 }
+
+// prepareENPUHostResources installs missing ENPU assets without replacing existing files.
+func prepareENPUHostResources() error {
+	root := enpuHostPath("ENPU_CONFIG_ROOT", defaultENPUConfigRoot)
+	if err := os.MkdirAll(root, 0755); err != nil {
+		return fmt.Errorf("failed to create %s: %w", root, err)
+	}
+
+	assetsDir := "/usr/local/enpu-runtime-assets"
+	runtimeDir := "/usr/local/enpu/vcann-rt"
+	if err := os.MkdirAll(filepath.Join(runtimeDir, "lib"), 0755); err != nil {
+		return fmt.Errorf("failed to create ENPU runtime directory: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(runtimeDir, "tools"), 0755); err != nil {
+		return fmt.Errorf("failed to create ENPU tools directory: %w", err)
+	}
+	assets := []struct {
+		name string
+		dst  string
+		mode os.FileMode
+	}{
+		{"libvruntime.so", filepath.Join(runtimeDir, "lib", "libvruntime.so"), 0444},
+		{"enpu-monitor", filepath.Join(runtimeDir, "tools", "enpu-monitor"), 0555},
+		{"ld.so.preload", filepath.Join(runtimeDir, "ld.so.preload"), 0444},
+	}
+	for _, asset := range assets {
+		src := filepath.Join(assetsDir, asset.name)
+		if _, err := os.Stat(src); err != nil {
+			return fmt.Errorf("ENPU runtime asset %s is missing from image assets: %w", asset.name, err)
+		}
+		if _, err := os.Stat(asset.dst); err == nil {
+			srcSum, srcErr := fileSHA256(src)
+			dstSum, dstErr := fileSHA256(asset.dst)
+			if srcErr == nil && dstErr == nil && srcSum == dstSum {
+				if err := os.Chmod(asset.dst, asset.mode); err != nil {
+					return fmt.Errorf("chmod existing ENPU runtime asset %s: %w", asset.dst, err)
+				}
+				continue
+			}
+			return fmt.Errorf("ENPU runtime asset %s already exists with different contents", asset.dst)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("stat ENPU runtime asset %s: %w", asset.dst, err)
+		}
+		if err := copyFile(src, asset.dst); err != nil {
+			return fmt.Errorf("copy ENPU runtime asset %s to %s: %w", src, asset.dst, err)
+		}
+		if err := os.Chmod(asset.dst, asset.mode); err != nil {
+			return fmt.Errorf("chmod ENPU runtime asset %s: %w", asset.dst, err)
+		}
+	}
+	return nil
+}

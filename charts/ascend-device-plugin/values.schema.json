@@ -12,6 +12,7 @@
         "config",
         "nodeConfigMap",
         "hamiVnpuCore",
+        "enpu",
         "deviceConfig",
         "nodeConfig"
     ],
@@ -57,6 +58,61 @@
         },
         "deviceConfig": {
             "type": "string"
+        },
+        "enpu": {
+            "type": "object",
+            "required": [
+                "enabled",
+                "runtimePath",
+                "monitorPath",
+                "preloadPath",
+                "systemdDetectVirtPath",
+                "configRoot",
+                "defaultPolicy",
+                "exposeAllDevices"
+            ],
+            "properties": {
+                "configRoot": {
+                    "type": "string"
+                },
+                "defaultPolicy": {
+                    "type": "string",
+                    "enum": [
+                        "fixed-share",
+                        "elastic",
+                        "best-effort"
+                    ]
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "exposeAllDevices": {
+                    "type": "boolean"
+                },
+                "managerConfigRoot": {
+                    "type": [
+                        "string"
+                    ]
+                },
+                "managerURL": {
+                    "type": [
+                        "string"
+                    ]
+                },
+                "monitorPath": {
+                    "type": "string"
+                },
+                "preloadPath": {
+                    "type": "string"
+                },
+                "runtimePath": {
+                    "type": "string"
+                },
+                "systemdDetectVirtPath": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
         },
         "fullnameOverride": {
             "type": "string"

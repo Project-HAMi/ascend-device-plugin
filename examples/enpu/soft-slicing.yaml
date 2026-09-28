@@ -1,0 +1,32 @@
+# Replace the image; see README for prerequisites.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: enpu-soft-slicing
+  annotations:
+    huawei.com/vnpu-mode: enpu
+    huawei.com/enpu-policy: elastic # fixed-share, elastic, or best-effort
+spec:
+  schedulerName: hami-scheduler # Match the deployed scheduler.
+  runtimeClassName: ascend
+  restartPolicy: Never
+  containers:
+    - name: pytorch
+      # Requires CANN, torch_npu and systemd-detect-virt.
+      image: registry.example.com/your-project/pytorch-ascend:replace-me
+      command: ["python3", "-u", "-c"]
+      args:
+        - |
+          import torch
+          import torch_npu
+          torch.npu.set_device(0)
+          a = torch.ones((1024, 1024), device="npu:0")
+          for _ in range(100):
+              result = torch.mm(a, a)
+          torch.npu.synchronize()
+          print("ENPU result:", result[0, 0].item())
+      resources:
+        limits:
+          huawei.com/Ascend910C: "1"
+          huawei.com/Ascend910C-memory: "16384" # MiB limit
+          huawei.com/Ascend910C-core: "20" # Percent; ignored by best-effort

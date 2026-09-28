@@ -75,6 +75,72 @@ plugin falls back to `1` if the device config sets one directly.
 Only compute is oversold. Device memory is never scaled, and pod density per card is
 still capped by `vDeviceCount`, so raising the ratio alone may not admit more pods.
 
+## ubs-virt-enpu (vCANN-RT)
+
+Prepare hardware and runtime prerequisites using the [official vCANN-RT guide](https://docs.openeuler.org/zh/docs/24.03_LTS_SP3/unifiedbus/unifiedbus/ubs-virt/ubs-virt-enpu/vcann-rt/README.html). For per-node enablement that preserves other backends, see the [ENPU guide](../../examples/enpu/README.md), [ordinary soft-slicing Pod](../../examples/enpu/soft-slicing.yaml), and [mem-swap Pod](../../examples/enpu/mem-swap.yaml), with their accompanying values overlays. A2/910B does not require single-DIE mode; the current A3/910C integration does. Mem-swap requires a compatible manager/runtime version and is not enabled by annotations alone.
+
+Enable ENPU mode when the node has the ubs-virt/vCANN-RT host assets installed:
+
+```bash
+helm install ascend-device-plugin ./charts/ascend-device-plugin \
+  --namespace kube-system \
+  --set enpu.enabled=true
+```
+
+ENPU uses the same Ascend resource names as the device configuration, and selects
+the runtime with a pod annotation. A container must request exactly one physical
+NPU; `-memory` is the memory quota in MiB and `-core` is the AICore quota from 1
+to 100 percent:
+
+```yaml
+metadata:
+  annotations:
+    huawei.com/vnpu-mode: enpu
+spec:
+  runtimeClassName: ascend
+  containers:
+    - name: workload
+      resources:
+        limits:
+          huawei.com/Ascend910C: "1"
+          huawei.com/Ascend910C-memory: "16384"
+          huawei.com/Ascend910C-core: "20"
+```
+
+The plugin writes one `npu_info.config` per container and mounts it at
+`/etc/enpu/vcann-rt/npu_info.config`, together with the official Kubernetes
+mount layout: `/usr/local/sbin`, `/usr/local/Ascend/driver`, `/dev/shm`, the
+configured vCANN-RT library, monitor, and preload file. The workload image
+must provide `/usr/bin/systemd-detect-virt`; set `enpu.systemdDetectVirtPath`
+only when a compatible host binary must be mounted. By default the host runtime
+assets are expected under `/usr/local/enpu/vcann-rt`; change the `enpu.*Path` values when
+the installation uses another location. The default scheduling policy is
+`elastic`; use `huawei.com/enpu-policy` with `fixed-share`, `elastic`, or
+`best-effort` to select a policy. Workloads sharing one physical NPU must use the
+same policy.
+
+The plugin sets `ASCEND_VISIBLE_DEVICES` for the die selected by HAMi and keeps
+`enpu.exposeAllDevices=false` so a workload does not receive every `/dev/davinci*`
+node. `/dev/shm` is shared with the node for mem-swap so Pods can see the
+enpu-manager `shm-id` object.
+
+Set `enpu.defaultPolicy` to the same default used by the HAMi scheduler chart
+(`devices.ascend.enpuPolicy`) when the two charts are installed separately.
+For mem-swap manager integration, set `enpu.managerURL` to the node-local
+enpu-manager REST endpoint and set `enpu.managerConfigRoot` to the manager's
+`config_dir` (for example `/etc/enpu`) or its already-expanded
+`/etc/enpu/vcann-rt` directory; both forms are accepted. When `managerURL` is empty, the plugin keeps its local
+config-file path and the legacy ENPU behavior.
+For mem-swap, set `huawei.com/enpu-memory-limit` in MiB. The optional
+`huawei.com/enpu-memory-request` defaults to the requested `-memory` resource;
+keep an explicit request equal to `-memory`, and the
+limit may be larger than the request when the manager has oversubscription
+enabled. A Pod must set `huawei.com/vnpu-mode: enpu`; an unannotated Pod is
+rejected on an ENPU-only node.
+ENPU and hami-vnpu-core can be enabled in the same installation. The pod's
+`huawei.com/vnpu-mode` annotation selects the backend. ENPU supports one physical
+NPU per container and does not use hami-core compute oversell.
+
 ## Node Configuration
 
 Override `nodeConfig` to enable or customize `hami-vnpu-core` per node. Each node may

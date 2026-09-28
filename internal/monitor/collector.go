@@ -60,8 +60,9 @@ var (
 )
 
 type vNPUCollector struct {
-	containersPath string
-	lister         *ContainerLister
+	containersPath  string
+	lister          *ContainerLister
+	skipHostMetrics bool
 }
 
 func newVNPUCollector(containersPath string) (*vNPUCollector, error) {
@@ -95,7 +96,9 @@ func (c *vNPUCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	podMemByDevice := c.collectPodMetrics(ch, hostDevices)
-	c.collectHostMetrics(ch, hostDevices, podMemByDevice)
+	if !c.skipHostMetrics {
+		c.collectHostMetrics(ch, hostDevices, podMemByDevice)
+	}
 }
 
 func formatDeviceType(deviceType string) string {

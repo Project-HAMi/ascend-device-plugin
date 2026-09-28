@@ -100,6 +100,113 @@ func TestVDeviceCount(t *testing.T) {
 	}
 }
 
+func TestVDeviceCountENPUSlotLimit(t *testing.T) {
+	enabled, disabled := true, false
+	config := internal.VNPUConfig{
+		MemoryAllocatable: 32768,
+		Templates:         []internal.Template{{Memory: 8192}},
+	}
+	tests := []struct {
+		name       string
+		globalENPU bool
+		globalCore bool
+		nodeConfig *internal.NodeConfig
+		want       int
+	}{
+		{
+			name:       "ENPU only caps explicit override",
+			globalENPU: true,
+			nodeConfig: &internal.NodeConfig{VDeviceCount: 101},
+			want:       100,
+		},
+		{
+			name:       "both backends cap explicit override",
+			globalENPU: true,
+			globalCore: true,
+			nodeConfig: &internal.NodeConfig{HamiVnpuCore: true, VDeviceCount: 200},
+			want:       100,
+		},
+		{
+			name:       "node enabling ENPU caps both backends",
+			globalCore: true,
+			nodeConfig: &internal.NodeConfig{HamiVnpuCore: true, Enpu: &enabled, VDeviceCount: 200},
+			want:       100,
+		},
+		{
+			name:       "node enabling ENPU caps ENPU only",
+			nodeConfig: &internal.NodeConfig{Enpu: &enabled, VDeviceCount: 200},
+			want:       100,
+		},
+		{
+			name:       "both backends preserve exact limit",
+			globalENPU: true,
+			nodeConfig: &internal.NodeConfig{HamiVnpuCore: true, VDeviceCount: 100},
+			want:       100,
+		},
+		{
+			name:       "both backends preserve smaller override",
+			globalENPU: true,
+			nodeConfig: &internal.NodeConfig{HamiVnpuCore: true, VDeviceCount: 32},
+			want:       32,
+		},
+		{
+			name:       "node disabling ENPU preserves core override",
+			globalENPU: true,
+			globalCore: true,
+			nodeConfig: &internal.NodeConfig{HamiVnpuCore: true, Enpu: &disabled, VDeviceCount: 200},
+			want:       200,
+		},
+		{
+			name:       "node disabling ENPU preserves template override",
+			globalENPU: true,
+			nodeConfig: &internal.NodeConfig{Enpu: &disabled, VDeviceCount: 200},
+			want:       200,
+		},
+		{
+			name:       "core only preserves large override",
+			globalCore: true,
+			nodeConfig: &internal.NodeConfig{HamiVnpuCore: true, VDeviceCount: 200},
+			want:       200,
+		},
+		{
+			name:       "template only preserves large override",
+			nodeConfig: &internal.NodeConfig{VDeviceCount: 200},
+			want:       200,
+		},
+		{
+			name:       "ENPU only default remains 100",
+			globalENPU: true,
+			want:       100,
+		},
+		{
+			name:       "both backends keep template default",
+			globalENPU: true,
+			globalCore: true,
+			want:       4,
+		},
+		{
+			name:       "both backends ignore zero override",
+			globalENPU: true,
+			nodeConfig: &internal.NodeConfig{HamiVnpuCore: true, VDeviceCount: 0},
+			want:       4,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			am := &AscendManager{
+				config: config,
+				globalConfig: internal.Config{VNPUs: internal.VNPUsConfig{
+					Enpu: tt.globalENPU, HamiVnpuCore: tt.globalCore,
+				}},
+				nodeConfig: tt.nodeConfig,
+			}
+			if got := am.VDeviceCount(); got != tt.want {
+				t.Fatalf("VDeviceCount() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 // chipInfoDeviceManager reports a fixed chip so LoadConfig can pick an entry
 // without a real NPU.
 type chipInfoDeviceManager struct {

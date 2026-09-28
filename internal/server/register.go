@@ -109,7 +109,12 @@ func (ps *PluginServer) registerHAMi() error {
 	apiDevices := make([]*device.DeviceInfo, 0, len(devs))
 	// hami currently believes that the index starts from 0 and is continuous.
 	for i, dev := range devs {
-		devcore := internal.AdvertisedDevcore(ps.mgr.IsHamiVnpuCore(), ps.mgr.DeviceCoreScaling(), dev.AICore)
+		softSlice := ps.mgr.IsHamiVnpuCore() || managerUsesENPU(ps.mgr)
+		scaling := ps.mgr.DeviceCoreScaling()
+		if managerUsesENPU(ps.mgr) && !ps.mgr.IsHamiVnpuCore() {
+			scaling = 1
+		}
+		devcore := internal.AdvertisedDevcore(softSlice, scaling, dev.AICore)
 		device := &device.DeviceInfo{
 			Index:   uint(i),
 			ID:      dev.UUID,
@@ -119,6 +124,9 @@ func (ps *PluginServer) registerHAMi() error {
 			Type:    ps.mgr.CommonWord(),
 			Numa:    0,
 			Health:  dev.Health,
+		}
+		if managerUsesENPU(ps.mgr) && !ps.mgr.IsHamiVnpuCore() {
+			device.Mode = VNPUModeENPU
 		}
 		if strings.HasPrefix(device.Type, Ascend910Prefix) {
 			networkID, err := ps.getDeviceNetworkID(i, device.Type)
@@ -146,6 +154,12 @@ func (ps *PluginServer) registerHAMi() error {
 		klog.V(4).Infof("Node %s has HamiVnpuCore enabled, patching annotation %s: true", ps.nodeName, VNPUNodeSelectorAnnotation)
 	} else {
 		annos[VNPUNodeSelectorAnnotation] = "false"
+	}
+	if managerUsesENPU(ps.mgr) {
+		annos[VNPUNodeENPUAnnotation] = "true"
+		klog.V(4).Infof("Node %s has ENPU enabled, patching annotation %s: true", ps.nodeName, VNPUNodeENPUAnnotation)
+	} else {
+		annos[VNPUNodeENPUAnnotation] = "false"
 	}
 
 	node, err := util.GetNode(ps.nodeName)

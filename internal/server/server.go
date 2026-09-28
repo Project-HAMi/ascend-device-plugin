@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,7 +46,9 @@ const (
 	Ascend910CType             = "Ascend910C"
 	VNPUModeAnnotation         = "huawei.com/vnpu-mode"
 	VNPUModeHamiCore           = "hami-core"
+	VNPUModeENPU               = "enpu"
 	VNPUNodeSelectorAnnotation = "hami-vnpu-core"
+	VNPUNodeENPUAnnotation     = "hami.io/enpu"
 )
 
 var (
@@ -88,6 +91,40 @@ type RuntimeInfo struct {
 	Core   *int32 `json:"core,omitempty"`
 }
 
+// enpuManager provides optional ENPU capability detection.
+type enpuManager interface {
+	IsEnpu() bool
+}
+
+type enpuPolicyManager interface {
+	EnpuPolicy() string
+}
+
+func managerUsesENPU(mgr manager.Manager) bool {
+	m, ok := mgr.(enpuManager)
+	return ok && m.IsEnpu()
+}
+
+func managerENPUPolicy(mgr manager.Manager) string {
+	m, ok := mgr.(enpuPolicyManager)
+	if !ok {
+		return ""
+	}
+	return m.EnpuPolicy()
+}
+
+func podUsesENPU(pod *v1.Pod) bool {
+	if pod == nil || pod.Annotations == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(pod.Annotations[VNPUModeAnnotation])) {
+	case VNPUModeENPU, "ubs-virt", "vcann-rt":
+		return true
+	default:
+		return false
+	}
+}
+
 func NewPluginServer(mgr manager.Manager, nodeName string, checkIdleVNPUInterval int, enablePeriodicIdleVNPUCleanup bool) (*PluginServer, error) {
 	commonWord := mgr.CommonWord()
 	server := &PluginServer{
@@ -119,10 +156,17 @@ func (ps *PluginServer) prepareHostResources() error {
 }
 
 func (ps *PluginServer) Start() error {
-	// Automatically prepare host environment when the plugin starts
-	if err := ps.prepareHostResources(); err != nil {
-		klog.Errorf("Failed to prepare host resources: %v. vNPU core functionality will be impaired.", err)
-		return err
+	if ps.mgr.IsHamiVnpuCore() {
+		if err := ps.prepareHostResources(); err != nil {
+			klog.Errorf("Failed to prepare hami-vnpu-core host resources: %v", err)
+			return err
+		}
+	}
+	if managerUsesENPU(ps.mgr) {
+		if err := prepareENPUHostResources(); err != nil {
+			klog.Errorf("Failed to prepare ENPU host resources: %v", err)
+			return err
+		}
 	}
 
 	ps.stopCh = make(chan any)

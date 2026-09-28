@@ -1,0 +1,23 @@
+# Optional manual example; requires Prometheus Operator's PodMonitor CRD.
+# 可选手动示例；需已安装 Prometheus Operator 的 PodMonitor CRD。
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ascend-device-plugin
+  namespace: kube-system # Replace with the plugin namespace.
+  labels:
+    release: prometheus # Match Prometheus.spec.podMonitorSelector.
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system # Replace with the plugin namespace.
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: hami-ascend-device-plugin
+      app.kubernetes.io/name: ascend-device-plugin # Chart name or nameOverride.
+      app.kubernetes.io/instance: ascend-device-plugin # Existing Helm release.
+  podMetricsEndpoints:
+    - port: monitorport # Named container port 9395.
+      path: /metrics
+      interval: 30s
+      honorLabels: true # Preserve workload namespace/pod/container labels.

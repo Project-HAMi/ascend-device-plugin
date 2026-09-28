@@ -2,6 +2,10 @@ GO ?= go
 VERSION ?= unknown
 BUILDARGS ?= -ldflags '-s -w -X github.com/Project-HAMi/ascend-device-plugin/version.version=$(VERSION)'
 IMG_NAME = projecthami/ascend-device-plugin
+DOCKER_BUILD_ARGS ?=
+ENPU_DRIVER_PATH ?=
+ENPU_SOURCE_DIR ?=
+ENPU_BUILDER_IMAGE ?= swr.cn-north-4.myhuaweicloud.com/ubscore/ubs-virt:oe2403-v1
 
 all: ascend-device-plugin
 
@@ -12,10 +16,22 @@ test:
 	$(GO) test -v ./internal/...
 
 docker:
-	docker build \
+	docker build $(DOCKER_BUILD_ARGS) \
+	--build-arg VERSION="$(VERSION)" \
 	--build-arg BASE_IMAGE=ubuntu:20.04 \
 	--build-arg GOPROXY=https://goproxy.cn,direct \
 	-t ${IMG_NAME}:${VERSION} .
+
+enpu-runtime:
+	bash scripts/build-enpu-runtime.sh \
+		--builder-image "$(ENPU_BUILDER_IMAGE)" \
+		$(if $(ENPU_DRIVER_PATH),--driver-path "$(ENPU_DRIVER_PATH)",) \
+		$(if $(ENPU_SOURCE_DIR),--source-dir "$(ENPU_SOURCE_DIR)",)
+
+docker-enpu: enpu-runtime
+	@test -s lib/hami-vnpu-core/libvnpu.so -a -s lib/hami-vnpu-core/ld.so.preload || \
+		{ echo 'Prepare the existing hami-vnpu-core assets in lib/hami-vnpu-core before building the device-plugin image.' >&2; exit 1; }
+	$(MAKE) docker
 
 lint:
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.0
@@ -67,4 +83,4 @@ verify-helm-release-path:
 clean:
 	rm -rf ./ascend-device-plugin
 
-.PHONY: all tidy test lint clean update-chart-docs verify-helm-chart verify-helm-release-path
+.PHONY: all ascend-device-plugin tidy test lint clean enpu-runtime docker-enpu update-chart-docs verify-helm-chart verify-helm-release-path

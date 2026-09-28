@@ -73,3 +73,9 @@ Temporary Items
 .idea/
 .vscode/
 .worktree/
+
+# Generated runtime assets
+/lib/hami-vnpu-core/
+/enpu-runtime-assets/*
+!/enpu-runtime-assets/README.md
+!/enpu-runtime-assets/LICENSE.ubs-virt

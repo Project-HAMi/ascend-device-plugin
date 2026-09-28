@@ -1,0 +1,5 @@
+# Apply after device-plugin-values.yaml; replace the placeholder IP.
+enpu:
+  managerURL: http://192.0.2.10:8080
+  managerConfigRoot: /etc/enpu # Match manager config_dir.
+# URL must reach this node's manager, not localhost or another node.

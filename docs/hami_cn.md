@@ -19,8 +19,9 @@
 - **HAMi 版本**：
   - 基于模板的硬切分 (vNPU) 最低版本：≥ 2.7.0
   - `hami-core` 软切分 (hami-vnpu-core) 最低版本：≥ 2.9.0
+  - `enpu` 运行时软切分：需要与业务镜像 CANN 版本匹配的 ubs-virt-enpu/vCANN-RT 产物
 
-  两种模式都需要在部署 HAMi 时设置 `devices.ascend.enabled: true`。
+  这些模式都需要在部署 HAMi 时设置 `devices.ascend.enabled: true`。
 
   HAMi v2.9.0 把 `hami-scheduler-device` ConfigMap 中的 Ascend 芯片列表从 `vnpus` 挪到了 `vnpus.configs`。插件两种格式都能读，回退到旧格式时会打一条告警日志，因此可以先于 HAMi 升级。
 
@@ -49,7 +50,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
   kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
   ```
 
-**注意：** `vnpus.hamiVnpuCore` 决定了**所有节点**的切分方式（可被 `hami-device-node-config` 按节点覆盖）：`true` 为基于 `hami-core` 的**软切分**；`false` 为基于模板的**硬切分**。
+**注意：** `vnpus.hamiVnpuCore` 和 `vnpus.enpu` 分别启用两种运行时软切分后端；两者都为 `false` 时使用模板硬切分。节点配置中的 `hami-vnpu-core` 和 `enpu` 会覆盖全局设置。
 
 #### （可选）节点自定义配置说明
 
@@ -122,7 +123,53 @@ spec:
 
 软切分机制支持在单个 Pod 中申请多个虚拟设备。在进行多卡并行推理（如使用 vLLM）时，`--gpu-memory-utilization` 的值不能大于"容器总显存上限"占"所选卡物理显存总和"的比例。
 
-**示例：使用 vLLM 开启 2 卡张量并行 (TP=2)**
+### vCANN-RT 运行时软切分（enpu）
+
+硬件与运行时前提请按 [vCANN-RT 官方配置示例](https://docs.openeuler.org/zh/docs/24.03_LTS_SP3/unifiedbus/unifiedbus/ubs-virt/ubs-virt-enpu/vcann-rt/README.html) 准备；节点启用方式、不同型号 ConfigMap 字段和 manager 接入见 [HAMi ENPU 使用说明](../examples/enpu/README_cn.md)。完整 Pod YAML：[普通软切分](../examples/enpu/soft-slicing.yaml)、[mem-swap 显存超分](../examples/enpu/mem-swap.yaml)。A2/910B 使用同一套适配，不需要 A3 的独立 DIE 模式设置；该要求仅适用于 A3/910C。910A 暂不列入 ENPU 支持范围。
+
+`enpu` 使用 ubs-virt-enpu/vCANN-RT 的 runtime hook 实现算力和显存配额。为 Pod 添加 `huawei.com/vnpu-mode: enpu`，并使用现有 HAMi 资源：例如 `huawei.com/Ascend910C: "1"`、对应的 `-memory`（MB）和 `-core`（1–100%）。ENPU 每个容器只支持一个物理 DIE 上的共享份额；省略 `-core` 时按 100% 配置。必须设置 `runtimeClassName: ascend`。管理员负责在节点安装 Ascend 驱动，并在业务镜像中安装兼容版本的 CANN。
+
+启用 ENPU 后，插件从自身镜像把 `libvruntime.so`、`enpu-monitor` 和 `ld.so.preload` 安装到宿主机 `/usr/local/enpu/vcann-rt`。已有文件内容相同时直接复用；内容不同时拒绝覆盖，插件启动失败。更换版本时遵循[运行库构建、升级与回滚说明](../enpu-runtime-assets/README.md)，先停止 ENPU 业务并暂停插件，再替换运行库文件。保留原有 hami-vnpu-core 文件。
+
+```yaml
+metadata:
+  annotations:
+    huawei.com/vnpu-mode: enpu
+    huawei.com/enpu-policy: elastic # fixed-share、elastic 或 best-effort
+spec:
+  runtimeClassName: ascend
+  containers:
+    - name: npu
+      resources:
+        limits:
+          huawei.com/Ascend910C: "1"
+          huawei.com/Ascend910C-memory: "16384"
+          huawei.com/Ascend910C-core: "20"
+```
+
+设备插件把每个容器的 vCANN-RT 配置写入 `ENPU_CONFIG_ROOT`（默认 `/var/lib/hami-enpu`），再挂载到容器的 `/etc/enpu/vcann-rt/npu_info.config`。挂载布局与官方 Kubernetes 示例一致：将节点的 `/usr/local/sbin`、`/usr/local/Ascend/driver`、运行库、监控器、`/etc/ld.so.preload` 和 `/dev/shm` 注入业务容器。业务镜像必须在 `/usr/bin/systemd-detect-virt` 提供该命令；如果镜像没有，可设置 `enpu.systemdDetectVirtPath`，插件会把兼容的主机二进制挂载到该路径。这是 vCANN-RT 调用 DCMI 的前置条件。仍需使用 `ascend` RuntimeClass。插件只设置 HAMi 选中的 DIE 对应的 `ASCEND_VISIBLE_DEVICES`，默认保持 `enpu.exposeAllDevices=false`，不会把全部 `/dev/davinci*` 暴露给业务容器。
+
+
+A3/910C 的调度与配额单位是单个 DIE：一个 DIE UUID 对应一个 `PhyID`，配置中的 `physical-npu-id` 和 `ASCEND_VISIBLE_DEVICES` 使用同一个 `PhyID`，不是双 DIE 模块的 `CardID`。这与[官方软切分部署要求](https://www.hiascend.com/document/detail/en/mindcluster/2610/clustersched/schedulingug/docs/en/scheduling/usage/virtual_instance/virtual_instance_with_vcann_rt/01_soft_allocation_scheduling_inference.md)中的 `useSingleDieMode=true` 一致。HAMi 不使用 MindCluster 的启动参数；部署 ENPU 节点前，在主机配置等效的单 DIE 独立模式：
+
+```shell
+npu-smi info -t multi-die-policy
+# 在确认节点业务允许切换后执行；该设置作用于整个节点。
+npu-smi set -t multi-die-policy -d 1
+npu-smi info -t multi-die-policy # 应为 INDEP_POLICY
+```
+
+ENPU 在 A3 分配前检查该模式，未启用时返回具体配置提示；插件不会自动改变节点模式，也不会为此扩大设备挂载。此检查仅针对 ENPU 的 Ascend910C 分配，不改变 hami-core 或模板分配路径。业务使用容器内的逻辑设备 `npu:0`；无需额外设置 `ASCEND_RT_VISIBLE_DEVICES`。
+
+`systemd-detect-virt` 必须能在业务镜像内实际执行；优先通过镜像自身的软件包安装，并一同提供动态库依赖。仅挂载另一发行版的宿主机二进制可能因依赖或 glibc 不匹配而失败。运行前检查 `systemd-detect-virt --container` 和 `ldd /usr/bin/systemd-detect-virt`。
+
+预发布 mem-swap 源码还必须包含上游 `3d87a1d678cd9b4e9bf3b0770285dc6b53d357ee` 的多 DIE 编号修复：CANN 逻辑设备号不能被 DCMI 卡内芯片号覆盖。官方 `1.0.0` 已包含该修复；测试分支 `1072945` 尚未包含。新增 swap 线程及物理内存操作也需要保持这两类编号分离；扩大设备可见范围不能替代此修复。
+
+使用 mem-swap 时，设置 `huawei.com/enpu-memory-limit`（单位 MiB）；manager 开启超分后，limit 可以大于 request。`huawei.com/enpu-memory-request` 默认使用 HAMi 已调度的 `<chip>-memory` 资源，通常可省略；若显式设置，插件要求它与该资源配额相等，否则拒绝分配，保证调度器和 manager 预留同一个 request。例如资源 `huawei.com/Ascend910C-memory: 256` 配合注解 `huawei.com/enpu-memory-limit: "65536"` 即表示 request=256 MiB、limit=65536 MiB。没有这些注解时仍保持 request=limit=原显存配额；fixed-share 不允许 request 与 limit 不同。设置 `enpu.managerURL`，并让 `enpu.managerConfigRoot` 指向 enpu-manager 的 `config_dir`（例如 `/etc/enpu`）或已经展开的 `/etc/enpu/vcann-rt` 目录，两种写法都支持；两者不同时 chart 会把该目录额外挂载到 device-plugin。HAMI 保持 `/dev/shm` 使用主机共享空间，以便同一物理 NPU 上的多个 Pod 看到 manager 生成的 `shm-id`。同一物理 NPU 上的 Pod 必须使用同一种调度策略，且不会让 hami-core 与 ENPU 混用同一个物理 DIE。
+
+ENPU 采用显式启用：业务 Pod 必须设置 `huawei.com/vnpu-mode: enpu`。ENPU-only 节点会拒绝没有该注解的普通 Pod，避免旧业务绕过运行时挂载。
+
+### hami-vnpu-core 多卡 vLLM 示例（TP=2）
 
 假设单块物理卡显存为 **64Gi**，计划在 2 块卡上各使用 **32Gi**（总计 64Gi）：
 

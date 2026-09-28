@@ -81,11 +81,35 @@ hamiVnpuCore: # @schema required:true;additionalProperties:false
   # hamiVnpuCore.deviceCoreScaling -- (float) hami-core compute oversell ratio. The plugin advertises `Devcore = round(100 * deviceCoreScaling)` so HAMi can admit more than 100% of `-core` on one card. Values below 1 are not supported.
   deviceCoreScaling: 1 # @schema required:true;type:number;minimum:1
 
+enpu: # @schema required:true;additionalProperties:false
+  # enpu.enabled -- Enable ENPU in the generated device config.
+  enabled: false # @schema required:true
+  # enpu.runtimePath -- Host path to libvruntime.so.
+  runtimePath: /usr/local/enpu/vcann-rt/lib/libvruntime.so # @schema required:true
+  # enpu.monitorPath -- Host path to enpu-monitor.
+  monitorPath: /usr/local/enpu/vcann-rt/tools/enpu-monitor # @schema required:true
+  # enpu.preloadPath -- Host path to ld.so.preload.
+  preloadPath: /usr/local/enpu/vcann-rt/ld.so.preload # @schema required:true
+  # enpu.systemdDetectVirtPath -- Optional host binary; prefer providing it in the workload image.
+  systemdDetectVirtPath: "" # @schema required:true
+  # enpu.configRoot -- Host directory for per-container ENPU configs.
+  configRoot: /var/lib/hami-enpu # @schema required:true
+  # enpu.defaultPolicy -- Default ENPU scheduling policy.
+  defaultPolicy: elastic # @schema required:true;enum:[fixed-share,elastic,best-effort]
+  # enpu.exposeAllDevices -- Expose all davinci devices; keep false for device isolation.
+  exposeAllDevices: false # @schema required:true
+  # enpu.managerURL -- Optional node-local enpu-manager REST endpoint.
+  managerURL: "" # @schema type:string
+  # enpu.managerConfigRoot -- Manager config_dir or its vcann-rt subdirectory; empty uses configRoot.
+  managerConfigRoot: "" # @schema type:string
+
 # @ignored
 deviceConfig: |- # @schema required:true
   vnpus:
     hamiVnpuCore: {{ .Values.hamiVnpuCore.enabled }}
+    enpu: {{ .Values.enpu.enabled }}
     deviceCoreScaling: {{ .Values.hamiVnpuCore.deviceCoreScaling }}
+    enpuPolicy: {{ .Values.enpu.defaultPolicy }}
     configs:
     - chipName: 910A
       commonWord: Ascend910A

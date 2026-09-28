@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,49 @@ import (
 	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 )
+
+func TestRegisterHAMiENPUNodeAnnotation(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		core, enpu bool
+	}{
+		{name: "ENPU", enpu: true},
+		{name: "both backends", core: true, enpu: true},
+		{name: "hami-core", core: true},
+		{name: "template"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			node := &v1.Node{ObjectMeta: metav1.ObjectMeta{
+				Name: "test-node", Annotations: map[string]string{"hami.io/enpu": strconv.FormatBool(!tc.enpu)},
+			}}
+			t.Cleanup(setupFakeClient(nil, []*v1.Node{node}))
+			ps := &PluginServer{
+				nodeName: node.Name, registerAnno: "hami.io/node-register-Ascend910C", handshakeAnno: "hami.io/node-handshake-Ascend910C",
+				mgr: &FakeManager{
+					IsHamiVnpuCoreFunc: func() bool { return tc.core },
+					IsEnpuFunc:         func() bool { return tc.enpu },
+				},
+			}
+			if err := ps.registerHAMi(); err != nil {
+				t.Fatal(err)
+			}
+			updated, err := client.KubeClient.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for key, want := range map[string]string{
+				"hami.io/enpu": strconv.FormatBool(tc.enpu), "hami-vnpu-core": strconv.FormatBool(tc.core),
+			} {
+				if got := updated.Annotations[key]; got != want {
+					t.Fatalf("node annotation %s = %q, want %q", key, got, want)
+				}
+			}
+			if _, exists := updated.Annotations["hami-enpu"]; exists {
+				t.Fatal("node registration wrote the unqualified ENPU annotation")
+			}
+		})
+	}
+}
 
 func TestGetDeviceNetworkID(t *testing.T) {
 	t.Parallel()

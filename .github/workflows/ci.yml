@@ -107,11 +107,29 @@ jobs:
         if-no-files-found: error
         path: ./artifacts/*
 
+  build-enpu:
+    runs-on: ubuntu-22.04-arm
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build official ENPU release assets
+      run: make enpu-runtime
+    - name: Upload ENPU artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: enpu-runtime-artifacts
+        if-no-files-found: error
+        path: |
+          enpu-runtime-assets/libvruntime.so
+          enpu-runtime-assets/enpu-monitor
+          enpu-runtime-assets/ld.so.preload
+          enpu-runtime-assets/build-info.json
+          enpu-runtime-assets/SHA256SUMS
+
   build:
     env:
       IMAGE_NAME: ${{ secrets.IMAGE_NAME || 'projecthami/ascend-device-plugin' }}
     runs-on: ubuntu-latest
-    needs: [ "build-vnpu", "test" ]
+    needs: [ "build-vnpu", "build-enpu", "test" ]
     steps:
     - uses: actions/checkout@v4
       with:
@@ -127,6 +145,20 @@ jobs:
       with:
         name: build-artifacts
         path: ./lib/hami-vnpu-core/
+
+    - name: Download ENPU artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: enpu-runtime-artifacts
+        path: ./enpu-runtime-assets/
+
+    - name: Verify ENPU artifacts
+      working-directory: ./enpu-runtime-assets
+      run: |
+        for asset in libvruntime.so enpu-monitor ld.so.preload build-info.json SHA256SUMS; do
+          test -s "$asset"
+        done
+        sha256sum -c SHA256SUMS
 
     - name: Docker Login
       if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}

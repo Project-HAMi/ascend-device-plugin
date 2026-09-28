@@ -46,7 +46,9 @@ type VNPUConfig struct {
 }
 
 type VNPUsConfig struct {
-	HamiVnpuCore bool `json:"hamiVnpuCore,omitempty"`
+	HamiVnpuCore bool   `json:"hamiVnpuCore,omitempty"`
+	Enpu         bool   `json:"enpu,omitempty"`
+	EnpuPolicy   string `json:"enpuPolicy,omitempty"`
 	// DeviceCoreScaling is the hami-core compute oversell ratio.
 	// When hami-core is on, registerHAMi advertises Devcore = round(100 * DeviceCoreScaling).
 	// Default 1 keeps a 100-point budget. Values below 1 are not supported and fall back to 1.
@@ -117,6 +119,7 @@ func LoadConfig(path string) (*Config, error) {
 type NodeConfig struct {
 	Name              string        `json:"name" yaml:"name"`
 	HamiVnpuCore      bool          `json:"hami-vnpu-core" yaml:"hami-vnpu-core"`
+	Enpu              *bool         `json:"enpu,omitempty" yaml:"enpu,omitempty"`
 	VDeviceCount      int           `json:"vDeviceCount" yaml:"vDeviceCount"`
 	DeviceCoreScaling float64       `json:"deviceCoreScaling,omitempty" yaml:"deviceCoreScaling,omitempty"`
 	FilterDevices     FilterDevices `json:"filterDevices,omitempty" yaml:"filterDevices,omitempty"`

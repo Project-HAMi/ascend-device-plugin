@@ -157,7 +157,14 @@ func (am *AscendManager) ResourceName() string {
 func (am *AscendManager) VDeviceCount() int {
 	// Prefer the per-node override when present, mirroring IsHamiVnpuCore().
 	if am.nodeConfig != nil && am.nodeConfig.VDeviceCount > 0 {
+		if am.IsEnpu() && am.nodeConfig.VDeviceCount > 100 {
+			klog.Warningf("vDeviceCount %d exceeds ENPU's 100 virtual-NPU slots; using 100", am.nodeConfig.VDeviceCount)
+			return 100
+		}
 		return am.nodeConfig.VDeviceCount
+	}
+	if am.IsEnpu() && !am.IsHamiVnpuCore() {
+		return 100
 	}
 	if len(am.config.Templates) == 0 {
 		return 1
@@ -373,6 +380,19 @@ func (am *AscendManager) IsHamiVnpuCore() bool {
 		return am.nodeConfig.HamiVnpuCore
 	}
 	return am.globalConfig.VNPUs.HamiVnpuCore
+}
+
+// IsEnpu returns whether ENPU is enabled, preferring the node setting.
+func (am *AscendManager) IsEnpu() bool {
+	if am.nodeConfig != nil && am.nodeConfig.Enpu != nil {
+		return *am.nodeConfig.Enpu
+	}
+	return am.globalConfig.VNPUs.Enpu
+}
+
+// EnpuPolicy returns the default ENPU scheduling policy.
+func (am *AscendManager) EnpuPolicy() string {
+	return am.globalConfig.VNPUs.EnpuPolicy
 }
 
 // DeviceCoreScaling returns the hami-core oversell ratio in effect, preferring

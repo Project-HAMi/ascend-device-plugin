@@ -12,6 +12,7 @@ data:
     nodes:
       - name: "cnst-dev-w2"
         hami-vnpu-core: true
+        enpu: false
         vDeviceCount: 8
         deviceCoreScaling: 1
         filterDevices:

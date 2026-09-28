@@ -33,6 +33,7 @@ type FakeManager struct {
 	GetUnHealthIDsFunc    func() []int32
 	CleanupIdleVNPUsFunc  func() error
 	IsHamiVnpuCoreFunc    func() bool
+	IsEnpuFunc            func() bool
 	DeviceCoreScalingFunc func() float64
 }
 
@@ -95,6 +96,13 @@ func (f *FakeManager) CleanupIdleVNPUs() error {
 func (f *FakeManager) IsHamiVnpuCore() bool {
 	if f.IsHamiVnpuCoreFunc != nil {
 		return f.IsHamiVnpuCoreFunc()
+	}
+	return false
+}
+
+func (f *FakeManager) IsEnpu() bool {
+	if f.IsEnpuFunc != nil {
+		return f.IsEnpuFunc()
 	}
 	return false
 }
