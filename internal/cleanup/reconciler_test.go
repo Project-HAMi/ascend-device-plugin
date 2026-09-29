@@ -342,7 +342,7 @@ func TestClassifyPodCreateFailureWithoutTerminationTimestampReturnsZero(t *testi
 
 func TestClassifyCheckpointedCreateFailureAsCandidate(t *testing.T) {
 	pod := &corev1.Pod{Status: corev1.PodStatus{
-		Phase: corev1.PodRunning,
+		Phase: corev1.PodPending,
 		ContainerStatuses: []corev1.ContainerStatus{{
 			State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "RunContainerError"}},
 		}},

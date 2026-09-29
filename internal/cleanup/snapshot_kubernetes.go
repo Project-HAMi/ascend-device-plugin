@@ -335,7 +335,7 @@ func classifyPod(pod *corev1.Pod, checkpointed bool) (podClaimState, string, tim
 		}
 		return claimProtected, "a container is running", time.Time{}
 	}
-	if hasProtectedWaiting || pod.Status.Phase == corev1.PodPending {
+	if hasProtectedWaiting || (pod.Status.Phase == corev1.PodPending && !hasFailedWaiting && !hasFailedTerminated) {
 		if checkpointed {
 			return claimProtected, "Pod is in a startup window and retained in kubelet checkpoint", time.Time{}
 		}
