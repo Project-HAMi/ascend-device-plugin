@@ -59,3 +59,31 @@ func (t *confirmationTracker) observe(cardID int32, now, candidateSince time.Tim
 	}
 	return state.count >= confirmations && now.Sub(graceSince) >= grace
 }
+
+func (t *confirmationTracker) updateCandidateSince(cardID int32, candidateSince time.Time) {
+	if candidateSince.IsZero() {
+		return
+	}
+	state, exists := t.states[cardID]
+	if !exists || state.candidateSince.IsZero() || candidateSince.After(state.candidateSince) {
+		state.candidateSince = candidateSince
+		t.states[cardID] = state
+	}
+}
+
+func (t *confirmationTracker) ready(cardID int32, now, candidateSince time.Time, grace time.Duration, confirmations int) bool {
+	state, exists := t.states[cardID]
+	if !exists {
+		return false
+	}
+	t.updateCandidateSince(cardID, candidateSince)
+	state = t.states[cardID]
+	if confirmations < 1 {
+		confirmations = 1
+	}
+	graceSince := state.firstSeen
+	if state.candidateSince.After(graceSince) {
+		graceSince = state.candidateSince
+	}
+	return state.count >= confirmations && now.Sub(graceSince) >= grace
+}

@@ -469,17 +469,23 @@ func parseDeviceAnnotation(value string) ([]string, error) {
 	// HAMi's devices-to-allocate annotation is encoded as
 	// uuid,type,memory,core[:uuid,type,memory,core];...
 	var uuids []string
+	sawNonEmptySegment := false
 	for _, container := range strings.Split(value, ";") {
 		for _, device := range strings.Split(container, ":") {
-			fields := strings.Split(strings.TrimSpace(device), ",")
-			if len(fields) == 0 || fields[0] == "" {
+			device = strings.TrimSpace(device)
+			if device == "" {
 				continue
 			}
+			sawNonEmptySegment = true
+			fields := strings.Split(device, ",")
 			if len(fields) < 4 {
 				return nil, fmt.Errorf("invalid device annotation segment %q", device)
 			}
 			uuids = append(uuids, fields[0])
 		}
+	}
+	if !sawNonEmptySegment {
+		return nil, nil
 	}
 	if len(uuids) == 0 {
 		return nil, fmt.Errorf("device annotation contains no UUID")

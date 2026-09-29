@@ -47,6 +47,17 @@ type Reconciler struct {
 
 	mu                  sync.Mutex
 	confirmationsByCard *confirmationTracker
+	seenVNPUs           map[virtualDeviceKey]time.Time
+}
+
+type virtualDeviceKey struct {
+	logicID int32
+	vdevID  int32
+}
+
+type cardCandidate struct {
+	device manager.Device
+	vdevs  []manager.VirtualDevice
 }
 
 func NewReconciler(hardware HardwareView, snapshotter PodAllocationSnapshot, options ReconcilerOptions) *Reconciler {
@@ -66,6 +77,7 @@ func NewReconciler(hardware HardwareView, snapshotter PodAllocationSnapshot, opt
 		confirmations:       options.Confirmations,
 		clock:               options.Clock,
 		confirmationsByCard: newConfirmationTracker(),
+		seenVNPUs:           make(map[virtualDeviceKey]time.Time),
 	}
 }
 
@@ -97,6 +109,10 @@ func (r *Reconciler) Reconcile(ctx context.Context) (ReconcileResult, error) {
 
 	now := r.clock()
 	var destroyErrors []error
+	// Build candidates first. Pod ownership is sampled again after the complete
+	// hardware scan and immediately before any destroy, so a Pod created after
+	// the initial Snapshot cannot inherit an old card confirmation blindly.
+	var candidates []cardCandidate
 	devices := r.hardware.GetDevices()
 	for _, device := range devices {
 		if device == nil {
@@ -121,6 +137,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (ReconcileResult, error) {
 			destroyErrors = append(destroyErrors, fmt.Errorf("list virtual devices for card %d: %w", device.CardID, err))
 			continue
 		}
+		r.observeVNPUs(device.LogicID, virtualDevices, now)
 
 		idle := make([]manager.VirtualDevice, 0, len(virtualDevices))
 		for _, virtualDevice := range virtualDevices {
@@ -146,16 +163,61 @@ func (r *Reconciler) Reconcile(ctx context.Context) (ReconcileResult, error) {
 		if !r.confirmationsByCard.observe(device.CardID, now, claim.CandidateSince, r.gracePeriod, r.confirmations) {
 			continue
 		}
-		result.CardsReclaimable++
+		// A vNPU that first appears in this scan gets its own grace period.
+		// This closes the race where runtime creates a vNPU between the Pod
+		// snapshot and ListVirtualDevices.
+		freshIdle := make([]manager.VirtualDevice, 0, len(idle))
 		for _, virtualDevice := range idle {
-			if err := r.hardware.DestroyVirtualDevice(device.LogicID, uint32(virtualDevice.VDevID)); err != nil {
-				result.DestroyErrors++
-				destroyErrors = append(destroyErrors, fmt.Errorf("destroy idle vNPU card=%d logicID=%d vdevID=%d: %w", device.CardID, device.LogicID, virtualDevice.VDevID, err))
-				klog.Errorf("failed to destroy idle vNPU card=%d logicID=%d vdevID=%d: %v", device.CardID, device.LogicID, virtualDevice.VDevID, err)
+			seenAt := r.seenVNPUs[virtualDeviceKey{logicID: device.LogicID, vdevID: virtualDevice.VDevID}]
+			if seenAt.IsZero() || now.Sub(seenAt) < r.gracePeriod {
+				result.VNPUsSkipped++
 				continue
 			}
-			result.VNPUsDestroyed++
-			klog.Infof("destroyed orphan idle vNPU card=%d logicID=%d vdevID=%d template=%s", device.CardID, device.LogicID, virtualDevice.VDevID, virtualDevice.TemplateName)
+			freshIdle = append(freshIdle, virtualDevice)
+		}
+		if len(freshIdle) == 0 {
+			continue
+		}
+		candidates = append(candidates, cardCandidate{device: *device, vdevs: freshIdle})
+	}
+
+	if len(candidates) > 0 {
+		// Recheck Pod/checkpoint ownership after all candidate hardware has been
+		// observed and before the first irreversible destroy operation.
+		latestSnapshot, err := r.snapshotter.Snapshot(ctx)
+		if err != nil || !latestSnapshot.Ready || len(latestSnapshot.UnknownPodUIDs) > 0 {
+			r.resetAll(&result)
+			result.UnknownSnapshot = true
+			if err == nil {
+				err = fmt.Errorf("allocation snapshot is not ready before destroy")
+			}
+			return result, err
+		}
+
+		for _, candidate := range candidates {
+			claim := latestSnapshot.ClaimsByCard[candidate.device.CardID]
+			if claim.Protected() {
+				if r.confirmationsByCard.reset(candidate.device.CardID) {
+					result.ConfirmationResets++
+				}
+				result.CardsProtected++
+				continue
+			}
+			if !r.confirmationsByCard.ready(candidate.device.CardID, now, claim.CandidateSince, r.gracePeriod, r.confirmations) {
+				continue
+			}
+			result.CardsReclaimable++
+			for _, virtualDevice := range candidate.vdevs {
+				if err := r.hardware.DestroyVirtualDevice(candidate.device.LogicID, uint32(virtualDevice.VDevID)); err != nil {
+					result.DestroyErrors++
+					destroyErrors = append(destroyErrors, fmt.Errorf("destroy idle vNPU card=%d logicID=%d vdevID=%d: %w", candidate.device.CardID, candidate.device.LogicID, virtualDevice.VDevID, err))
+					klog.Errorf("failed to destroy idle vNPU card=%d logicID=%d vdevID=%d: %v", candidate.device.CardID, candidate.device.LogicID, virtualDevice.VDevID, err)
+					continue
+				}
+				result.VNPUsDestroyed++
+				klog.Infof("destroyed orphan idle vNPU card=%d logicID=%d vdevID=%d template=%s", candidate.device.CardID, candidate.device.LogicID, virtualDevice.VDevID, virtualDevice.TemplateName)
+				delete(r.seenVNPUs, virtualDeviceKey{logicID: candidate.device.LogicID, vdevID: virtualDevice.VDevID})
+			}
 		}
 	}
 
@@ -172,6 +234,25 @@ func (r *Reconciler) Reset() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.confirmationsByCard.resetAll()
+	r.seenVNPUs = make(map[virtualDeviceKey]time.Time)
+}
+
+func (r *Reconciler) observeVNPUs(logicID int32, virtualDevices []manager.VirtualDevice, now time.Time) {
+	current := make(map[virtualDeviceKey]struct{}, len(virtualDevices))
+	for _, virtualDevice := range virtualDevices {
+		key := virtualDeviceKey{logicID: logicID, vdevID: virtualDevice.VDevID}
+		current[key] = struct{}{}
+		if _, exists := r.seenVNPUs[key]; !exists {
+			r.seenVNPUs[key] = now
+		}
+	}
+	for key := range r.seenVNPUs {
+		if key.logicID == logicID {
+			if _, exists := current[key]; !exists {
+				delete(r.seenVNPUs, key)
+			}
+		}
+	}
 }
 
 func (r *Reconciler) resetAll(result *ReconcileResult) {

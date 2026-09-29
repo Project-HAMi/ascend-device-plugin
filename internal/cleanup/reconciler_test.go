@@ -60,6 +60,20 @@ type fakeSnapshot struct {
 	err      error
 }
 
+type sequenceSnapshot struct {
+	snapshots []AllocationSnapshot
+	calls     int
+}
+
+func (s *sequenceSnapshot) Snapshot(context.Context) (AllocationSnapshot, error) {
+	index := s.calls
+	if index >= len(s.snapshots) {
+		index = len(s.snapshots) - 1
+	}
+	s.calls++
+	return s.snapshots[index], nil
+}
+
 func (f fakeSnapshot) Snapshot(context.Context) (AllocationSnapshot, error) {
 	return f.snapshot, f.err
 }
@@ -77,6 +91,52 @@ func TestReconcilerNeverDestroysWhenSnapshotIsUnknown(t *testing.T) {
 	}
 	if len(hardware.destroyed) != 0 {
 		t.Fatalf("destroyed %d vNPUs for an unknown snapshot", len(hardware.destroyed))
+	}
+}
+
+func TestReconcilerRechecksOwnershipBeforeDestroy(t *testing.T) {
+	hardware := testHardware()
+	snapshot := &sequenceSnapshot{snapshots: []AllocationSnapshot{
+		{Ready: true},
+		{Ready: true},
+		{Ready: true, ClaimsByCard: map[int32]CardClaim{7: {CardID: 7, State: ClaimProtected}}},
+	}}
+	now := time.Unix(0, 0)
+	r := NewReconciler(hardware, snapshot, ReconcilerOptions{
+		GracePeriod:   time.Nanosecond,
+		Confirmations: 1,
+		Clock:         func() time.Time { return now },
+	})
+	if _, err := r.Reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(time.Second)
+	if _, err := r.Reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(hardware.destroyed) != 0 {
+		t.Fatalf("destroyed=%v after ownership appeared between snapshots", hardware.destroyed)
+	}
+}
+
+func TestReconcilerRequiresFreshGraceForNewVnpu(t *testing.T) {
+	hardware := testHardware()
+	now := time.Unix(0, 0)
+	r := NewReconciler(hardware, fakeSnapshot{snapshot: AllocationSnapshot{Ready: true}}, ReconcilerOptions{
+		GracePeriod:   10 * time.Minute,
+		Confirmations: 1,
+		Clock:         func() time.Time { return now },
+	})
+	if _, err := r.Reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(10 * time.Minute)
+	hardware.virtual[3] = append(hardware.virtual[3], manager.VirtualDevice{LogicID: 3, CardID: 7, VDevID: 13, IsContainerUsed: 0})
+	if _, err := r.Reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(hardware.destroyed) != 1 || hardware.destroyed[0].VDevID != 11 {
+		t.Fatalf("destroyed=%v, want only pre-existing vdev 11", hardware.destroyed)
 	}
 }
 

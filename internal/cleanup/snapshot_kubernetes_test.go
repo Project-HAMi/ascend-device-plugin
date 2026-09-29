@@ -154,6 +154,24 @@ func TestPodHasAscendResourceSupportsMultipleCardFamilies(t *testing.T) {
 	}
 }
 
+func TestPodDeviceUUIDsAcceptsEmptyPostAllocationPlaceholder(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			"huawei.com/Ascend910B4":                    `[{"UUID":"uuid-7"}]`,
+			"hami.io/Ascend910B4-1-devices-to-allocate": ";",
+		}},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{
+			Resources: corev1.ResourceRequirements{Limits: corev1.ResourceList{
+				corev1.ResourceName("huawei.com/Ascend910B4"): resource.MustParse("1"),
+			}},
+		}}},
+	}
+	hasResource, uuids, err := podDeviceUUIDs(pod)
+	if err != nil || !hasResource || len(uuids) != 1 || uuids[0] != "uuid-7" {
+		t.Fatalf("podDeviceUUIDs() = resource=%v uuids=%v err=%v, want valid runtime UUID", hasResource, uuids, err)
+	}
+}
+
 type fakeResolver struct{ device *manager.Device }
 
 func (r fakeResolver) GetDeviceByUUID(uuid string) *manager.Device {
