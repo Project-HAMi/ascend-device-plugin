@@ -85,6 +85,33 @@ func TestKubernetesPodSnapshotFailsClosedForUnknownCheckpointPod(t *testing.T) {
 	}
 }
 
+func TestKubernetesPodSnapshotAgesOutStaleCheckpointUID(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	snapshot, err := NewKubernetesPodSnapshot(clientset, "node-1", fakeResolver{}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(snapshot.Stop)
+	checkpoint := filepath.Join(t.TempDir(), "kubelet_internal_checkpoint")
+	if err := os.WriteFile(checkpoint, []byte(`{"Data":{"PodDeviceEntries":[{"PodUID":"gone"}],"RegisteredDevices":{"huawei.com/Ascend910B4":["uuid-7"]}}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot.checkpointPath = checkpoint
+	snapshot.staleGrace = time.Second
+	snapshot.staleConfirmations = 2
+	current := time.Unix(0, 0)
+	snapshot.clock = func() time.Time { return current }
+	waitForInformer(t, snapshot.podListerSynced)
+	if result, err := snapshot.Snapshot(context.Background()); err == nil || result.Ready {
+		t.Fatalf("first Snapshot() = result=%+v err=%v, want temporary fail-closed state", result, err)
+	}
+	current = current.Add(time.Second)
+	result, err := snapshot.Snapshot(context.Background())
+	if err != nil || !result.Ready {
+		t.Fatalf("second Snapshot() = result=%+v err=%v, want stale UID aged out", result, err)
+	}
+}
+
 type fakeResolver struct{ device *manager.Device }
 
 func (r fakeResolver) GetDeviceByUUID(string) *manager.Device { return r.device }

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -33,15 +34,29 @@ import (
 )
 
 type KubernetesPodSnapshot struct {
-	nodeName        string
-	clientset       kubernetes.Interface
-	resolver        DeviceResolver
-	podLister       corelisters.PodLister
-	podListerSynced cache.InformerSynced
-	stopCh          chan struct{}
-	checkpointPath  string
-	readFile        func(string) ([]byte, error)
-	clock           Clock
+	nodeName           string
+	clientset          kubernetes.Interface
+	resolver           DeviceResolver
+	podLister          corelisters.PodLister
+	podListerSynced    cache.InformerSynced
+	stopCh             chan struct{}
+	checkpointPath     string
+	readFile           func(string) ([]byte, error)
+	clock              Clock
+	mu                 sync.Mutex
+	staleCheckpoint    map[string]checkpointStaleState
+	staleGrace         time.Duration
+	staleConfirmations int
+}
+
+const (
+	defaultStaleCheckpointGrace         = 10 * time.Minute
+	defaultStaleCheckpointConfirmations = 3
+)
+
+type checkpointStaleState struct {
+	firstAbsent time.Time
+	count       int
 }
 
 func NewKubernetesPodSnapshot(clientset kubernetes.Interface, nodeName string, resolver DeviceResolver, checkpointPath string) (*KubernetesPodSnapshot, error) {
@@ -68,15 +83,18 @@ func NewKubernetesPodSnapshot(clientset kubernetes.Interface, nodeName string, r
 	)
 	pods := factory.Core().V1().Pods()
 	snapshot := &KubernetesPodSnapshot{
-		nodeName:        nodeName,
-		clientset:       clientset,
-		resolver:        resolver,
-		podLister:       pods.Lister(),
-		podListerSynced: pods.Informer().HasSynced,
-		stopCh:          stopCh,
-		checkpointPath:  checkpointPath,
-		readFile:        os.ReadFile,
-		clock:           time.Now,
+		nodeName:           nodeName,
+		clientset:          clientset,
+		resolver:           resolver,
+		podLister:          pods.Lister(),
+		podListerSynced:    pods.Informer().HasSynced,
+		stopCh:             stopCh,
+		checkpointPath:     checkpointPath,
+		readFile:           os.ReadFile,
+		clock:              time.Now,
+		staleCheckpoint:    make(map[string]checkpointStaleState),
+		staleGrace:         defaultStaleCheckpointGrace,
+		staleConfirmations: defaultStaleCheckpointConfirmations,
 	}
 	factory.Start(stopCh)
 	return snapshot, nil
@@ -128,11 +146,7 @@ func (s *KubernetesPodSnapshot) Snapshot(ctx context.Context) (AllocationSnapsho
 		}
 		podUIDs[string(pod.UID)] = struct{}{}
 	}
-	for uid := range checkpointUIDs {
-		if _, present := podUIDs[uid]; !present {
-			result.UnknownPodUIDs = append(result.UnknownPodUIDs, uid)
-		}
-	}
+	result.UnknownPodUIDs = append(result.UnknownPodUIDs, s.observeStaleCheckpointUIDs(checkpointUIDs, podUIDs, result.CollectedAt)...)
 
 	for i := range podList.Items {
 		pod := &podList.Items[i]
@@ -196,6 +210,38 @@ func (s *KubernetesPodSnapshot) Snapshot(ctx context.Context) (AllocationSnapsho
 	return result, nil
 }
 
+// observeStaleCheckpointUIDs protects against transient API/checkpoint races
+// while allowing a checkpoint entry that remains absent from several fresh
+// API snapshots to age out. Without this bounded state, a kubelet checkpoint
+// entry left behind by a failed container creation can block cleanup forever.
+func (s *KubernetesPodSnapshot) observeStaleCheckpointUIDs(checkpointUIDs map[string]bool, podUIDs map[string]struct{}, now time.Time) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for uid := range s.staleCheckpoint {
+		if !checkpointUIDs[uid] {
+			delete(s.staleCheckpoint, uid)
+		}
+	}
+	var unknown []string
+	for uid := range checkpointUIDs {
+		if _, present := podUIDs[uid]; present {
+			delete(s.staleCheckpoint, uid)
+			continue
+		}
+		state := s.staleCheckpoint[uid]
+		if state.firstAbsent.IsZero() {
+			state.firstAbsent = now
+		}
+		state.count++
+		s.staleCheckpoint[uid] = state
+		if state.count < s.staleConfirmations || now.Sub(state.firstAbsent) < s.staleGrace {
+			unknown = append(unknown, uid)
+		}
+	}
+	return unknown
+}
+
 type podClaimState string
 
 const (
@@ -206,13 +252,13 @@ const (
 )
 
 func classifyPod(pod *corev1.Pod, checkpointed bool) (podClaimState, string, time.Time) {
-	if checkpointed {
-		return claimProtected, "kubelet checkpoint still retains Pod", time.Time{}
-	}
 	if pod.DeletionTimestamp != nil && pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
 		return claimProtected, "Pod is being deleted", time.Time{}
 	}
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+		if checkpointed {
+			return claimProtected, "terminal Pod is still retained in kubelet checkpoint", time.Time{}
+		}
 		return claimTerminal, "Pod is terminal and kubelet checkpoint released it", time.Time{}
 	}
 
@@ -258,16 +304,31 @@ func classifyPod(pod *corev1.Pod, checkpointed bool) (podClaimState, string, tim
 		}
 	}
 	if hasRunning {
+		if checkpointed {
+			return claimProtected, "a running container is retained in kubelet checkpoint", time.Time{}
+		}
 		return claimProtected, "a container is running", time.Time{}
 	}
 	if hasProtectedWaiting || pod.Status.Phase == corev1.PodPending {
+		if checkpointed {
+			return claimProtected, "Pod is in a startup window and retained in kubelet checkpoint", time.Time{}
+		}
 		return claimProtected, "Pod is in a startup window", time.Time{}
 	}
 	if hasFailedWaiting || hasFailedTerminated {
 		if failureTimeUnknown {
+			if checkpointed {
+				return claimCandidate, "checkpoint-retained Pod is in a failure/retry state with an unknown failure timestamp", time.Time{}
+			}
 			return claimCandidate, "all observed containers are in a failure/retry state with an unknown failure timestamp", time.Time{}
 		}
+		if checkpointed {
+			return claimCandidate, "checkpoint-retained Pod is in a failure/retry state", latestFailure
+		}
 		return claimCandidate, "all observed containers are in a failure/retry state", latestFailure
+	}
+	if checkpointed {
+		return claimProtected, "Pod has incomplete state and is retained in kubelet checkpoint", time.Time{}
 	}
 	if pod.Status.Phase == corev1.PodRunning {
 		return claimUnknown, "Running Pod has no recognizable container state", time.Time{}

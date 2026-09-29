@@ -340,6 +340,19 @@ func TestClassifyPodCreateFailureWithoutTerminationTimestampReturnsZero(t *testi
 	}
 }
 
+func TestClassifyCheckpointedCreateFailureAsCandidate(t *testing.T) {
+	pod := &corev1.Pod{Status: corev1.PodStatus{
+		Phase: corev1.PodRunning,
+		ContainerStatuses: []corev1.ContainerStatus{{
+			State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "RunContainerError"}},
+		}},
+	}}
+	state, reason, _ := classifyPod(pod, true)
+	if state != claimCandidate {
+		t.Fatalf("classifyPod() = state=%q reason=%q, want checkpointed failure candidate", state, reason)
+	}
+}
+
 type mutableSnapshot struct{ snapshot AllocationSnapshot }
 
 func (m *mutableSnapshot) Snapshot(context.Context) (AllocationSnapshot, error) {
