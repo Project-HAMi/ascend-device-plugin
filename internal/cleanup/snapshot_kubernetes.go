@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -57,6 +58,11 @@ const (
 type checkpointStaleState struct {
 	firstAbsent time.Time
 	count       int
+}
+
+type checkpointAllocation struct {
+	CardIDs   []int32
+	DeviceIDs map[string][]string
 }
 
 func NewKubernetesPodSnapshot(clientset kubernetes.Interface, nodeName string, resolver DeviceResolver, checkpointPath string) (*KubernetesPodSnapshot, error) {
@@ -133,9 +139,13 @@ func (s *KubernetesPodSnapshot) Snapshot(ctx context.Context) (AllocationSnapsho
 	if err != nil {
 		return result, fmt.Errorf("list node pods from Kubernetes API: %w", err)
 	}
-	checkpointUIDs, err := s.readCheckpointUIDs()
+	checkpointAllocations, err := s.readCheckpointAllocations()
 	if err != nil {
 		return result, err
+	}
+	checkpointUIDs := make(map[string]bool, len(checkpointAllocations))
+	for uid := range checkpointAllocations {
+		checkpointUIDs[uid] = true
 	}
 
 	podUIDs := make(map[string]struct{}, len(podList.Items))
@@ -146,7 +156,19 @@ func (s *KubernetesPodSnapshot) Snapshot(ctx context.Context) (AllocationSnapsho
 		}
 		podUIDs[string(pod.UID)] = struct{}{}
 	}
-	result.UnknownPodUIDs = append(result.UnknownPodUIDs, s.observeStaleCheckpointUIDs(checkpointUIDs, podUIDs, result.CollectedAt)...)
+	staleCards, staleUnknown := s.observeStaleCheckpointUIDs(checkpointAllocations, podUIDs, result.CollectedAt)
+	result.UnknownPodUIDs = append(result.UnknownPodUIDs, staleUnknown...)
+	for cardID := range staleCards {
+		claim := result.ClaimsByCard[cardID]
+		claim.CardID = cardID
+		claim.State = mergeClaimState(claim.State, claimProtected)
+		claim.Evidence = append(claim.Evidence, ClaimEvidence{
+			State:  ClaimProtected,
+			Reason: "stale Ascend checkpoint allocation is within the protection window",
+			Source: "kubelet-checkpoint",
+		})
+		result.ClaimsByCard[cardID] = claim
+	}
 
 	for i := range podList.Items {
 		pod := &podList.Items[i]
@@ -214,17 +236,18 @@ func (s *KubernetesPodSnapshot) Snapshot(ctx context.Context) (AllocationSnapsho
 // while allowing a checkpoint entry that remains absent from several fresh
 // API snapshots to age out. Without this bounded state, a kubelet checkpoint
 // entry left behind by a failed container creation can block cleanup forever.
-func (s *KubernetesPodSnapshot) observeStaleCheckpointUIDs(checkpointUIDs map[string]bool, podUIDs map[string]struct{}, now time.Time) []string {
+func (s *KubernetesPodSnapshot) observeStaleCheckpointUIDs(checkpointAllocations map[string]checkpointAllocation, podUIDs map[string]struct{}, now time.Time) (map[int32]struct{}, []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for uid := range s.staleCheckpoint {
-		if !checkpointUIDs[uid] {
+		if _, present := checkpointAllocations[uid]; !present {
 			delete(s.staleCheckpoint, uid)
 		}
 	}
+	protectedCards := make(map[int32]struct{})
 	var unknown []string
-	for uid := range checkpointUIDs {
+	for uid, allocation := range checkpointAllocations {
 		if _, present := podUIDs[uid]; present {
 			delete(s.staleCheckpoint, uid)
 			continue
@@ -236,10 +259,16 @@ func (s *KubernetesPodSnapshot) observeStaleCheckpointUIDs(checkpointUIDs map[st
 		state.count++
 		s.staleCheckpoint[uid] = state
 		if state.count < s.staleConfirmations || now.Sub(state.firstAbsent) < s.staleGrace {
-			unknown = append(unknown, uid)
+			if len(allocation.CardIDs) == 0 {
+				unknown = append(unknown, uid)
+				continue
+			}
+			for _, cardID := range allocation.CardIDs {
+				protectedCards[cardID] = struct{}{}
+			}
 		}
 	}
-	return unknown
+	return protectedCards, unknown
 }
 
 type podClaimState string
@@ -256,10 +285,7 @@ func classifyPod(pod *corev1.Pod, checkpointed bool) (podClaimState, string, tim
 		return claimProtected, "Pod is being deleted", time.Time{}
 	}
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
-		if checkpointed {
-			return claimProtected, "terminal Pod is still retained in kubelet checkpoint", time.Time{}
-		}
-		return claimTerminal, "Pod is terminal and kubelet checkpoint released it", time.Time{}
+		return claimTerminal, "Pod is terminal; checkpoint state cannot make it runnable again", time.Time{}
 	}
 
 	statuses := append(append([]corev1.ContainerStatus{}, pod.Status.InitContainerStatuses...), pod.Status.ContainerStatuses...)
@@ -480,7 +506,7 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
-func (s *KubernetesPodSnapshot) readCheckpointUIDs() (map[string]bool, error) {
+func (s *KubernetesPodSnapshot) readCheckpointAllocations() (map[string]checkpointAllocation, error) {
 	contents, err := s.readFile(s.checkpointPath)
 	if err != nil {
 		return nil, fmt.Errorf("read kubelet allocation checkpoint: %w", err)
@@ -507,18 +533,72 @@ func (s *KubernetesPodSnapshot) readCheckpointUIDs() (map[string]bool, error) {
 	if !registered {
 		return nil, fmt.Errorf("kubelet allocation checkpoint has no registered Ascend devices")
 	}
-	var entries []struct{ PodUID string }
+	var entries []struct {
+		PodUID       string
+		ResourceName string
+		DeviceIDs    map[string][]string
+	}
 	if err := json.Unmarshal(checkpoint.Data.PodDeviceEntries, &entries); err != nil {
 		return nil, fmt.Errorf("decode kubelet Pod allocations: %w", err)
 	}
-	active := make(map[string]bool, len(entries))
+	allocations := make(map[string]checkpointAllocation, len(entries))
 	for _, entry := range entries {
+		if !strings.HasPrefix(entry.ResourceName, "huawei.com/Ascend") {
+			continue
+		}
 		if entry.PodUID == "" {
 			return nil, fmt.Errorf("kubelet allocation checkpoint contains an empty Pod UID")
 		}
-		active[entry.PodUID] = true
+		allocation := allocations[entry.PodUID]
+		allocation.CardIDs = appendUniqueInt32(allocation.CardIDs, s.checkpointCardIDs(entry.DeviceIDs)...)
+		allocation.DeviceIDs = entry.DeviceIDs
+		allocations[entry.PodUID] = allocation
 	}
-	return active, nil
+	return allocations, nil
+}
+
+func (s *KubernetesPodSnapshot) checkpointCardIDs(deviceIDs map[string][]string) []int32 {
+	seen := make(map[int32]struct{})
+	for _, ids := range deviceIDs {
+		for _, id := range ids {
+			device := s.resolver.GetDeviceByUUID(id)
+			if device == nil {
+				idx := strings.LastIndexByte(id, '-')
+				if idx <= 0 {
+					return nil
+				}
+				if _, err := strconv.Atoi(id[idx+1:]); err != nil {
+					return nil
+				}
+				device = s.resolver.GetDeviceByUUID(id[:idx])
+			}
+			if device == nil {
+				return nil
+			}
+			seen[device.CardID] = struct{}{}
+		}
+	}
+	cardIDs := make([]int32, 0, len(seen))
+	for cardID := range seen {
+		cardIDs = append(cardIDs, cardID)
+	}
+	return cardIDs
+}
+
+func appendUniqueInt32(values []int32, additions ...int32) []int32 {
+	for _, addition := range additions {
+		found := false
+		for _, value := range values {
+			if value == addition {
+				found = true
+				break
+			}
+		}
+		if !found {
+			values = append(values, addition)
+		}
+	}
+	return values
 }
 
 var _ PodAllocationSnapshot = (*KubernetesPodSnapshot)(nil)
