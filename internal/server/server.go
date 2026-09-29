@@ -35,6 +35,7 @@ import (
 	// "github.com/Project-HAMi/HAMi/pkg/device/ascend"
 	"github.com/Project-HAMi/HAMi/pkg/device"
 	"github.com/Project-HAMi/HAMi/pkg/util"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/cleanup"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 )
 
@@ -71,6 +72,7 @@ type PluginServer struct {
 	healthCh                      chan int32
 	checkIdleVNPUInterval         int
 	enablePeriodicIdleVNPUCleanup bool
+	idleVNPUReconciler            cleanup.IdleVNPUReconciler
 	wg                            sync.WaitGroup
 
 	// lastPublishedDevices fingerprints the device set most recently handed to
@@ -144,6 +146,20 @@ func NewPluginServer(mgr manager.Manager, nodeName string, checkIdleVNPUInterval
 	// enable calling hami methods
 	device.InRequestDevices[commonWord] = server.toAllocDeviceAnno
 	return server, nil
+}
+
+// SetIdleVNPUReconciler wires the platform-side safety policy used by both
+// startup cleanup and the periodic cleanup loop. It is intentionally separate
+// from NewPluginServer to keep existing embedders and unit tests source
+// compatible while making production wiring explicit in cmd/main.go.
+func (ps *PluginServer) SetIdleVNPUReconciler(reconciler cleanup.IdleVNPUReconciler) {
+	ps.idleVNPUReconciler = reconciler
+}
+
+func (ps *PluginServer) ResetIdleVNPUCleanupState() {
+	if resettable, ok := ps.idleVNPUReconciler.(interface{ Reset() }); ok {
+		resettable.Reset()
+	}
 }
 
 // prepareHostResources wraps the package-level prepareHostResources() to
@@ -237,7 +253,12 @@ func (ps *PluginServer) StopCh() <-chan any {
 }
 
 func (ps *PluginServer) CleanupIdleVNPUs() error {
-	return ps.mgr.CleanupIdleVNPUs()
+	if ps.idleVNPUReconciler == nil {
+		return fmt.Errorf("idle vNPU reconciler is not configured")
+	}
+	result, err := ps.idleVNPUReconciler.Reconcile(context.Background())
+	klog.Infof("idle vNPU reconcile: cards=%d protected=%d reclaimable=%d inspected=%d destroyed=%d skipped=%d ignored=%d unknown=%v destroyErrors=%d resets=%d", result.CardsInspected, result.CardsProtected, result.CardsReclaimable, result.VNPUsInspected, result.VNPUsDestroyed, result.VNPUsSkipped, result.VNPUsIgnored, result.UnknownSnapshot, result.DestroyErrors, result.ConfirmationResets)
+	return err
 }
 
 func (ps *PluginServer) serve() error {

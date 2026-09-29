@@ -39,6 +39,20 @@ type Device struct {
 	Health   bool
 }
 
+// VirtualDevice is the read-only hardware view used by the platform-side
+// orphan vNPU reconciler.  The reconciler intentionally only receives the
+// fields needed to make a safe cleanup decision; it does not depend on the
+// Ascend driver query structures.
+type VirtualDevice struct {
+	LogicID         int32
+	VDevID          int32
+	CardID          int32
+	DeviceID        int32
+	TemplateName    string
+	IsContainerUsed int32
+	Ignored         bool
+}
+
 // Manager defines the interface that PluginServer depends on.
 // AscendManager implements this interface.
 type Manager interface {
@@ -49,7 +63,8 @@ type Manager interface {
 	GetDevices() []*Device
 	GetDeviceByUUID(UUID string) *Device
 	GetUnHealthIDs() []int32
-	CleanupIdleVNPUs() error
+	ListVirtualDevices(logicID int32) ([]VirtualDevice, error)
+	DestroyVirtualDevice(logicID int32, vdevID uint32) error
 	IsHamiVnpuCore() bool
 	DeviceCoreScaling() float64
 }
@@ -239,6 +254,52 @@ func (am *AscendManager) GetDeviceByUUID(UUID string) *Device {
 	return nil
 }
 
+// ListVirtualDevices returns the current virtual-device state for one logical
+// NPU.  Keeping the driver-specific query here makes the cleanup policy
+// testable without a CANN/Ascend runtime.
+func (am *AscendManager) ListVirtualDevices(logicID int32) ([]VirtualDevice, error) {
+	cardID, deviceID, err := am.mgr.GetCardIDDeviceID(logicID)
+	if err != nil {
+		return nil, fmt.Errorf("get card/device id for logic id %d: %w", logicID, err)
+	}
+	infos, err := am.mgr.GetVirtualDeviceInfo(logicID)
+	if err != nil {
+		return nil, fmt.Errorf("get virtual devices for logic id %d: %w", logicID, err)
+	}
+	result := make([]VirtualDevice, 0, len(infos.VDevInfo))
+	for _, info := range infos.VDevInfo {
+		result = append(result, VirtualDevice{
+			LogicID:         logicID,
+			VDevID:          int32(info.VDevID),
+			CardID:          cardID,
+			DeviceID:        deviceID,
+			TemplateName:    info.QueryInfo.Name,
+			IsContainerUsed: int32(info.QueryInfo.IsContainerUsed),
+			Ignored:         am.shouldIgnoreDeviceForCleanup(logicID, cardID),
+		})
+	}
+	return result, nil
+}
+
+func (am *AscendManager) shouldIgnoreDeviceForCleanup(logicID, cardID int32) bool {
+	if !am.shouldCheckIgnored() {
+		return false
+	}
+	uuid, err := am.mgr.GetDieID(logicID, dcmi.VDIE)
+	if err != nil {
+		klog.Warningf("failed to get uuid for logic ID %d while checking cleanup filter: %v", logicID, err)
+		return true
+	}
+	return am.shouldIgnoreDevice(uuid, cardID)
+}
+
+// DestroyVirtualDevice is the narrow hardware mutation used by the safe
+// reconciler.  Callers must perform all Pod-side safety checks before invoking
+// it.
+func (am *AscendManager) DestroyVirtualDevice(logicID int32, vdevID uint32) error {
+	return am.mgr.DestroyVirtualDevice(logicID, vdevID)
+}
+
 func (am *AscendManager) GetIDs() []int32 {
 	_, IDs, err := am.mgr.GetDeviceList()
 	if err != nil {
@@ -307,68 +368,6 @@ func (am *AscendManager) GetUnHealthIDs() []int32 {
 		}
 	}
 	return unhealthy
-}
-
-func (am *AscendManager) CleanupIdleVNPUs() error {
-	klog.Info("Starting cleanup of idle vNPUs...")
-
-	_, IDs, err := am.mgr.GetDeviceList()
-	if err != nil {
-		return fmt.Errorf("failed to get device list: %w", err)
-	}
-	klog.Infof("Found %d devices to check for idle vNPUs,%+v", len(IDs), IDs)
-
-	totalCleaned := 0
-	for _, logicID := range IDs {
-		cardID, deviceID, err := am.mgr.GetCardIDDeviceID(logicID)
-		if err != nil {
-			klog.Warningf("failed to get card/device ID for logic ID %d: %v", logicID, err)
-			continue
-		}
-		uuid := ""
-		if am.shouldCheckIgnored() && am.nodeConfig.FilterDevices.HasUUID() {
-			uuid, err = am.mgr.GetDieID(logicID, dcmi.VDIE)
-			if err != nil {
-				klog.Warningf("failed to get uuid for logic ID %d: %v", logicID, err)
-				continue
-			}
-		}
-		if am.shouldIgnoreDevice(uuid, cardID) {
-			klog.V(4).Infof("skip cleanup on ignored device uuid=%s index=%d logicID=%d deviceID=%d", uuid, cardID, logicID, deviceID)
-			continue
-		}
-		// Obtain all vNPU information on this device
-		vDevInfos, err := am.mgr.GetVirtualDeviceInfo(logicID)
-		if err != nil {
-			klog.Infof("no vNPU found on device %d or query failed: %v", logicID, err)
-			continue
-		}
-
-		klog.V(1).Infof("Device logicID=%d, cardID=%d,deviceID=%d has %d vNPUs", logicID, cardID, deviceID, len(vDevInfos.VDevInfo))
-
-		for _, vDev := range vDevInfos.VDevInfo {
-			klog.V(1).Infof("vNPU CardId=%d, VDevID(Vnpu ID)=%d,template=%s,IsContainerUsed=%d", cardID, vDev.VDevID, vDev.QueryInfo.Name, vDev.QueryInfo.IsContainerUsed)
-
-			if vDev.QueryInfo.IsContainerUsed == 0 {
-				klog.V(1).Infof("Found idle vNPU: cardID=%d, deviceID=%d, vnpuID=%d, status=%d, template=%s,IsContainerUsed=%d",
-					cardID, deviceID, vDev.VDevID, vDev.QueryInfo.Status, vDev.QueryInfo.Name, vDev.QueryInfo.IsContainerUsed)
-
-				err := am.mgr.DestroyVirtualDevice(logicID, uint32(vDev.VDevID))
-				if err != nil {
-					klog.Errorf("failed to destroy vNPU %d on device %d: %v", vDev.VDevID, logicID, err)
-				} else {
-					klog.Infof("Successfully destroyed idle vNPU: vnpuID=%d", vDev.VDevID)
-					totalCleaned++
-				}
-			} else {
-				klog.Infof("Skipping active vNPU: cardID=%d, deviceID=%d, vnpuID=%d, status=%d, template=%s,IsContainerUsed=%d",
-					cardID, deviceID, vDev.VDevID, vDev.QueryInfo.Status, vDev.QueryInfo.Name, vDev.QueryInfo.IsContainerUsed)
-			}
-		}
-	}
-
-	klog.Infof("Cleanup completed, destroyed %d idle vNPUs", totalCleaned)
-	return nil
 }
 
 func (am *AscendManager) GetNodeConfig() *internal.NodeConfig {
