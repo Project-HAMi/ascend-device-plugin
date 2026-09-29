@@ -134,6 +134,26 @@ func TestKubernetesPodSnapshotIgnoresNonAscendCheckpointEntries(t *testing.T) {
 	}
 }
 
+func TestPodHasAscendResourceSupportsMultipleCardFamilies(t *testing.T) {
+	for _, resourceName := range []string{
+		"huawei.com/Ascend310P",
+		"huawei.com/Ascend310P3",
+		"huawei.com/Ascend910A",
+		"huawei.com/Ascend910B3",
+		"huawei.com/Ascend910B4-1",
+		"huawei.com/Ascend910C",
+	} {
+		pod := &corev1.Pod{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+			Resources: corev1.ResourceRequirements{Limits: corev1.ResourceList{
+				corev1.ResourceName(resourceName): resource.MustParse("1"),
+			}},
+		}}}}
+		if !podHasAscendResource(pod) {
+			t.Fatalf("podHasAscendResource(%q) = false, want true", resourceName)
+		}
+	}
+}
+
 type fakeResolver struct{ device *manager.Device }
 
 func (r fakeResolver) GetDeviceByUUID(uuid string) *manager.Device {
