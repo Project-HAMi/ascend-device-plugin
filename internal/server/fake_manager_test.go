@@ -35,6 +35,7 @@ type FakeManager struct {
 	IsHamiVnpuCoreFunc    func() bool
 	IsEnpuFunc            func() bool
 	DeviceCoreScalingFunc func() float64
+	IsDeviceInUseFunc     func(logicID int32) (bool, error)
 }
 
 func (f *FakeManager) CommonWord() string {
@@ -112,4 +113,11 @@ func (f *FakeManager) DeviceCoreScaling() float64 {
 		return f.DeviceCoreScalingFunc()
 	}
 	return 0
+}
+
+func (f *FakeManager) IsDeviceInUse(logicID int32) (bool, error) {
+	if f.IsDeviceInUseFunc != nil {
+		return f.IsDeviceInUseFunc(logicID)
+	}
+	return false, nil
 }
