@@ -257,6 +257,7 @@ func (r *Reconciler) observeVNPUs(logicID int32, virtualDevices []manager.Virtua
 
 func (r *Reconciler) resetAll(result *ReconcileResult) {
 	result.ConfirmationResets += r.confirmationsByCard.resetAll()
+	r.seenVNPUs = make(map[virtualDeviceKey]time.Time)
 }
 
 var _ IdleVNPUReconciler = (*Reconciler)(nil)

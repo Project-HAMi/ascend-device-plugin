@@ -94,6 +94,16 @@ func TestReconcilerNeverDestroysWhenSnapshotIsUnknown(t *testing.T) {
 	}
 }
 
+func TestReconcilerResetAllClearsVnpuObservations(t *testing.T) {
+	r := NewReconciler(testHardware(), fakeSnapshot{snapshot: AllocationSnapshot{Ready: true}}, ReconcilerOptions{})
+	r.seenVNPUs[virtualDeviceKey{logicID: 3, vdevID: 11}] = time.Unix(0, 0)
+	var result ReconcileResult
+	r.resetAll(&result)
+	if len(r.seenVNPUs) != 0 {
+		t.Fatalf("seenVNPUs after resetAll() = %v, want empty", r.seenVNPUs)
+	}
+}
+
 func TestReconcilerRechecksOwnershipBeforeDestroy(t *testing.T) {
 	hardware := testHardware()
 	snapshot := &sequenceSnapshot{snapshots: []AllocationSnapshot{
