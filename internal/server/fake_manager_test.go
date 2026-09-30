@@ -24,17 +24,18 @@ import (
 // Each method delegates to the corresponding Func field if set;
 // otherwise it returns a zero value.
 type FakeManager struct {
-	CommonWordFunc        func() string
-	ResourceNameFunc      func() string
-	VDeviceCountFunc      func() int
-	UpdateDeviceFunc      func() error
-	GetDevicesFunc        func() []*manager.Device
-	GetDeviceByUUIDFunc   func(UUID string) *manager.Device
-	GetUnHealthIDsFunc    func() []int32
-	CleanupIdleVNPUsFunc  func() error
-	IsHamiVnpuCoreFunc    func() bool
-	IsEnpuFunc            func() bool
-	DeviceCoreScalingFunc func() float64
+	CommonWordFunc           func() string
+	ResourceNameFunc         func() string
+	VDeviceCountFunc         func() int
+	UpdateDeviceFunc         func() error
+	GetDevicesFunc           func() []*manager.Device
+	GetDeviceByUUIDFunc      func(UUID string) *manager.Device
+	GetUnHealthIDsFunc       func() []int32
+	ListVirtualDevicesFunc   func(logicID int32) ([]manager.VirtualDevice, error)
+	DestroyVirtualDeviceFunc func(logicID int32, vdevID uint32) error
+	IsHamiVnpuCoreFunc       func() bool
+	IsEnpuFunc               func() bool
+	DeviceCoreScalingFunc    func() float64
 }
 
 func (f *FakeManager) CommonWord() string {
@@ -86,9 +87,16 @@ func (f *FakeManager) GetUnHealthIDs() []int32 {
 	return nil
 }
 
-func (f *FakeManager) CleanupIdleVNPUs() error {
-	if f.CleanupIdleVNPUsFunc != nil {
-		return f.CleanupIdleVNPUsFunc()
+func (f *FakeManager) ListVirtualDevices(logicID int32) ([]manager.VirtualDevice, error) {
+	if f.ListVirtualDevicesFunc != nil {
+		return f.ListVirtualDevicesFunc(logicID)
+	}
+	return nil, nil
+}
+
+func (f *FakeManager) DestroyVirtualDevice(logicID int32, vdevID uint32) error {
+	if f.DestroyVirtualDeviceFunc != nil {
+		return f.DestroyVirtualDeviceFunc(logicID, vdevID)
 	}
 	return nil
 }
