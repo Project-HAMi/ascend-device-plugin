@@ -19,8 +19,10 @@ package internal
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"os"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/klog/v2"
@@ -46,14 +48,43 @@ type VNPUConfig struct {
 }
 
 type VNPUsConfig struct {
-	HamiVnpuCore bool   `json:"hamiVnpuCore,omitempty"`
-	Enpu         bool   `json:"enpu,omitempty"`
+	HamiVnpuMode string `json:"hamiVnpuMode,omitempty"`
 	EnpuPolicy   string `json:"enpuPolicy,omitempty"`
+	// Deprecated: used only when HamiVnpuMode is empty.
+	HamiVnpuCore bool `json:"hamiVnpuCore,omitempty"`
 	// DeviceCoreScaling is the hami-core compute oversell ratio.
 	// When hami-core is on, registerHAMi advertises Devcore = round(100 * DeviceCoreScaling).
 	// Default 1 keeps a 100-point budget. Values below 1 are not supported and fall back to 1.
 	DeviceCoreScaling float64      `json:"deviceCoreScaling,omitempty"`
 	Configs           []VNPUConfig `json:"configs"`
+}
+
+const (
+	VNPUModeTemplate = "template"
+	VNPUModeHamiCore = "hami-core"
+	VNPUModeENPU     = "enpu"
+)
+
+func resolveVNPUMode(mode, fallback string) (string, error) {
+	switch normalized := strings.ToLower(strings.TrimSpace(mode)); normalized {
+	case "":
+		return fallback, nil
+	case "hamicore", VNPUModeHamiCore:
+		return VNPUModeHamiCore, nil
+	case VNPUModeTemplate, VNPUModeENPU:
+		return normalized, nil
+	default:
+		return "", fmt.Errorf("hamiVnpuMode must be template, hami-core (or hamiCore), or enpu, got %q", mode)
+	}
+}
+
+// Mode resolves the default backend using the same precedence as HAMi.
+func (v VNPUsConfig) Mode() (string, error) {
+	fallback := VNPUModeTemplate
+	if v.HamiVnpuCore {
+		fallback = VNPUModeHamiCore
+	}
+	return resolveVNPUMode(v.HamiVnpuMode, fallback)
 }
 
 type Config struct {
@@ -101,6 +132,20 @@ func LoadConfig(path string) (*Config, error) {
 	var yamlData Config
 	err = yaml.Unmarshal(data, &yamlData)
 	if err == nil {
+		if _, err := yamlData.VNPUs.Mode(); err != nil {
+			return nil, fmt.Errorf("vnpus: %w", err)
+		}
+		// The shared HAMi config contains fields this plugin does not consume.
+		// Reject the removed flag explicitly without rejecting other vendors' fields.
+		var fields struct {
+			VNPUs map[string]json.RawMessage `json:"vnpus"`
+		}
+		if err := yaml.Unmarshal(data, &fields); err != nil {
+			return nil, err
+		}
+		if _, exists := fields.VNPUs["enpu"]; exists {
+			return nil, fmt.Errorf("vnpus.enpu has been removed; use vnpus.hamiVnpuMode: enpu")
+		}
 		return &yamlData, nil
 	}
 	if !isLegacyVNPUsLayout(err) {
@@ -117,12 +162,24 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 type NodeConfig struct {
-	Name              string        `json:"name" yaml:"name"`
-	HamiVnpuCore      bool          `json:"hami-vnpu-core" yaml:"hami-vnpu-core"`
-	Enpu              *bool         `json:"enpu,omitempty" yaml:"enpu,omitempty"`
+	Name         string `json:"name" yaml:"name"`
+	HamiVnpuMode string `json:"hamiVnpuMode,omitempty" yaml:"hamiVnpuMode,omitempty"`
+	// Deprecated: used only when HamiVnpuMode is empty; nil inherits the global mode.
+	HamiVnpuCore      *bool         `json:"hami-vnpu-core,omitempty" yaml:"hami-vnpu-core,omitempty"`
 	VDeviceCount      int           `json:"vDeviceCount" yaml:"vDeviceCount"`
 	DeviceCoreScaling float64       `json:"deviceCoreScaling,omitempty" yaml:"deviceCoreScaling,omitempty"`
 	FilterDevices     FilterDevices `json:"filterDevices,omitempty" yaml:"filterDevices,omitempty"`
+}
+
+// Mode resolves a node override, inheriting the global mode when none is set.
+func (n NodeConfig) Mode(globalMode string) (string, error) {
+	if n.HamiVnpuCore != nil {
+		globalMode = VNPUModeTemplate
+		if *n.HamiVnpuCore {
+			globalMode = VNPUModeHamiCore
+		}
+	}
+	return resolveVNPUMode(n.HamiVnpuMode, globalMode)
 }
 
 type NodeListConfig struct {
@@ -171,6 +228,20 @@ func LoadNodeConfig(path string) (*NodeListConfig, error) {
 	err = yaml.Unmarshal(data, &yamlData)
 	if err != nil {
 		return nil, err
+	}
+	var fields struct {
+		Nodes []map[string]json.RawMessage `json:"nodes"`
+	}
+	if err := yaml.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	for i, node := range yamlData.Nodes {
+		if _, err := node.Mode(VNPUModeTemplate); err != nil {
+			return nil, fmt.Errorf("node %q: %w", node.Name, err)
+		}
+		if _, exists := fields.Nodes[i]["enpu"]; exists {
+			return nil, fmt.Errorf("node %q: enpu has been removed; use hamiVnpuMode: enpu", node.Name)
+		}
 	}
 	return &yamlData, nil
 }

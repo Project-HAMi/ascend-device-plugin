@@ -376,18 +376,22 @@ func (am *AscendManager) GetNodeConfig() *internal.NodeConfig {
 }
 
 func (am *AscendManager) IsHamiVnpuCore() bool {
-	if am.nodeConfig != nil {
-		return am.nodeConfig.HamiVnpuCore
-	}
-	return am.globalConfig.VNPUs.HamiVnpuCore
+	mode, err := am.vnpuMode()
+	return err == nil && mode == internal.VNPUModeHamiCore
 }
 
 // IsEnpu returns whether ENPU is enabled, preferring the node setting.
 func (am *AscendManager) IsEnpu() bool {
-	if am.nodeConfig != nil && am.nodeConfig.Enpu != nil {
-		return *am.nodeConfig.Enpu
+	mode, err := am.vnpuMode()
+	return err == nil && mode == internal.VNPUModeENPU
+}
+
+func (am *AscendManager) vnpuMode() (string, error) {
+	mode, err := am.globalConfig.VNPUs.Mode()
+	if err != nil || am.nodeConfig == nil {
+		return mode, err
 	}
-	return am.globalConfig.VNPUs.Enpu
+	return am.nodeConfig.Mode(mode)
 }
 
 // EnpuPolicy returns the default ENPU scheduling policy.

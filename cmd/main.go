@@ -142,7 +142,7 @@ func main() {
 	if *nodeConfigFile != "" {
 		err = mgr.LoadNodeConfig(*nodeConfigFile, *nodeName)
 		if err != nil {
-			klog.Errorf("load node config failed: %v", err)
+			klog.Fatalf("load node config failed: %v", err)
 		}
 	}
 	server, err := server.NewPluginServer(mgr, *nodeName, *checkIdleVNPUInterval, *enablePeriodicIdleVNPUCleanup)

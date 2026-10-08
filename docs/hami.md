@@ -44,17 +44,17 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 ### Deploy ConfigMap
 
 * **HAMi and `ascend-device-plugin` in the same namespace (recommended)**: skip this step — HAMi's existing `hami-scheduler-device` ConfigMap already covers Ascend.
-* **Different namespaces**: deploy the Ascend ConfigMap into `ascend-device-plugin`'s own namespace, then manually merge its `vnpus:` section into HAMi's existing `hami-scheduler-device` ConfigMap without touching HAMi's other device entries. On HAMi < v2.9.0, keep that ConfigMap's own `vnpus` list layout — its scheduler cannot read `vnpus.configs`. Keep both copies in sync whenever you change templates, resourceNames, or `hamiVnpuCore`.
+* **Different namespaces**: deploy the Ascend ConfigMap into `ascend-device-plugin`'s own namespace, then manually merge its `vnpus:` section into HAMi's existing `hami-scheduler-device` ConfigMap without touching HAMi's other device entries. On HAMi < v2.9.0, keep that ConfigMap's own `vnpus` list layout — its scheduler cannot read `vnpus.configs`. Keep both copies in sync whenever you change templates, resourceNames, or `hamiVnpuMode`.
 
   ```bash
   kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
   ```
 
-**Note:** `vnpus.hamiVnpuCore` and `vnpus.enpu` enable the two runtime soft-slicing backends; when both are `false`, template-based hard slicing is used. The `hami-vnpu-core` and `enpu` node settings override the global values.
+**Note:** `vnpus.hamiVnpuMode` selects `template`, `hami-core` (alias `hamiCore`), or `enpu`, matching the companion HAMi scheduler. Node `hamiVnpuMode` takes priority. An empty global mode uses `template`, or `hami-core` when the deprecated `vnpus.hamiVnpuCore` is true. The deprecated node `hami-vnpu-core` boolean is used only when node mode is empty; omitted node settings inherit the global mode. Replace the unreleased `vnpus.enpu` and node `enpu` flags with `hamiVnpuMode: enpu`; removed flags and invalid modes fail startup. Upgrade the scheduler before writing the new field to its shared ConfigMap.
 
 #### (Optional) **Node Custom Configuration Description**
 
-The `hami-device-node-config` is used to enable or override hami-vnpu-core for specific nodes within the cluster. Node-level settings take higher priority than the global `vnpus.hamiVnpuCore` switch.
+The `hami-device-node-config` is used to enable or override hami-vnpu-core for specific nodes within the cluster. Node `hamiVnpuMode` takes priority over global `vnpus.hamiVnpuMode`; an omitted mode inherits the global setting.
 
 It also supports `filterDevices` to configure devices ignored by HAMi on a specific node. By default, `filterDevices` is empty, which means no devices are ignored. A device is ignored when its UUID is listed in `uuid` or its index is listed in `index`, for example: `filterDevices: {index: [0, 1], uuid: []}`.
 

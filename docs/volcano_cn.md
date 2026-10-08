@@ -48,7 +48,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 #### （可选）节点自定义配置
 
-`hami-device-node-config` 用于对集群中特定节点的 hami-vnpu-core 进行启用或覆盖，节点级配置优先级高于全局 `vnpus.hamiVnpuCore` 开关，同时支持 `filterDevices` 忽略节点上的特定设备，例如 `filterDevices: {index: [0, 1], uuid: []}`。
+`hami-device-node-config` 用于对集群中特定节点的 hami-vnpu-core 进行启用或覆盖，节点 `hamiVnpuMode` 优先于全局 `vnpus.hamiVnpuMode`，未设置时继承全局，同时支持 `filterDevices` 忽略节点上的特定设备，例如 `filterDevices: {index: [0, 1], uuid: []}`。
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-node-configmap.yaml
