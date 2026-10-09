@@ -271,6 +271,12 @@
                 }
             },
             "additionalProperties": false
+        },
+        "vnpuDeviceSplitCount": {
+            "type": [
+                "integer"
+            ],
+            "minimum": 1
         }
     }
 }

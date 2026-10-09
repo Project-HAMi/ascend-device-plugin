@@ -52,6 +52,11 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 **Note:** `vnpus.hamiVnpuMode` selects `template`, `hami-core` (alias `hamiCore`), or `enpu`, matching the companion HAMi scheduler. Node `hamiVnpuMode` takes priority. An empty global mode uses `template`, or `hami-core` when the deprecated `vnpus.hamiVnpuCore` is true. The deprecated node `hami-vnpu-core` boolean is used only when node mode is empty; omitted node settings inherit the global mode. Replace the unreleased `vnpus.enpu` and node `enpu` flags with `hamiVnpuMode: enpu`; removed flags and invalid modes fail startup. Upgrade the scheduler before writing the new field to its shared ConfigMap.
 
+In `hami-core` mode, `vnpus.vnpuDeviceSplitCount` sets virtual-device slots per physical NPU; omitted or nonpositive values default to `10`. HAMi Chart exposes `devices.ascend.vnpuDeviceSplitCount`; the standalone plugin Chart exposes `vnpuDeviceSplitCount` when it creates the configuration. A positive node `vDeviceCount` takes precedence. Template mode keeps its template-derived capacity; ENPU keeps its separate 100-slot capacity and node-override limit.
+
+With two healthy NPUs and count `5`, kubelet advertises `10` virtual devices and HAMi registers `Count=5` per NPU. The scheduler limits allocations using that registered count; memory and core limits may be reached earlier. Restart the plugin after changing the shared ConfigMap to reload it. Use a plugin image containing split-count support; the Chart value alone does not add support to an older image.
+
+
 #### (Optional) **Node Custom Configuration Description**
 
 The `hami-device-node-config` is used to enable or override hami-vnpu-core for specific nodes within the cluster. Node `hamiVnpuMode` takes priority over global `vnpus.hamiVnpuMode`; an omitted mode inherits the global setting.

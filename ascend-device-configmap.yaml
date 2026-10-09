@@ -10,6 +10,7 @@ metadata:
 data:
   device-config.yaml: |-
     vnpus:
+      vnpuDeviceSplitCount: 10
       hamiVnpuMode: template
       enpuPolicy: elastic
       deviceCoreScaling: 1

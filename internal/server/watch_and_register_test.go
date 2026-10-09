@@ -323,3 +323,40 @@ func TestWatchAndRegister_ContinuesWithoutListAndWatchConsumer(t *testing.T) {
 		}
 	}
 }
+
+func TestSoftSliceCapacityRegistration(t *testing.T) {
+	for _, count := range []int{5, 10} {
+		t.Run(fmt.Sprintf("split-count-%d", count), func(t *testing.T) {
+			mgr := newCachingFakeManager(
+				&manager.Device{UUID: "npu-0", Health: true},
+				&manager.Device{UUID: "npu-1", Health: true},
+			)
+			mgr.VDeviceCountFunc = func() int { return count }
+			mgr.IsHamiVnpuCoreFunc = func() bool { return true }
+			ps := newWatchRegisterServer(t, mgr)
+			devices := ps.apiDevices()
+			if got := countHealthy(devices); got != 2*count {
+				t.Fatalf("healthy kubelet devices = %d, want %d", got, 2*count)
+			}
+			ids := make(map[string]bool)
+			for _, dev := range devices {
+				if ids[dev.ID] {
+					t.Fatalf("duplicate kubelet device ID %q", dev.ID)
+				}
+				ids[dev.ID] = true
+			}
+			if err := ps.registerHAMi(); err != nil {
+				t.Fatal(err)
+			}
+			registered := registeredDevices(t, ps)
+			if len(registered) != 2 {
+				t.Fatalf("registered physical devices = %d, want 2", len(registered))
+			}
+			for _, dev := range registered {
+				if dev.Count != int32(count) {
+					t.Fatalf("registered Count = %d, want %d", dev.Count, count)
+				}
+			}
+		})
+	}
+}
