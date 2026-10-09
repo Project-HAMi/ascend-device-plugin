@@ -37,6 +37,7 @@ import (
 	"github.com/Project-HAMi/HAMi/pkg/util"
 	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/Project-HAMi/HAMi/pkg/util/nodelock"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/cleanup"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 )
 
@@ -723,7 +724,7 @@ func TestApiDevices(t *testing.T) {
 
 func TestCleanupIdleVNPUs(t *testing.T) {
 	type cleanupIdleVNPUsArgs struct {
-		mgr *FakeManager
+		reconciler cleanup.IdleVNPUReconciler
 	}
 
 	tests := []struct {
@@ -732,33 +733,35 @@ func TestCleanupIdleVNPUs(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "DelegatesToManager",
+			name: "DelegatesToReconciler",
 			args: cleanupIdleVNPUsArgs{
-				mgr: &FakeManager{
-					CleanupIdleVNPUsFunc: func() error { return nil },
-				},
+				reconciler: cleanup.ReconcilerFunc(func(context.Context) (cleanup.ReconcileResult, error) {
+					return cleanup.ReconcileResult{}, nil
+				}),
 			},
 		},
 		{
-			name: "ReturnsManagerError",
+			name: "ReturnsReconcilerError",
 			args: cleanupIdleVNPUsArgs{
-				mgr: &FakeManager{
-					CleanupIdleVNPUsFunc: func() error { return fmt.Errorf("cleanup failed") },
-				},
+				reconciler: cleanup.ReconcilerFunc(func(context.Context) (cleanup.ReconcileResult, error) {
+					return cleanup.ReconcileResult{}, fmt.Errorf("cleanup failed")
+				}),
 			},
 			wantErr: true,
 		},
 		{
-			name: "NilFuncReturnsNil",
+			name: "ReconcilerReturnsNil",
 			args: cleanupIdleVNPUsArgs{
-				mgr: &FakeManager{},
+				reconciler: cleanup.ReconcilerFunc(func(context.Context) (cleanup.ReconcileResult, error) {
+					return cleanup.ReconcileResult{}, nil
+				}),
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ps := &PluginServer{mgr: tc.args.mgr}
+			ps := &PluginServer{idleVNPUReconciler: tc.args.reconciler}
 			err := ps.CleanupIdleVNPUs()
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("CleanupIdleVNPUs() error = %v, wantErr %v", err, tc.wantErr)
