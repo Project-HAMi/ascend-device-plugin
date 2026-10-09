@@ -946,3 +946,40 @@ func TestGrpcServer_StopWaitForAllGoroutines(t *testing.T) {
 		t.Fatalf("Stop() failed: %v", err)
 	}
 }
+
+// kubelet must not be offered a chip that is still laid out as a whole chip
+// because the driver refused to enable device-share on it.
+func TestApiDevices_PendingChipIsNotAdvertised(t *testing.T) {
+	t.Parallel()
+
+	devs := []*manager.Device{
+		{UUID: "uuid0", CardID: 0, DeviceID: 0, Health: true},
+		{UUID: "uuid1", CardID: 0, DeviceID: 1, Health: true},
+	}
+	ps := &PluginServer{
+		mgr: &FakeManager{
+			GetDevicesFunc:   func() []*manager.Device { return devs },
+			VDeviceCountFunc: func() int { return 2 },
+		},
+	}
+
+	if got := len(ps.apiDevices()); got != 4 {
+		t.Fatalf("with no chip pending, apiDevices returned %d devices, want 4", got)
+	}
+
+	ps.setPendingDeviceShare([]shareTarget{{chipKey: chipKey{Card: 0, Chip: 1}, LogicID: 1}})
+	got := ps.apiDevices()
+	if len(got) != 2 {
+		t.Fatalf("apiDevices returned %d devices, want 2 (uuid1 is waiting for device-share)", len(got))
+	}
+	for _, d := range got {
+		if strings.HasPrefix(d.ID, "uuid1-") {
+			t.Fatalf("apiDevices still advertises the withheld chip: %s", d.ID)
+		}
+	}
+
+	ps.setPendingDeviceShare(nil)
+	if got := len(ps.apiDevices()); got != 4 {
+		t.Fatalf("after the chip is switched, apiDevices returned %d devices, want 4", got)
+	}
+}

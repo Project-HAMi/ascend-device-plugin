@@ -51,6 +51,7 @@ type Manager interface {
 	GetUnHealthIDs() []int32
 	CleanupIdleVNPUs() error
 	IsHamiVnpuCore() bool
+	IsDeviceInUse(logicID int32) (bool, error)
 	DeviceCoreScaling() float64
 }
 
@@ -410,4 +411,15 @@ func (am *AscendManager) DeviceCoreScaling() float64 {
 		return am.nodeConfig.DeviceCoreScaling
 	}
 	return am.globalConfig.VNPUs.DeviceCoreScaling
+}
+
+// IsDeviceInUse reports whether a workload still runs on the chip, from the
+// driver's process list for the device. The driver refuses to switch
+// device-share on such a chip until the workload finishes.
+func (am *AscendManager) IsDeviceInUse(logicID int32) (bool, error) {
+	info, err := am.mgr.GetDevProcessInfo(logicID)
+	if err != nil {
+		return false, fmt.Errorf("get process info of logicID %d: %w", logicID, err)
+	}
+	return info != nil && info.ProcNum > 0, nil
 }
