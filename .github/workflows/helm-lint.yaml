@@ -28,6 +28,7 @@ jobs:
         with:
           filters: |
             helm:
+              - 'ascend-device-plugin.yaml'
               - 'charts/ascend-device-plugin/**'
               - 'Makefile'
               - '.github/workflows/helm-lint.yaml'
@@ -62,6 +63,30 @@ jobs:
         run: |
           make verify-helm-chart
           make verify-helm-release-path
+
+      - name: Verify manifest and chart image alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          image_of() { awk '$1 == "-" && $2 == "image:" { gsub(/"/, "", $3); print $3; exit }'; }
+
+          app_version="$(awk '$1 == "appVersion:" { gsub(/"/, "", $2); print $2; exit }' charts/ascend-device-plugin/Chart.yaml)"
+          expected_image="projecthami/ascend-device-plugin:${app_version}"
+          manifest_image="$(image_of <ascend-device-plugin.yaml)"
+          chart_image="$(helm template ascend-device-plugin charts/ascend-device-plugin | image_of)"
+
+          if [[ "${manifest_image}" != "${expected_image}" ]]; then
+            echo "ascend-device-plugin.yaml pins ${manifest_image}, but Chart.yaml appVersion ${app_version} expects ${expected_image}" >&2
+            exit 1
+          fi
+
+          if [[ "${chart_image}" != "${expected_image}" ]]; then
+            echo "helm template renders ${chart_image} by default, expected ${expected_image}" >&2
+            exit 1
+          fi
+
+          echo "manifest and chart both ship ${expected_image}"
 
   helm-lint-required:
     runs-on: ubuntu-latest
