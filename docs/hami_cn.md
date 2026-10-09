@@ -44,17 +44,17 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 ### 部署 ConfigMap
 
 * **HAMi 和 `ascend-device-plugin` 在同一命名空间(推荐)**：跳过这一步，HAMi 现有的 `hami-scheduler-device` 已经包含 Ascend 配置。
-* **不同命名空间**：把 Ascend 的 ConfigMap 部署到 `ascend-device-plugin` 自己的命名空间下，然后手动把其中的 `vnpus:` 部分合并进 HAMi 现有的 `hami-scheduler-device`，不要动 HAMi 其他设备的配置。若 HAMi < v2.9.0，合并时要保留它自己的 `vnpus` 列表写法——那边的调度器读不了 `vnpus.configs`。以后修改模板、resourceName 或 `hamiVnpuCore` 时，两边同步更新。
+* **不同命名空间**：把 Ascend 的 ConfigMap 部署到 `ascend-device-plugin` 自己的命名空间下，然后手动把其中的 `vnpus:` 部分合并进 HAMi 现有的 `hami-scheduler-device`，不要动 HAMi 其他设备的配置。若 HAMi < v2.9.0，合并时要保留它自己的 `vnpus` 列表写法——那边的调度器读不了 `vnpus.configs`。以后修改模板、resourceName 或 `hamiVnpuMode` 时，两边同步更新。
 
   ```bash
   kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
   ```
 
-**注意：** `vnpus.hamiVnpuCore` 和 `vnpus.enpu` 分别启用两种运行时软切分后端；两者都为 `false` 时使用模板硬切分。节点配置中的 `hami-vnpu-core` 和 `enpu` 会覆盖全局设置。
+**注意：** `vnpus.hamiVnpuMode` 与配套 HAMi scheduler 一致，可选 `template`、`hami-core`（别名 `hamiCore`）或 `enpu`。节点 `hamiVnpuMode` 优先于全局模式。全局模式为空时默认 `template`；若旧的 `vnpus.hamiVnpuCore: true` 则使用 `hami-core`。旧节点 `hami-vnpu-core` 布尔值仅在节点模式为空时生效，未设置时继承全局模式。将尚未发布的 `vnpus.enpu` 和节点 `enpu` 开关改为对应层级的 `hamiVnpuMode: enpu`；已删除的开关和无效模式会导致启动失败。共享 ConfigMap 写入新字段前，应先升级配套 scheduler。
 
 #### （可选）节点自定义配置说明
 
-`hami-device-node-config` 用于对集群中特定节点的 hami-vnpu-core 进行启用或覆盖。节点级配置的优先级高于全局 `vnpus.hamiVnpuCore` 开关。
+`hami-device-node-config` 用于对集群中特定节点的 hami-vnpu-core 进行启用或覆盖。节点 `hamiVnpuMode` 优先于全局 `vnpus.hamiVnpuMode`，未设置模式时继承全局。
 
 同时支持 `filterDevices`，用于配置某个节点上 HAMi 需要忽略的设备。默认情况下 `filterDevices` 为空，表示不忽略任何设备。当设备 UUID 在 `uuid` 列表中，或设备索引在 `index` 列表中时，该设备会被 HAMi 忽略，例如：`filterDevices: {index: [0, 1], uuid: []}`。
 
@@ -74,7 +74,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 **注意：** 如果要独占整卡或者申请多张卡只需要设置对应的 resourceName 即可。如果多个任务要共享同一张卡，需要将 resourceName 设置为 1，并且设置对应的 ResourceMemoryName。
 
-**注意：** 只有为 Pod 配置了注解 `huawei.com/vnpu-mode: hami-core` 时，设备插件才会按 **软切分**（`libvnpu` / `hami-vnpu-core` 的挂载与环境变量）处理。**未添加**该注解的任务仍走 **原有 vNPU** 方案（虚拟化模板与 `ASCEND_VNPU_SPECS` 等），因此在只暴露 `hami-vnpu-core` 软切分能力的节点上，这类任务可能会一直处于 **Pending**。
+**注意：** 显式设置 `huawei.com/vnpu-mode: hami-core` 的 Pod 使用软切分，并匹配 hami-core 节点。省略模式注解时，任务跟随节点：hami-core 节点使用运行时软切分，template 节点使用原有虚拟化模板路径。ENPU 仍要求显式设置 `huawei.com/vnpu-mode: enpu`，ENPU 节点不会接收未指定模式的任务。
 
 ```yaml
 ...

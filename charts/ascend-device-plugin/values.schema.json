@@ -62,7 +62,6 @@
         "enpu": {
             "type": "object",
             "required": [
-                "enabled",
                 "runtimePath",
                 "monitorPath",
                 "preloadPath",
@@ -82,9 +81,6 @@
                         "elastic",
                         "best-effort"
                     ]
-                },
-                "enabled": {
-                    "type": "boolean"
                 },
                 "exposeAllDevices": {
                     "type": "boolean"
@@ -135,6 +131,11 @@
                 }
             },
             "additionalProperties": false
+        },
+        "hamiVnpuMode": {
+            "type": [
+                "string"
+            ]
         },
         "image": {
             "type": "object",

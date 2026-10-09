@@ -41,14 +41,36 @@ helm install ascend-device-plugin ./charts/ascend-device-plugin \
 
 With this mode, the chart mounts the existing device config and still manages `hami-device-node-config` by default.
 
+## VNPU mode
+
+`hamiVnpuMode` selects `template`, `hami-core` (alias `hamiCore`), or `enpu`.
+The plugin and HAMi scheduler consume the same `vnpus.hamiVnpuMode` field.
+An empty global mode resolves to `template`. For compatibility, the released
+`hamiVnpuCore.enabled` chart value / `vnpus.hamiVnpuCore` config field still selects
+`hami-core` when the new mode is empty. An explicit mode takes precedence.
+
+Node `hamiVnpuMode` overrides the global mode. The deprecated node
+`hami-vnpu-core` boolean remains a fallback only when the node mode is empty:
+`true` selects `hami-core`, `false` selects `template`, and omission inherits
+the global mode. Entries containing only device filters or counts inherit too.
+The plugin publishes both `hami-vnpu-core` and `hami.io/enpu` capability annotations
+for HAMi, enabling exactly the selected backend.
+
+Replace the unreleased `enpu.enabled`, `vnpus.enpu`, or node `enpu` booleans with
+`hamiVnpuMode: enpu` at the corresponding level. Removed flags and invalid modes
+are rejected. When reusing an existing ConfigMap, set the global mode in that
+ConfigMap; this chart's `hamiVnpuMode` only controls the config it generates.
+Deploy the companion HAMi scheduler change before writing the new field to a
+shared ConfigMap. Older scheduler deployments can retain their legacy config.
+
 ## hami-vnpu-core
 
-Enable the global `vnpus.hamiVnpuCore` switch in the generated device config:
+Select `vnpus.hamiVnpuMode: hami-core` in the generated device config:
 
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --namespace kube-system \
-  --set hamiVnpuCore.enabled=true
+  --set hamiVnpuMode=hami-core
 ```
 
 ### Compute Oversell
@@ -60,7 +82,7 @@ admits `-core` requests against that budget:
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --namespace kube-system \
-  --set hamiVnpuCore.enabled=true \
+  --set hamiVnpuMode=hami-core \
   --set-json hamiVnpuCore.deviceCoreScaling=1.5
 ```
 
@@ -84,7 +106,7 @@ Enable ENPU mode when the node has the ubs-virt/vCANN-RT host assets installed:
 ```bash
 helm install ascend-device-plugin ./charts/ascend-device-plugin \
   --namespace kube-system \
-  --set enpu.enabled=true
+  --set hamiVnpuMode=enpu
 ```
 
 ENPU uses the same Ascend resource names as the device configuration, and selects
@@ -137,20 +159,20 @@ keep an explicit request equal to `-memory`, and the
 limit may be larger than the request when the manager has oversubscription
 enabled. A Pod must set `huawei.com/vnpu-mode: enpu`; an unannotated Pod is
 rejected on an ENPU-only node.
-ENPU and hami-vnpu-core can be enabled in the same installation. The pod's
-`huawei.com/vnpu-mode` annotation selects the backend. ENPU supports one physical
+ENPU and hami-vnpu-core can run on different nodes in the same installation.
+Each node selects one backend; the Pod annotation must match its capability. ENPU supports one physical
 NPU per container and does not use hami-core compute oversell.
 
 ## Node Configuration
 
-Override `nodeConfig` to enable or customize `hami-vnpu-core` per node. Each node may
-also override `deviceCoreScaling`:
+Override `nodeConfig` to select `hamiVnpuMode` per node. An omitted or empty mode
+inherits the global setting. Each node may also override `deviceCoreScaling`:
 
 ```yaml
 nodeConfig: |-
   nodes:
     - name: "ascend-node-1"
-      hami-vnpu-core: true
+      hamiVnpuMode: hami-core
       vDeviceCount: 8
       deviceCoreScaling: 1.5
 ```
@@ -170,7 +192,6 @@ nodeConfig: |-
 | daemonSet.name | string | `"hami-ascend-device-plugin"` | Device plugin DaemonSet name. |
 | enpu.configRoot | string | `"/var/lib/hami-enpu"` | Host directory for per-container ENPU configs. |
 | enpu.defaultPolicy | string | `"elastic"` | Default ENPU scheduling policy. |
-| enpu.enabled | bool | `false` | Enable ENPU in the generated device config. |
 | enpu.exposeAllDevices | bool | `false` | Expose all davinci devices; keep false for device isolation. |
 | enpu.managerConfigRoot | string | `""` | Manager config_dir or its vcann-rt subdirectory; empty uses configRoot. |
 | enpu.managerURL | string | `""` | Optional node-local enpu-manager REST endpoint. |
@@ -180,12 +201,13 @@ nodeConfig: |-
 | enpu.systemdDetectVirtPath | string | `""` | Optional host binary; prefer providing it in the workload image. |
 | fullnameOverride | string | `""` | Override the fully qualified resource name. |
 | hamiVnpuCore.deviceCoreScaling | float | `1` | hami-core compute oversell ratio. The plugin advertises `Devcore = round(100 * deviceCoreScaling)` so HAMi can admit more than 100% of `-core` on one card. Values below 1 are not supported. |
-| hamiVnpuCore.enabled | bool | `false` | Enable hami-vnpu-core in the generated global device configuration. |
+| hamiVnpuCore.enabled | bool | `false` | Deprecated. Used only when hamiVnpuMode is empty; prefer hamiVnpuMode: hami-core. |
+| hamiVnpuMode | string | `""` | Default backend: template, hami-core (alias hamiCore), or enpu. Empty uses template, or hami-core if the deprecated hamiVnpuCore.enabled is true. Node mode takes priority. |
 | image.pullPolicy | string | `"IfNotPresent"` | Kubernetes image pull policy. |
 | image.repository | string | `"projecthami/ascend-device-plugin"` | Container image repository. |
 | image.tag | string | `""` | Container image tag. Defaults to the chart `appVersion` when empty. |
 | nameOverride | string | `""` | Override the chart name used in resource names. |
-| nodeConfig | string | `"nodes: []"` | Per-node hami-vnpu-core configuration written to the node ConfigMap. |
+| nodeConfig | string | `"nodes: []"` | Per-node mode (hamiVnpuMode), device count, compute scaling and device filters written to the node ConfigMap. Omitted mode inherits the global mode. |
 | nodeConfigMap.create | bool | `true` | Create the per-node configuration ConfigMap. |
 | nodeConfigMap.name | string | `"hami-device-node-config"` | Per-node configuration ConfigMap name. |
 | nodeSelector.ascend | string | `"on"` | Node label value used to schedule the device plugin. |
