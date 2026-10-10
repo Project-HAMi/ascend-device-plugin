@@ -52,6 +52,11 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 **注意：** `vnpus.hamiVnpuMode` 与配套 HAMi scheduler 一致，可选 `template`、`hami-core`（别名 `hamiCore`）或 `enpu`。节点 `hamiVnpuMode` 优先于全局模式。全局模式为空时默认 `template`；若旧的 `vnpus.hamiVnpuCore: true` 则使用 `hami-core`。旧节点 `hami-vnpu-core` 布尔值仅在节点模式为空时生效，未设置时继承全局模式。将尚未发布的 `vnpus.enpu` 和节点 `enpu` 开关改为对应层级的 `hamiVnpuMode: enpu`；已删除的开关和无效模式会导致启动失败。共享 ConfigMap 写入新字段前，应先升级配套 scheduler。
 
+在 `hami-core` 模式下，`vnpus.vnpuDeviceSplitCount` 指定每张物理 NPU 的虚拟设备槽位数，省略或非正数时默认为 `10`。HAMi Chart 对应的参数是 `devices.ascend.vnpuDeviceSplitCount`；独立插件 Chart 创建配置时使用 `hamiVnpuCore.vnpuDeviceSplitCount`。正数节点配置 `vDeviceCount` 优先。模板模式保留按模板计算的容量；ENPU 保留独立的 100 槽位容量及节点覆盖上限。
+
+例如，两张健康 NPU 的切分数量为 `5` 时，kubelet 上报 `10` 个虚拟设备，HAMi 为每张 NPU 注册 `Count=5`。调度器按注册数量限制分配，显存和算力可能先耗尽。修改共享 ConfigMap 后，需要重启插件以重新读取配置。插件镜像必须包含切分数量支持；只设置 Chart 参数不能使旧镜像获得该功能。
+
+
 #### （可选）节点自定义配置说明
 
 `hami-device-node-config` 用于对集群中特定节点的 hami-vnpu-core 进行启用或覆盖。节点 `hamiVnpuMode` 优先于全局 `vnpus.hamiVnpuMode`，未设置模式时继承全局。

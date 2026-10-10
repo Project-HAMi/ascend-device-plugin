@@ -202,6 +202,7 @@ nodeConfig: |-
 | fullnameOverride | string | `""` | Override the fully qualified resource name. |
 | hamiVnpuCore.deviceCoreScaling | float | `1` | hami-core compute oversell ratio. The plugin advertises `Devcore = round(100 * deviceCoreScaling)` so HAMi can admit more than 100% of `-core` on one card. Values below 1 are not supported. |
 | hamiVnpuCore.enabled | bool | `false` | Deprecated. Used only when hamiVnpuMode is empty; prefer hamiVnpuMode: hami-core. |
+| hamiVnpuCore.vnpuDeviceSplitCount | int | `10` | Virtual-device slots per physical NPU in hami-core mode. A positive node vDeviceCount takes precedence; template and ENPU modes keep their own capacity. Used when config.create=true. |
 | hamiVnpuMode | string | `""` | Default backend: template, hami-core (alias hamiCore), or enpu. Empty uses template, or hami-core if the deprecated hamiVnpuCore.enabled is true. Node mode takes priority. |
 | image.pullPolicy | string | `"IfNotPresent"` | Kubernetes image pull policy. |
 | image.repository | string | `"projecthami/ascend-device-plugin"` | Container image repository. |

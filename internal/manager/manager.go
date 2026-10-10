@@ -163,7 +163,13 @@ func (am *AscendManager) VDeviceCount() int {
 		}
 		return am.nodeConfig.VDeviceCount
 	}
-	if am.IsEnpu() && !am.IsHamiVnpuCore() {
+	if am.IsHamiVnpuCore() {
+		if am.globalConfig.VNPUs.VNPUDeviceSplitCount > 0 {
+			return am.globalConfig.VNPUs.VNPUDeviceSplitCount
+		}
+		return 10
+	}
+	if am.IsEnpu() {
 		return 100
 	}
 	if len(am.config.Templates) == 0 {

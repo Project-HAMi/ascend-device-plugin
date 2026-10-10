@@ -116,6 +116,7 @@
         "hamiVnpuCore": {
             "type": "object",
             "required": [
+                "vnpuDeviceSplitCount",
                 "enabled",
                 "deviceCoreScaling"
             ],
@@ -128,6 +129,12 @@
                 },
                 "enabled": {
                     "type": "boolean"
+                },
+                "vnpuDeviceSplitCount": {
+                    "type": [
+                        "integer"
+                    ],
+                    "minimum": 1
                 }
             },
             "additionalProperties": false
