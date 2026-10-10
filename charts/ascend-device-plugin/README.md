@@ -163,12 +163,6 @@ ENPU and hami-vnpu-core can run on different nodes in the same installation.
 Each node selects one backend; the Pod annotation must match its capability. ENPU supports one physical
 NPU per container and does not use hami-core compute oversell.
 
-## Virtual-device capacity
-
-`vnpuDeviceSplitCount` defaults to `10` and sets virtual-device slots per physical NPU in `hami-core` mode when `config.create=true`. A positive node `vDeviceCount` takes precedence. Template mode keeps its template calculation and ENPU keeps its own capacity limit. When reusing HAMi's ConfigMap, set `devices.ascend.vnpuDeviceSplitCount` in the HAMi Chart instead.
-
-The same effective count is published to kubelet and HAMi. Memory or core capacity may be exhausted before all slots are used. Restart the plugin after changing an external device ConfigMap; it is read at startup. This requires a plugin image built with split-count support.
-
 ## Node Configuration
 
 Override `nodeConfig` to select `hamiVnpuMode` per node. An omitted or empty mode
@@ -208,6 +202,7 @@ nodeConfig: |-
 | fullnameOverride | string | `""` | Override the fully qualified resource name. |
 | hamiVnpuCore.deviceCoreScaling | float | `1` | hami-core compute oversell ratio. The plugin advertises `Devcore = round(100 * deviceCoreScaling)` so HAMi can admit more than 100% of `-core` on one card. Values below 1 are not supported. |
 | hamiVnpuCore.enabled | bool | `false` | Deprecated. Used only when hamiVnpuMode is empty; prefer hamiVnpuMode: hami-core. |
+| hamiVnpuCore.vnpuDeviceSplitCount | int | `10` | Virtual-device slots per physical NPU in hami-core mode. A positive node vDeviceCount takes precedence; template and ENPU modes keep their own capacity. Used when config.create=true. |
 | hamiVnpuMode | string | `""` | Default backend: template, hami-core (alias hamiCore), or enpu. Empty uses template, or hami-core if the deprecated hamiVnpuCore.enabled is true. Node mode takes priority. |
 | image.pullPolicy | string | `"IfNotPresent"` | Kubernetes image pull policy. |
 | image.repository | string | `"projecthami/ascend-device-plugin"` | Container image repository. |
@@ -227,4 +222,3 @@ nodeConfig: |-
 | runtimeClass.name | string | `"ascend"` | RuntimeClass resource name. |
 | serviceAccount.create | bool | `true` | Create a ServiceAccount for the device plugin. |
 | serviceAccount.name | string | `"hami-ascend"` | ServiceAccount name. Defaults to the chart fullname when empty and creation is enabled. |
-| vnpuDeviceSplitCount | int | `10` | Virtual-device slots per physical NPU in hami-core mode. A positive node vDeviceCount takes precedence; template and ENPU modes keep their own capacity. Used when config.create=true. |
