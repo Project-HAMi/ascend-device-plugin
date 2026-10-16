@@ -116,15 +116,21 @@ func TestVDeviceCountSoftSlicing(t *testing.T) {
 		{name: "zero node count inherits core", mode: "hami-core", splitCount: 7, node: &internal.NodeConfig{VDeviceCount: 0}, want: 7},
 		{name: "node selects template", mode: "hami-core", splitCount: 7, node: &internal.NodeConfig{HamiVnpuMode: "template"}, want: 4},
 		{name: "template ignores split count", mode: "template", splitCount: 7, want: 4},
-		{name: "ENPU ignores split count", mode: "enpu", splitCount: 7, want: 100},
-		{name: "node selects ENPU", mode: "hami-core", splitCount: 7, node: &internal.NodeConfig{HamiVnpuMode: "enpu"}, want: 100},
+		{name: "configured ENPU count", mode: "enpu", splitCount: 7, want: 7},
+		{name: "ENPU default", mode: "enpu", want: 10},
+		{name: "ENPU negative count falls back", mode: "enpu", splitCount: -1, want: 10},
+		{name: "ENPU global limit", mode: "enpu", splitCount: 101, want: 100},
+		{name: "ENPU exact global limit", mode: "enpu", splitCount: 100, want: 100},
+		{name: "ENPU node override", mode: "enpu", splitCount: 7, node: &internal.NodeConfig{VDeviceCount: 3}, want: 3},
+		{name: "core count above ENPU limit", mode: "hami-core", splitCount: 101, want: 101},
+		{name: "node selects ENPU", mode: "hami-core", splitCount: 7, node: &internal.NodeConfig{HamiVnpuMode: "enpu"}, want: 7},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			am := &AscendManager{
 				config: config,
 				globalConfig: internal.Config{VNPUs: internal.VNPUsConfig{
-					HamiVnpuMode:         tc.mode,
-					VNPUDeviceSplitCount: tc.splitCount,
+					HamiVnpuMode:     tc.mode,
+					DeviceSplitCount: tc.splitCount,
 				}},
 				nodeConfig: tc.node,
 			}
@@ -134,7 +140,7 @@ func TestVDeviceCountSoftSlicing(t *testing.T) {
 		})
 	}
 	t.Run("core without templates", func(t *testing.T) {
-		am := &AscendManager{globalConfig: internal.Config{VNPUs: internal.VNPUsConfig{HamiVnpuMode: "hami-core", VNPUDeviceSplitCount: 7}}}
+		am := &AscendManager{globalConfig: internal.Config{VNPUs: internal.VNPUsConfig{HamiVnpuMode: "hami-core", DeviceSplitCount: 7}}}
 		if got := am.VDeviceCount(); got != 7 {
 			t.Fatalf("VDeviceCount() = %d, want 7", got)
 		}
@@ -147,7 +153,7 @@ func TestVDeviceCountENPUSlotLimit(t *testing.T) {
 		name, globalMode, nodeMode string
 		count, want                int
 	}{
-		{"ENPU default", "enpu", "", 0, 100},
+		{"ENPU default", "enpu", "", 0, 10},
 		{"ENPU inherits with count override", "enpu", "", 101, 100},
 		{"node enables ENPU", "hami-core", "enpu", 200, 100},
 		{"ENPU exact limit", "enpu", "", 100, 100},

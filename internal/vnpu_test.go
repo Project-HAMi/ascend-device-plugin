@@ -387,15 +387,15 @@ func TestLoadNodeConfigModes(t *testing.T) {
 	}
 }
 
-func TestLoadConfigVNPUDeviceSplitCount(t *testing.T) {
-	config, err := LoadConfig(writeConfig(t, "vnpus:\n  vnpuDeviceSplitCount: 7\n  configs: []\n"))
+func TestLoadConfigDeviceSplitCount(t *testing.T) {
+	config, err := LoadConfig(writeConfig(t, "vnpus:\n  deviceSplitCount: 7\n  configs: []\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.VNPUs.VNPUDeviceSplitCount != 7 {
-		t.Fatalf("split count = %d, want 7", config.VNPUs.VNPUDeviceSplitCount)
+	if config.VNPUs.DeviceSplitCount != 7 {
+		t.Fatalf("split count = %d, want 7", config.VNPUs.DeviceSplitCount)
 	}
-	if _, err := LoadConfig(writeConfig(t, "vnpus:\n  vnpuDeviceSplitCount: invalid\n")); err == nil {
+	if _, err := LoadConfig(writeConfig(t, "vnpus:\n  deviceSplitCount: invalid\n")); err == nil {
 		t.Fatal("expected invalid split count to fail decoding")
 	}
 }

@@ -155,22 +155,21 @@ func (am *AscendManager) ResourceName() string {
 }
 
 func (am *AscendManager) VDeviceCount() int {
-	// Prefer the per-node override when present, mirroring IsHamiVnpuCore().
+	count := 0
 	if am.nodeConfig != nil && am.nodeConfig.VDeviceCount > 0 {
-		if am.IsEnpu() && am.nodeConfig.VDeviceCount > 100 {
-			klog.Warningf("vDeviceCount %d exceeds ENPU's 100 virtual-NPU slots; using 100", am.nodeConfig.VDeviceCount)
+		count = am.nodeConfig.VDeviceCount
+	} else if am.IsHamiVnpuCore() || am.IsEnpu() {
+		count = am.globalConfig.VNPUs.DeviceSplitCount
+		if count <= 0 {
+			count = 10
+		}
+	}
+	if count > 0 {
+		if am.IsEnpu() && count > 100 {
+			klog.Warningf("device count %d exceeds ENPU's 100 virtual-NPU slots; using 100", count)
 			return 100
 		}
-		return am.nodeConfig.VDeviceCount
-	}
-	if am.IsHamiVnpuCore() {
-		if am.globalConfig.VNPUs.VNPUDeviceSplitCount > 0 {
-			return am.globalConfig.VNPUs.VNPUDeviceSplitCount
-		}
-		return 10
-	}
-	if am.IsEnpu() {
-		return 100
+		return count
 	}
 	if len(am.config.Templates) == 0 {
 		return 1

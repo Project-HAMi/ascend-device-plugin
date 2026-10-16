@@ -51,7 +51,7 @@ type VNPUsConfig struct {
 	HamiVnpuMode string `json:"hamiVnpuMode,omitempty"`
 	EnpuPolicy   string `json:"enpuPolicy,omitempty"`
 
-	VNPUDeviceSplitCount int `json:"vnpuDeviceSplitCount"`
+	DeviceSplitCount int `json:"deviceSplitCount"`
 	// Deprecated: used only when HamiVnpuMode is empty.
 	HamiVnpuCore bool `json:"hamiVnpuCore,omitempty"`
 	// DeviceCoreScaling is the hami-core compute oversell ratio.

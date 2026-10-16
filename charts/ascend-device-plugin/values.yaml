@@ -78,9 +78,6 @@ nodeConfigMap: # @schema required:true;additionalProperties:false
 hamiVnpuMode: "" # @schema type:string
 
 hamiVnpuCore: # @schema required:true;additionalProperties:false
-  # hamiVnpuCore.vnpuDeviceSplitCount -- Virtual-device slots per physical NPU in hami-core mode. A positive node vDeviceCount takes precedence; template and ENPU modes keep their own capacity. Used when config.create=true.
-  vnpuDeviceSplitCount: 10 # @schema type:integer;minimum:1;required:true
-
   # hamiVnpuCore.enabled -- Deprecated. Used only when hamiVnpuMode is empty; prefer hamiVnpuMode: hami-core.
   enabled: false # @schema required:true
 
@@ -107,11 +104,14 @@ enpu: # @schema required:true;additionalProperties:false
   # enpu.managerConfigRoot -- Manager config_dir or its vcann-rt subdirectory; empty uses configRoot.
   managerConfigRoot: "" # @schema type:string
 
+# deviceSplitCount -- Positive integer virtual-device slots per physical NPU in hami-core and ENPU modes. A positive node vDeviceCount takes precedence; ENPU is capped at 100. Template mode keeps its template calculation. Used when config.create=true.
+deviceSplitCount: 10 # @schema type:integer;minimum:1;required:true
+
 # @ignored
 deviceConfig: |- # @schema required:true
   vnpus:
     hamiVnpuMode: {{ include "ascend-device-plugin.vnpuMode" . | quote }}
-    vnpuDeviceSplitCount: {{ .Values.hamiVnpuCore.vnpuDeviceSplitCount | int64 }}
+    deviceSplitCount: {{ .Values.deviceSplitCount | int64 }}
     deviceCoreScaling: {{ .Values.hamiVnpuCore.deviceCoreScaling }}
     enpuPolicy: {{ .Values.enpu.defaultPolicy | quote }}
     configs:
