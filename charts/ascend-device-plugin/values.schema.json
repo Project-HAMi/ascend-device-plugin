@@ -13,6 +13,7 @@
         "nodeConfigMap",
         "hamiVnpuCore",
         "enpu",
+        "deviceSplitCount",
         "deviceConfig",
         "nodeConfig"
     ],
@@ -58,6 +59,12 @@
         },
         "deviceConfig": {
             "type": "string"
+        },
+        "deviceSplitCount": {
+            "type": [
+                "integer"
+            ],
+            "minimum": 1
         },
         "enpu": {
             "type": "object",

@@ -1,6 +1,6 @@
 # ascend-device-plugin
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: v1.4.0](https://img.shields.io/badge/AppVersion-v1.4.0-informational?style=flat-square)
+![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square)  ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)  ![AppVersion: v1.4.0](https://img.shields.io/badge/AppVersion-v1.4.0-informational?style=flat-square)
 
 HAMi Ascend device plugin
 
@@ -190,6 +190,7 @@ nodeConfig: |-
 | daemonSet.args[3] | string | `"/node-config.yaml"` |  |
 | daemonSet.args[4] | string | `"--v=4"` |  |
 | daemonSet.name | string | `"hami-ascend-device-plugin"` | Device plugin DaemonSet name. |
+| deviceSplitCount | int | `10` | Positive integer virtual-device slots per physical NPU in hami-core and ENPU modes. A positive node vDeviceCount takes precedence; ENPU is capped at 100. Template mode keeps its template calculation. Used when config.create=true. |
 | enpu.configRoot | string | `"/var/lib/hami-enpu"` | Host directory for per-container ENPU configs. |
 | enpu.defaultPolicy | string | `"elastic"` | Default ENPU scheduling policy. |
 | enpu.exposeAllDevices | bool | `false` | Expose all davinci devices; keep false for device isolation. |

@@ -100,13 +100,60 @@ func TestVDeviceCount(t *testing.T) {
 	}
 }
 
+func TestVDeviceCountSoftSlicing(t *testing.T) {
+	config := internal.VNPUConfig{MemoryAllocatable: 32768, Templates: []internal.Template{{Memory: 8192}}}
+	for _, tc := range []struct {
+		name, mode string
+		splitCount int
+		node       *internal.NodeConfig
+		want       int
+	}{
+		{name: "configured core count", mode: "hami-core", splitCount: 7, want: 7},
+		{name: "core default", mode: "hami-core", want: 10},
+		{name: "negative count falls back", mode: "hami-core", splitCount: -1, want: 10},
+		{name: "node enables core", mode: "template", splitCount: 7, node: &internal.NodeConfig{HamiVnpuMode: "hami-core"}, want: 7},
+		{name: "node count overrides core", mode: "hami-core", splitCount: 7, node: &internal.NodeConfig{VDeviceCount: 3}, want: 3},
+		{name: "zero node count inherits core", mode: "hami-core", splitCount: 7, node: &internal.NodeConfig{VDeviceCount: 0}, want: 7},
+		{name: "node selects template", mode: "hami-core", splitCount: 7, node: &internal.NodeConfig{HamiVnpuMode: "template"}, want: 4},
+		{name: "template ignores split count", mode: "template", splitCount: 7, want: 4},
+		{name: "configured ENPU count", mode: "enpu", splitCount: 7, want: 7},
+		{name: "ENPU default", mode: "enpu", want: 10},
+		{name: "ENPU negative count falls back", mode: "enpu", splitCount: -1, want: 10},
+		{name: "ENPU global limit", mode: "enpu", splitCount: 101, want: 100},
+		{name: "ENPU exact global limit", mode: "enpu", splitCount: 100, want: 100},
+		{name: "ENPU node override", mode: "enpu", splitCount: 7, node: &internal.NodeConfig{VDeviceCount: 3}, want: 3},
+		{name: "core count above ENPU limit", mode: "hami-core", splitCount: 101, want: 101},
+		{name: "node selects ENPU", mode: "hami-core", splitCount: 7, node: &internal.NodeConfig{HamiVnpuMode: "enpu"}, want: 7},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			am := &AscendManager{
+				config: config,
+				globalConfig: internal.Config{VNPUs: internal.VNPUsConfig{
+					HamiVnpuMode:     tc.mode,
+					DeviceSplitCount: tc.splitCount,
+				}},
+				nodeConfig: tc.node,
+			}
+			if got := am.VDeviceCount(); got != tc.want {
+				t.Fatalf("VDeviceCount() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+	t.Run("core without templates", func(t *testing.T) {
+		am := &AscendManager{globalConfig: internal.Config{VNPUs: internal.VNPUsConfig{HamiVnpuMode: "hami-core", DeviceSplitCount: 7}}}
+		if got := am.VDeviceCount(); got != 7 {
+			t.Fatalf("VDeviceCount() = %d, want 7", got)
+		}
+	})
+}
+
 func TestVDeviceCountENPUSlotLimit(t *testing.T) {
 	config := internal.VNPUConfig{MemoryAllocatable: 32768, Templates: []internal.Template{{Memory: 8192}}}
 	for _, tc := range []struct {
 		name, globalMode, nodeMode string
 		count, want                int
 	}{
-		{"ENPU default", "enpu", "", 0, 100},
+		{"ENPU default", "enpu", "", 0, 10},
 		{"ENPU inherits with count override", "enpu", "", 101, 100},
 		{"node enables ENPU", "hami-core", "enpu", 200, 100},
 		{"ENPU exact limit", "enpu", "", 100, 100},
@@ -115,7 +162,7 @@ func TestVDeviceCountENPUSlotLimit(t *testing.T) {
 		{"node selects template", "enpu", "template", 200, 200},
 		{"core override", "hami-core", "", 200, 200},
 		{"template override", "template", "", 200, 200},
-		{"core template count", "hami-core", "", 0, 4},
+		{"core default count", "hami-core", "", 0, 10},
 		{"template count", "template", "", 0, 4},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -259,8 +306,12 @@ func TestLoadConfigAcrossHAMiVersions(t *testing.T) {
 			if got := am.ResourceName(); got != tt.wantResourceName {
 				t.Errorf("ResourceName() = %q, want %q", got, tt.wantResourceName)
 			}
-			if got := am.VDeviceCount(); got != 4 {
-				t.Errorf("VDeviceCount() = %d, want 4", got)
+			wantCount := 4
+			if tt.wantHamiVnpuCore {
+				wantCount = 10
+			}
+			if got := am.VDeviceCount(); got != wantCount {
+				t.Errorf("VDeviceCount() = %d, want %d", got, wantCount)
 			}
 			if got := am.IsHamiVnpuCore(); got != tt.wantHamiVnpuCore {
 				t.Errorf("IsHamiVnpuCore() = %v, want %v", got, tt.wantHamiVnpuCore)
