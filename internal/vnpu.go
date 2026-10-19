@@ -48,8 +48,9 @@ type VNPUConfig struct {
 }
 
 type VNPUsConfig struct {
-	HamiVnpuMode string `json:"hamiVnpuMode,omitempty"`
-	EnpuPolicy   string `json:"enpuPolicy,omitempty"`
+	HamiVnpuMode   string `json:"hamiVnpuMode,omitempty"`
+	EnpuPolicy     string `json:"enpuPolicy,omitempty"`
+	HamiCorePolicy string `json:"hamiCorePolicy,omitempty" yaml:"hamiCorePolicy,omitempty"`
 
 	DeviceSplitCount int `json:"deviceSplitCount"`
 	// Deprecated: used only when HamiVnpuMode is empty.
@@ -66,6 +67,18 @@ const (
 	VNPUModeHamiCore = "hami-core"
 	VNPUModeENPU     = "enpu"
 )
+
+// ResolveHamiCorePolicy validates the runtime policy and defaults to spatial.
+func ResolveHamiCorePolicy(value string) (string, error) {
+	switch normalized := strings.ToLower(strings.TrimSpace(value)); normalized {
+	case "":
+		return "spatial", nil
+	case "dynamic", "fixed", "overdraft", "spatial":
+		return normalized, nil
+	default:
+		return "", fmt.Errorf("hamiCorePolicy must be dynamic, fixed, overdraft, or spatial, got %q", value)
+	}
+}
 
 func resolveVNPUMode(mode, fallback string) (string, error) {
 	switch normalized := strings.ToLower(strings.TrimSpace(mode)); normalized {
@@ -137,6 +150,9 @@ func LoadConfig(path string) (*Config, error) {
 		if _, err := yamlData.VNPUs.Mode(); err != nil {
 			return nil, fmt.Errorf("vnpus: %w", err)
 		}
+		if _, err := ResolveHamiCorePolicy(yamlData.VNPUs.HamiCorePolicy); err != nil {
+			return nil, fmt.Errorf("vnpus: %w", err)
+		}
 		// The shared HAMi config contains fields this plugin does not consume.
 		// Reject the removed flag explicitly without rejecting other vendors' fields.
 		var fields struct {
@@ -164,8 +180,9 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 type NodeConfig struct {
-	Name         string `json:"name" yaml:"name"`
-	HamiVnpuMode string `json:"hamiVnpuMode,omitempty" yaml:"hamiVnpuMode,omitempty"`
+	Name           string `json:"name" yaml:"name"`
+	HamiVnpuMode   string `json:"hamiVnpuMode,omitempty" yaml:"hamiVnpuMode,omitempty"`
+	HamiCorePolicy string `json:"hamiCorePolicy,omitempty" yaml:"hamiCorePolicy,omitempty"`
 	// Deprecated: used only when HamiVnpuMode is empty; nil inherits the global mode.
 	HamiVnpuCore      *bool         `json:"hami-vnpu-core,omitempty" yaml:"hami-vnpu-core,omitempty"`
 	VDeviceCount      int           `json:"vDeviceCount" yaml:"vDeviceCount"`
@@ -239,6 +256,9 @@ func LoadNodeConfig(path string) (*NodeListConfig, error) {
 	}
 	for i, node := range yamlData.Nodes {
 		if _, err := node.Mode(VNPUModeTemplate); err != nil {
+			return nil, fmt.Errorf("node %q: %w", node.Name, err)
+		}
+		if _, err := ResolveHamiCorePolicy(node.HamiCorePolicy); err != nil {
 			return nil, fmt.Errorf("node %q: %w", node.Name, err)
 		}
 		if _, exists := fields.Nodes[i]["enpu"]; exists {

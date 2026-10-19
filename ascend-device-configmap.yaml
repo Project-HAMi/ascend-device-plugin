@@ -12,6 +12,7 @@ data:
     vnpus:
       deviceSplitCount: 10
       hamiVnpuMode: template
+      hamiCorePolicy: spatial
       enpuPolicy: elastic
       deviceCoreScaling: 1
       configs:

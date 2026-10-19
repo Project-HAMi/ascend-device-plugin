@@ -59,7 +59,7 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 
 #### （可选）节点自定义配置说明
 
-`hami-device-node-config` 用于对集群中特定节点的 hami-vnpu-core 进行启用或覆盖。节点 `hamiVnpuMode` 优先于全局 `vnpus.hamiVnpuMode`，未设置模式时继承全局。
+`hami-device-node-config` 用于对集群中特定节点的 hami-vnpu-core 进行启用或覆盖。节点 `hamiVnpuMode` 优先于全局 `vnpus.hamiVnpuMode`，未设置模式时继承全局。hami-core 算力调度策略同样支持节点 `hamiCorePolicy` 覆盖全局 `vnpus.hamiCorePolicy`。
 
 同时支持 `filterDevices`，用于配置某个节点上 HAMi 需要忽略的设备。默认情况下 `filterDevices` 为空，表示不忽略任何设备。当设备 UUID 在 `uuid` 列表中，或设备索引在 `index` 列表中时，该设备会被 HAMi 忽略，例如：`filterDevices: {index: [0, 1], uuid: []}`。
 
@@ -103,7 +103,7 @@ spec:
 
 ### 软切分配置 (hami-vnpu-core)
 
-需要 **软切分** 时请显式加上下文中的注解；不加则仍为 **模板硬切分 vNPU**（与上一节说明一致）。
+设置 `huawei.com/vnpu-mode: hami-core` 可显式选择软切分。省略模式注解时，任务按上一节所述跟随节点后端。hami-core 的算力策略默认使用 `spatial`；后端默认值仍为 `template`。
 
 ```yaml
 apiVersion: v1
@@ -124,9 +124,29 @@ spec:
           huawei.com/Ascend910B3-core: "40"      # 请求 40% 的算力
 ```
 
-**注意：** `-core` 是可选的。与 `-memory`（省略时默认使用整卡）不同，省略 `-core` 默认值为 **0**，即不预留专属算力。它只有在设置了 `huawei.com/vnpu-mode: hami-core` 时才生效；未加该注解时设置 `-core` 会被拒绝。
+`-memory` 单位为 MiB，省略时默认使用整卡。`-core` 是可选的：省略或为零时，HAMi 不预留算力，插件将运行时上限设为 **100**。正数上限必须在 1–100 之间；负数和大于 100 的配额会被拒绝。申请算力配额时请显式添加 hami-core 模式注解。
 
-软切分机制支持在单个 Pod 中申请多个虚拟设备。在进行多卡并行推理（如使用 vLLM）时，`--gpu-memory-utilization` 的值不能大于"容器总显存上限"占"所选卡物理显存总和"的比例。
+插件通过 `NPU_MEMORY_LIMIT_MB` 和 `NPU_COMPUTE_LIMIT` 将调度配额传给运行库，由 `NPU_SCHED_POLICY` 选择算力机制：
+
+| 策略 | 算力行为 |
+| --- | --- |
+| `spatial`（默认） | 通过 CANN 设置协作式 Cube/Vector 核数预算，两类核分别向上取整。20 Cube / 40 Vector 的 31% 配置得到 7 / 13。支持资源预算的算子使用这些设置；它不等同于独占硬件分区，也不保证 token 吞吐按比例分配。 |
+| `dynamic` | 按相对份额进行时间调度，允许借用空闲算力。 |
+| `fixed` | 以运行/休眠时间比例控制目标百分比。 |
+| `overdraft` | 在 Dynamic 时间调度基础上允许 IDLE 状态下的有界借用。 |
+
+全局策略通过设备 ConfigMap 的 `vnpus.hamiCorePolicy` 设置，独立 Chart 对应 `hamiVnpuCore.defaultPolicy`。节点 `hamiCorePolicy` 覆盖全局值，Pod 的 `huawei.com/npu-sched-policy` 覆盖前两者，全部省略时使用 `spatial`。合法值为上表中的四种策略；ENPU 继续使用独立的 `huawei.com/enpu-policy` 注解。
+
+```yaml
+metadata:
+  annotations:
+    huawei.com/vnpu-mode: hami-core
+    huawei.com/npu-sched-policy: overdraft
+```
+
+应同时部署更新后的插件及其锁定的 hami-vnpu-core `b19ef02` 运行库。旧运行库不识别新配额变量；新运行库会拒绝 `NPU_MEM_QUOTA`、`NPU_PRIORITY` 和 `NPU_FIXED_SHARE_RATIO`。替换节点运行库前先停止 hami-core 业务。升级或切换策略时，使用新进程及新的容器级本地 SHM 文件；共享同一本地 SHM 文件的进程必须使用相同策略、配额和 PID 命名空间。Spatial 绕过时间调度，同时保留共享 HBM 记账和进程清理。
+
+多卡分配要求每张卡的算力配额相同，不同算力配额会被拒绝。HAMi 调度的显存配额按卡计算，插件将各卡配额相加后写入 `NPU_MEMORY_LIMIT_MB`，用于所选设备之间的容器级 HBM 总量记账；这个聚合上限不提供各卡独立显存限额。多卡推理时，`--gpu-memory-utilization` 不应超过申请的显存总量与所选卡物理显存总量的比例。业务使用 Ascend 运行时在容器内的逻辑设备号：HAMi 选中其他物理卡时，不应把宿主机卡号直接当作业务的逻辑设备号。
 
 ### vCANN-RT 运行时软切分（enpu）
 
@@ -202,7 +222,7 @@ spec:
       resources:
         limits:
           huawei.com/Ascend910B3: "2"           # 申请 2 块虚拟设备进行并行计算
-          huawei.com/Ascend910B3-memory: "65536" # 容器可用的总显存上限（2 卡合计 64GiB）
+          huawei.com/Ascend910B3-memory: "32768" # 每卡 32GiB，2 卡运行时聚合上限为 64GiB
           huawei.com/Ascend910B3-core: "50"
 ```
 

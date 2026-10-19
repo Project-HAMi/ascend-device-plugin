@@ -19,6 +19,7 @@ package manager
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"ascend-common/devmanager"
@@ -402,6 +403,15 @@ func (am *AscendManager) vnpuMode() (string, error) {
 // EnpuPolicy returns the default ENPU scheduling policy.
 func (am *AscendManager) EnpuPolicy() string {
 	return am.globalConfig.VNPUs.EnpuPolicy
+}
+
+// HamiCorePolicy returns the runtime policy, preferring a nonempty node override.
+// Empty values are resolved to the default by the allocating server.
+func (am *AscendManager) HamiCorePolicy() string {
+	if am.nodeConfig != nil && strings.TrimSpace(am.nodeConfig.HamiCorePolicy) != "" {
+		return am.nodeConfig.HamiCorePolicy
+	}
+	return am.globalConfig.VNPUs.HamiCorePolicy
 }
 
 // DeviceCoreScaling returns the hami-core oversell ratio in effect, preferring

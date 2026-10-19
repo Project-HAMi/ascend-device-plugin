@@ -81,6 +81,9 @@ hamiVnpuCore: # @schema required:true;additionalProperties:false
   # hamiVnpuCore.enabled -- Deprecated. Used only when hamiVnpuMode is empty; prefer hamiVnpuMode: hami-core.
   enabled: false # @schema required:true
 
+  # hamiVnpuCore.defaultPolicy -- Default hami-core compute policy: spatial, dynamic, fixed, or overdraft. Pod huawei.com/npu-sched-policy and node hamiCorePolicy override it.
+  defaultPolicy: spatial # @schema required:true;enum:[spatial,dynamic,fixed,overdraft]
+
   # hamiVnpuCore.deviceCoreScaling -- (float) hami-core compute oversell ratio. The plugin advertises `Devcore = round(100 * deviceCoreScaling)` so HAMi can admit more than 100% of `-core` on one card. Values below 1 are not supported.
   deviceCoreScaling: 1 # @schema required:true;type:number;minimum:1
 
@@ -111,6 +114,7 @@ deviceSplitCount: 10 # @schema type:integer;minimum:1;required:true
 deviceConfig: |- # @schema required:true
   vnpus:
     hamiVnpuMode: {{ include "ascend-device-plugin.vnpuMode" . | quote }}
+    hamiCorePolicy: {{ .Values.hamiVnpuCore.defaultPolicy | quote }}
     deviceSplitCount: {{ .Values.deviceSplitCount | int64 }}
     deviceCoreScaling: {{ .Values.hamiVnpuCore.deviceCoreScaling }}
     enpuPolicy: {{ .Values.enpu.defaultPolicy | quote }}
@@ -239,6 +243,6 @@ deviceConfig: |- # @schema required:true
       aiCore: 20
       aiCPU: 7
 
-# nodeConfig -- Per-node mode (hamiVnpuMode), device count, compute scaling and device filters written to the node ConfigMap. Omitted mode inherits the global mode.
+# nodeConfig -- Per-node mode (hamiVnpuMode), hami-core policy (hamiCorePolicy), device count, compute scaling and device filters written to the node ConfigMap. Omitted fields inherit global mode and policy.
 nodeConfig: |- # @schema required:true
   nodes: []
