@@ -124,9 +124,19 @@
             "type": "object",
             "required": [
                 "enabled",
+                "defaultPolicy",
                 "deviceCoreScaling"
             ],
             "properties": {
+                "defaultPolicy": {
+                    "type": "string",
+                    "enum": [
+                        "spatial",
+                        "dynamic",
+                        "fixed",
+                        "overdraft"
+                    ]
+                },
                 "deviceCoreScaling": {
                     "type": [
                         "number"

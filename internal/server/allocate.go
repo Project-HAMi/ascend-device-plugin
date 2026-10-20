@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
@@ -30,8 +29,6 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, ctrName stri
 
 	var (
 		IDs            []int32
-		memories       []*int64
-		cores          []*int32
 		ascendVNPUSpec string
 	)
 
@@ -45,12 +42,6 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, ctrName stri
 		if info, ok := rtInfoLookup[dev.UUID]; ok {
 			if ascendVNPUSpec == "" && info.Temp != "" {
 				ascendVNPUSpec = info.Temp
-			}
-			if info.Memory != nil {
-				memories = append(memories, info.Memory)
-			}
-			if info.Core != nil {
-				cores = append(cores, info.Core)
 			}
 		}
 	}
@@ -111,71 +102,7 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, ctrName stri
 		return resp, nil
 	}
 	if effectiveHamiCore {
-		// 1. Handle volume mount injection
-		var mounts []*v1beta1.Mount
-		// A.Huawei driver and SMI toolchain (Read-Only)
-		driverPaths := []string{
-			"/usr/local/bin/npu-smi",
-			"/etc/ascend_install.info",
-			"/usr/local/Ascend/driver/lib64/driver",
-			"/usr/local/Ascend/driver/version.info",
-		}
-		for _, p := range driverPaths {
-			mounts = append(mounts, &v1beta1.Mount{HostPath: p, ContainerPath: p, ReadOnly: true})
-		}
-
-		mounts = append(mounts, &v1beta1.Mount{
-			HostPath:      "/usr/local/hami-vnpu-core",
-			ContainerPath: "/hami-vnpu-core",
-			ReadOnly:      true,
-		})
-		// B. Inject HAMi library path by mounting /etc/ld.so.preload.
-		mounts = append(mounts, &v1beta1.Mount{
-			HostPath:      "/usr/local/hami-vnpu-core/ld.so.preload", // Template file on host
-			ContainerPath: "/etc/ld.so.preload",                      // Overwrites the target file in container
-			ReadOnly:      true,
-		})
-
-		// C. Shared directory for HAMi compute resource partitioning (Read/Write)
-		mounts = append(mounts, &v1beta1.Mount{
-			HostPath:      "/usr/local/hami-shared-region",
-			ContainerPath: "/hami-shared-region",
-			ReadOnly:      false,
-		})
-		resp.Mounts = mounts
-
-		// Set NPU_MEM_QUOTA
-		if len(memories) > 0 && memories[0] != nil {
-			resp.Envs["NPU_MEM_QUOTA"] = strconv.FormatInt(*memories[0], 10)
-			klog.V(4).InfoS("Memory quota set", "value", *memories[0])
-		}
-
-		// Set NPU_PRIORITY
-		if len(cores) > 0 && cores[0] != nil {
-			resp.Envs["NPU_PRIORITY"] = strconv.FormatInt(int64(*cores[0]), 10)
-			klog.V(4).InfoS("Core priority set", "value", *cores[0])
-		}
-
-		// Set GLOBAL_SHM_PATH based on the first device ID.
-		resp.Envs["NPU_GLOBAL_SHM_PATH"] = fmt.Sprintf("/hami-shared-region/%d_global_registry", IDs[0])
-		klog.V(5).Infof("Create %d_global_registry", IDs[0])
-
-		// Per-container local shmem dir (like NVIDIA vgpu/containers/{podUID}_{ctrName})
-		containerShmemDir := fmt.Sprintf("%s/containers/%s_%s", hostHookPath, pod.UID, ctrName)
-		_ = os.RemoveAll(containerShmemDir)
-		if err := os.MkdirAll(containerShmemDir, 0777); err != nil {
-			klog.Warningf("MkdirAll %s: %v", containerShmemDir, err)
-		}
-		if err := os.Chmod(containerShmemDir, 0777); err != nil {
-			klog.Warningf("Chmod %s: %v", containerShmemDir, err)
-		}
-		resp.Mounts = append(resp.Mounts, &v1beta1.Mount{
-			HostPath:      containerShmemDir,
-			ContainerPath: "/hami-vnpu-shmem",
-			ReadOnly:      false,
-		})
-		resp.Envs["NPU_LOCAL_SHM_PATH"] = "/hami-vnpu-shmem/vnpu_local_shmem"
-		klog.V(4).Infof("Local shmem for %s/%s: host=%s", pod.UID, ctrName, containerShmemDir)
+		return ps.buildHamiCoreAllocateResponse(resp, pod, ctrName, containerDevs, rtInfoLookup)
 	} else {
 		if ascendVNPUSpec != "" {
 			resp.Envs["ASCEND_VNPU_SPECS"] = ascendVNPUSpec

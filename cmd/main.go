@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"github.com/Project-HAMi/HAMi/pkg/util/client"
@@ -145,7 +146,7 @@ func main() {
 			klog.Fatalf("load node config failed: %v", err)
 		}
 	}
-	server, err := server.NewPluginServer(mgr, *nodeName, *checkIdleVNPUInterval, *enablePeriodicIdleVNPUCleanup)
+	pluginServer, err := server.NewPluginServer(mgr, *nodeName, *checkIdleVNPUInterval, *enablePeriodicIdleVNPUCleanup)
 	if err != nil {
 		klog.Fatalf("init PluginServer failed, error is %v", err)
 	}
@@ -158,13 +159,13 @@ func main() {
 					klog.Errorf("recovered from panic in vNPU metrics server: %v", r)
 				}
 			}()
-			monitor.StartMetricsServerForModes(":9395", "/usr/local/hami-vnpu-core/containers", mgr.IsHamiVnpuCore(), mgr.IsEnpu())
+			monitor.StartMetricsServerForModes(":9395", filepath.Join(server.HamiCoreHostPath(), "containers"), mgr.IsHamiVnpuCore(), mgr.IsEnpu())
 		}()
 	} else {
 		klog.Info("hami-vnpu-core and ENPU disabled on this node; not starting the vNPU metrics server")
 	}
 
-	if err = start(server); err != nil {
+	if err = start(pluginServer); err != nil {
 		klog.Fatalf("start PluginServer failed, error is %v", err)
 	}
 }

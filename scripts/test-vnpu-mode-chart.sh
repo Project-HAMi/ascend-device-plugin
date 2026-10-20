@@ -32,6 +32,15 @@ check_mode enpu --set-string 'hamiVnpuMode= ENPU '
 check_mode hami-core --set hamiVnpuCore.enabled=true
 check_mode template --set hamiVnpuCore.enabled=true --set hamiVnpuMode=template
 check_mode enpu --set hamiVnpuCore.enabled=true --set hamiVnpuMode=enpu
+grep -Fq 'hamiCorePolicy: "spatial"' "$work/rendered.yaml"
+for policy in spatial dynamic fixed overdraft; do
+    "$helm" template mode-test "$chart" --set "hamiVnpuCore.defaultPolicy=$policy" > "$work/rendered.yaml"
+    grep -Fq "hamiCorePolicy: \"$policy\"" "$work/rendered.yaml"
+done
+reject --set hamiVnpuCore.defaultPolicy=elastic
+reject --set hamiVnpuCore.defaultPolicy=unknown
+reject --set hamiVnpuCore.defaultPolicy=false
+reject --set hamiVnpuCore.defaultPolicy=
 reject --set hamiVnpuMode=enup
 reject --set hamiVnpuMode=false
 reject --set-string hamiVnpuCore.enabled=true
@@ -42,4 +51,4 @@ reject --set hamiVnpuMode=enup --set-string 'deviceConfig=vnpus: {}'
 
 "$helm" template mode-test "$chart" -f "$chart/../../examples/enpu/device-plugin-values.yaml" > "$work/rendered.yaml"
 grep -Fq 'hamiVnpuMode: enpu' "$work/rendered.yaml"
-echo 'VNPU mode chart checks passed'
+echo 'VNPU mode and hami-core policy chart checks passed'

@@ -228,7 +228,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 				return &PluginServer{
 					mgr: &FakeManager{
 						GetDeviceByUUIDFunc: func(uuid string) *manager.Device {
-							return &manager.Device{UUID: "uuid1", PhyID: 3}
+							return &manager.Device{UUID: "uuid1", PhyID: 3, Memory: 65536}
 						},
 					},
 					allocAnno: allocAnno,
@@ -316,7 +316,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 				return &PluginServer{
 					mgr: &FakeManager{
 						GetDeviceByUUIDFunc: func(uuid string) *manager.Device {
-							return &manager.Device{UUID: "uuid1", PhyID: 3}
+							return &manager.Device{UUID: "uuid1", PhyID: 3, Memory: 65536}
 						},
 					},
 					allocAnno: allocAnno,
@@ -342,8 +342,8 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 			want: buildContainerAllocateResponseWant{
 				envs: map[string]string{
 					"ASCEND_VISIBLE_DEVICES": "3",
-					"NPU_MEM_QUOTA":          "16384",
-					"NPU_PRIORITY":           "4",
+					"NPU_MEMORY_LIMIT_MB":    "16384",
+					"NPU_COMPUTE_LIMIT":      "4",
 					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/3_global_registry",
 				},
 				mounts: []*v1beta1.Mount{
@@ -351,8 +351,8 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 					{HostPath: "/etc/ascend_install.info", ContainerPath: "/etc/ascend_install.info", ReadOnly: true},
 					{HostPath: "/usr/local/Ascend/driver/lib64/driver", ContainerPath: "/usr/local/Ascend/driver/lib64/driver", ReadOnly: true},
 					{HostPath: "/usr/local/Ascend/driver/version.info", ContainerPath: "/usr/local/Ascend/driver/version.info", ReadOnly: true},
-					{HostPath: "/usr/local/hami-vnpu-core", ContainerPath: "/hami-vnpu-core", ReadOnly: true},
-					{HostPath: "/usr/local/hami-vnpu-core/ld.so.preload", ContainerPath: "/etc/ld.so.preload", ReadOnly: true},
+					{HostPath: hostHookPath, ContainerPath: "/hami-vnpu-core", ReadOnly: true},
+					{HostPath: hostHookPath + "/ld.so.preload", ContainerPath: "/etc/ld.so.preload", ReadOnly: true},
 					{HostPath: "/usr/local/hami-shared-region", ContainerPath: "/hami-shared-region", ReadOnly: false},
 					{HostPath: hostHookPath + "/containers/_", ContainerPath: "/hami-vnpu-shmem", ReadOnly: false},
 				},
@@ -364,7 +364,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 				return &PluginServer{
 					mgr: &FakeManager{
 						GetDeviceByUUIDFunc: func(uuid string) *manager.Device {
-							return &manager.Device{UUID: "uuid1", PhyID: 3}
+							return &manager.Device{UUID: "uuid1", PhyID: 3, Memory: 65536}
 						},
 					},
 					allocAnno: allocAnno,
@@ -384,6 +384,9 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 			want: buildContainerAllocateResponseWant{
 				envs: map[string]string{
 					"ASCEND_VISIBLE_DEVICES": "3",
+					"NPU_MEMORY_LIMIT_MB":    "65536",
+					"NPU_COMPUTE_LIMIT":      "100",
+					"NPU_SCHED_POLICY":       "spatial",
 					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/3_global_registry",
 				},
 			},
@@ -417,8 +420,8 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 			},
 			want: buildContainerAllocateResponseWant{
 				envs: map[string]string{
-					"NPU_MEM_QUOTA": "8192",
-					"NPU_PRIORITY":  "2",
+					"NPU_MEMORY_LIMIT_MB": "8192",
+					"NPU_COMPUTE_LIMIT":   "2",
 				},
 			},
 		},
@@ -428,7 +431,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 				return &PluginServer{
 					mgr: &FakeManager{
 						GetDeviceByUUIDFunc: func(uuid string) *manager.Device {
-							return &manager.Device{UUID: "uuid1", PhyID: 3}
+							return &manager.Device{UUID: "uuid1", PhyID: 3, Memory: 65536}
 						},
 						IsHamiVnpuCoreFunc: func() bool { return true },
 					},
@@ -449,8 +452,8 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 			want: buildContainerAllocateResponseWant{
 				envs: map[string]string{
 					"ASCEND_VISIBLE_DEVICES": "3",
-					"NPU_MEM_QUOTA":          "8738",
-					"NPU_PRIORITY":           "4",
+					"NPU_MEMORY_LIMIT_MB":    "8738",
+					"NPU_COMPUTE_LIMIT":      "4",
 					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/3_global_registry",
 				},
 				mounts: []*v1beta1.Mount{
@@ -458,8 +461,8 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 					{HostPath: "/etc/ascend_install.info", ContainerPath: "/etc/ascend_install.info", ReadOnly: true},
 					{HostPath: "/usr/local/Ascend/driver/lib64/driver", ContainerPath: "/usr/local/Ascend/driver/lib64/driver", ReadOnly: true},
 					{HostPath: "/usr/local/Ascend/driver/version.info", ContainerPath: "/usr/local/Ascend/driver/version.info", ReadOnly: true},
-					{HostPath: "/usr/local/hami-vnpu-core", ContainerPath: "/hami-vnpu-core", ReadOnly: true},
-					{HostPath: "/usr/local/hami-vnpu-core/ld.so.preload", ContainerPath: "/etc/ld.so.preload", ReadOnly: true},
+					{HostPath: hostHookPath, ContainerPath: "/hami-vnpu-core", ReadOnly: true},
+					{HostPath: hostHookPath + "/ld.so.preload", ContainerPath: "/etc/ld.so.preload", ReadOnly: true},
 					{HostPath: "/usr/local/hami-shared-region", ContainerPath: "/hami-shared-region", ReadOnly: false},
 					{HostPath: hostHookPath + "/containers/_", ContainerPath: "/hami-vnpu-shmem", ReadOnly: false},
 				},
@@ -471,7 +474,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 				return &PluginServer{
 					mgr: &FakeManager{
 						GetDeviceByUUIDFunc: func(uuid string) *manager.Device {
-							return &manager.Device{UUID: "uuid1", PhyID: 3}
+							return &manager.Device{UUID: "uuid1", PhyID: 3, Memory: 65536}
 						},
 						IsHamiVnpuCoreFunc: func() bool { return false },
 					},
@@ -553,7 +556,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 				return &PluginServer{
 					mgr: &FakeManager{
 						GetDeviceByUUIDFunc: func(uuid string) *manager.Device {
-							return &manager.Device{UUID: "uuid1", PhyID: 3}
+							return &manager.Device{UUID: "uuid1", PhyID: 3, Memory: 65536}
 						},
 					},
 					allocAnno: allocAnno,
@@ -635,15 +638,15 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 					core := int32(8)
 					return map[string]RuntimeInfo{
 						"uuid1": {UUID: "uuid1", Temp: "vir01", Memory: &mem, Core: &core},
-						"uuid2": {UUID: "uuid2", Temp: "vir02", Memory: nil, Core: nil},
+						"uuid2": {UUID: "uuid2", Temp: "vir02", Memory: &mem, Core: &core},
 					}
 				}(),
 			},
 			want: buildContainerAllocateResponseWant{
 				envs: map[string]string{
 					"ASCEND_VISIBLE_DEVICES": "0,1",
-					"NPU_MEM_QUOTA":          "32768",
-					"NPU_PRIORITY":           "8",
+					"NPU_MEMORY_LIMIT_MB":    "65536",
+					"NPU_COMPUTE_LIMIT":      "8",
 					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/0_global_registry",
 				},
 			},

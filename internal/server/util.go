@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"k8s.io/klog/v2"
 )
@@ -29,33 +28,39 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// A standard file copy implementation that preserves the original file permissions
+// Install by rename so an existing mapped library is never truncated in place.
 func copyFile(src, dst string) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = srcFile.Close()
-	}()
-
-	dstFile, err := os.Create(dst)
+	defer func() { _ = srcFile.Close() }()
+	info, err := srcFile.Stat()
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = dstFile.Close()
-	}()
-
-	if _, err = io.Copy(dstFile, srcFile); err != nil {
-		return err
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("source %s is not a regular file", src)
 	}
-
-	srcInfo, err := srcFile.Stat()
+	staged, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-*")
 	if err != nil {
 		return err
 	}
-	return os.Chmod(dst, srcInfo.Mode())
+	defer func() { _ = os.Remove(staged.Name()) }()
+	defer func() { _ = staged.Close() }()
+	if _, err := io.Copy(staged, srcFile); err != nil {
+		return err
+	}
+	if err := staged.Chmod(info.Mode().Perm()); err != nil {
+		return err
+	}
+	if err := staged.Sync(); err != nil {
+		return err
+	}
+	if err := staged.Close(); err != nil {
+		return err
+	}
+	return os.Rename(staged.Name(), dst)
 }
 
 // Automatically creates directories, sets permissions, and copies core files on the host
@@ -74,8 +79,11 @@ func prepareHostResources() error {
 	}
 	klog.Infof("Successfully prepared directory: %s", sharedRegionPath)
 
-	// 2. Prepare /usr/local/hami-vnpu-core/ directory
-	targetDir := "/usr/local/hami-vnpu-core"
+	// 2. Install into the same host directory used by Allocate.
+	targetDir := hostHookPath
+	if !filepath.IsAbs(targetDir) {
+		return fmt.Errorf("HOOK_PATH must be absolute, got %q", targetDir)
+	}
 	if err := os.MkdirAll(targetDir, 0775); err != nil {
 		return fmt.Errorf("failed to create %s: %w", targetDir, err)
 	}
@@ -86,33 +94,36 @@ func prepareHostResources() error {
 		assetsDir = "/usr/local/hami-vnpu-core-assets"
 	}
 
-	filesToCopy := map[string]string{
-		"libvnpu.so":    filepath.Join(targetDir, "libvnpu.so"),
-		"ld.so.preload": filepath.Join(targetDir, "ld.so.preload"),
+	// Validate the complete bundle before replacing either installed asset.
+	names := []string{"libvnpu.so", "ld.so.preload"}
+	expected := make(map[string]string, len(names))
+	for _, name := range names {
+		source := filepath.Join(assetsDir, name)
+		info, err := os.Stat(source)
+		if err != nil {
+			return fmt.Errorf("stat HAMi asset %s: %w", source, err)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("HAMi asset %s is not a regular file", source)
+		}
+		expected[name], err = fileSHA256(source)
+		if err != nil {
+			return fmt.Errorf("hash HAMi asset %s: %w", source, err)
+		}
 	}
-
-	for srcName, destPath := range filesToCopy {
-		srcPath := filepath.Join(assetsDir, srcName)
-
-		// File already exists, skip if content is consistent
-		if _, err := os.Stat(destPath); err == nil {
-			srcSum, err1 := fileSHA256(srcPath)
-			dstSum, err2 := fileSHA256(destPath)
-
-			if err1 == nil && err2 == nil && srcSum == dstSum {
-				klog.Infof("✓ %s already up-to-date, skipping", destPath)
-				continue
+	for _, name := range names {
+		source, destination := filepath.Join(assetsDir, name), filepath.Join(targetDir, name)
+		installed, err := fileSHA256(destination)
+		if err != nil || installed != expected[name] {
+			if err := copyFile(source, destination); err != nil {
+				return fmt.Errorf("install HAMi asset %s: %w", destination, err)
 			}
 		}
-
-		if err := copyFile(srcPath, destPath); err != nil {
-			if strings.Contains(err.Error(), "text file busy") {
-				klog.Warningf("⚠ %s is in use by running process, keeping existing version (safe)", destPath)
-				continue
-			}
-			return fmt.Errorf("failed to copy %s: %w", destPath, err)
+		installed, err = fileSHA256(destination)
+		if err != nil || installed != expected[name] {
+			return fmt.Errorf("HAMi asset %s does not match bundled SHA256 after install", destination)
 		}
-		klog.Infof("✓ Copied %s -> %s", srcPath, destPath)
+		klog.Infof("HAMi asset ready: %s SHA256=%s", destination, installed)
 	}
 
 	klog.Info("Host resource preparation completed successfully.")
