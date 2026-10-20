@@ -13,6 +13,7 @@
         "nodeConfigMap",
         "hamiVnpuCore",
         "enpu",
+        "deviceSplitCount",
         "deviceConfig",
         "nodeConfig"
     ],
@@ -59,10 +60,15 @@
         "deviceConfig": {
             "type": "string"
         },
+        "deviceSplitCount": {
+            "type": [
+                "integer"
+            ],
+            "minimum": 1
+        },
         "enpu": {
             "type": "object",
             "required": [
-                "enabled",
                 "runtimePath",
                 "monitorPath",
                 "preloadPath",
@@ -82,9 +88,6 @@
                         "elastic",
                         "best-effort"
                     ]
-                },
-                "enabled": {
-                    "type": "boolean"
                 },
                 "exposeAllDevices": {
                     "type": "boolean"
@@ -121,9 +124,19 @@
             "type": "object",
             "required": [
                 "enabled",
+                "defaultPolicy",
                 "deviceCoreScaling"
             ],
             "properties": {
+                "defaultPolicy": {
+                    "type": "string",
+                    "enum": [
+                        "spatial",
+                        "dynamic",
+                        "fixed",
+                        "overdraft"
+                    ]
+                },
                 "deviceCoreScaling": {
                     "type": [
                         "number"
@@ -135,6 +148,11 @@
                 }
             },
             "additionalProperties": false
+        },
+        "hamiVnpuMode": {
+            "type": [
+                "string"
+            ]
         },
         "image": {
             "type": "object",

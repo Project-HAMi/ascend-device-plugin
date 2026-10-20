@@ -14,7 +14,7 @@ Ascend device plugin 是用来支持在 [HAMi](https://github.com/Project-HAMi/H
 
 ### 2. 基于运行时拦截的软切分 (hami-vnpu-core)
 
-实现了基于 `libvnpu.so` 拦截和 limiter 令牌调度的软切分机制，能够实现精细化的资源共享。详细信息请参阅 [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core)。
+hami-core 后端通过 `libvnpu.so` 实现显存记账和算力共享，默认使用协作式 CANN Cube/Vector 核数预算（`spatial`），也可显式选择 `dynamic`、`fixed`、`overdraft` 时间调度策略。配置见 [HAMi 使用说明](docs/hami_cn.md#软切分配置-hami-vnpu-core) 和 [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core)。
 
 **注意：** `hami-vnpu-core` 目前只支持 ARM 平台。
 

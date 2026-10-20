@@ -11,6 +11,5 @@ enpu:
 nodeConfig: |-
   nodes:
     - name: replace-with-enpu-node-name
-      hami-vnpu-core: false
-      enpu: true
+      hamiVnpuMode: enpu
       vDeviceCount: 100

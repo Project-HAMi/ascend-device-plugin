@@ -310,3 +310,159 @@ func TestAdvertisedDevcore(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigVNPUMode(t *testing.T) {
+	for _, tc := range []struct{ name, fields, want string }{
+		{"default", "{}", "template"},
+		{"empty", "hamiVnpuMode: ''", "template"},
+		{"template", "hamiVnpuMode: template", "template"},
+		{"core", "hamiVnpuMode: hami-core", "hami-core"},
+		{"core alias", "hamiVnpuMode: hamiCore", "hami-core"},
+		{"ENPU", "hamiVnpuMode: enpu", "enpu"},
+		{"case and whitespace", "hamiVnpuMode: ' ENPU '", "enpu"},
+		{"legacy", "hamiVnpuCore: true", "hami-core"},
+		{"empty legacy", "hamiVnpuMode: ''\nhamiVnpuCore: true", "hami-core"},
+		{"null legacy", "hamiVnpuMode: null\nhamiVnpuCore: true", "hami-core"},
+		{"explicit template wins", "hamiVnpuMode: template\nhamiVnpuCore: true", "template"},
+		{"explicit ENPU wins", "hamiVnpuMode: enpu\nhamiVnpuCore: true", "enpu"},
+		{"shared scheduler fields", "hamiVnpuMode: enpu\noverwriteEnv: true\nruntimeClassName: ascend", "enpu"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config, err := LoadConfig(writeConfig(t, otherVendorSections+"vnpus:\n  "+strings.ReplaceAll(tc.fields, "\n", "\n  ")+"\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := config.VNPUs.Mode()
+			if err != nil || got != tc.want {
+				t.Fatalf("Mode() = %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadConfigRejectsInvalidModes(t *testing.T) {
+	for _, fields := range []string{
+		"hamiVnpuMode: enup", "hamiVnpuMode: false", "hamiVnpuMode: [enpu]",
+		"hamiVnpuMode: bad\nhamiVnpuCore: true", "enpu: true", "enpu: false", "enpu: null",
+	} {
+		t.Run(fields, func(t *testing.T) {
+			if _, err := LoadConfig(writeConfig(t, "vnpus:\n  "+strings.ReplaceAll(fields, "\n", "\n  ")+"\n")); err == nil {
+				t.Fatal("invalid mode configuration was accepted")
+			}
+		})
+	}
+}
+
+func TestLoadNodeConfigModes(t *testing.T) {
+	for _, tc := range []struct{ fields, want string }{
+		{"vDeviceCount: 8", "enpu"},
+		{"hamiVnpuMode: ''", "enpu"},
+		{"hamiVnpuMode: null", "enpu"},
+		{"hamiVnpuMode: ' HamiCore '", "hami-core"},
+		{"hami-vnpu-core: false", "template"},
+		{"hami-vnpu-core: true", "hami-core"},
+		{"hamiVnpuMode: template\nhami-vnpu-core: true", "template"},
+		{"hamiVnpuMode: enup", ""},
+		{"hamiVnpuMode: false", ""},
+		{"enpu: true", ""},
+		{"enpu: false", ""},
+		{"enpu: null", ""},
+	} {
+		t.Run(tc.fields, func(t *testing.T) {
+			cfg, err := LoadNodeConfig(writeConfig(t, "nodes:\n- name: test-node\n  "+strings.ReplaceAll(tc.fields, "\n", "\n  ")+"\n"))
+			if tc.want == "" {
+				if err == nil {
+					t.Fatal("invalid node mode was accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := cfg.Nodes[0].Mode("enpu")
+			if err != nil || got != tc.want {
+				t.Fatalf("Mode(enpu) = %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadConfigDeviceSplitCount(t *testing.T) {
+	config, err := LoadConfig(writeConfig(t, "vnpus:\n  deviceSplitCount: 7\n  configs: []\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.VNPUs.DeviceSplitCount != 7 {
+		t.Fatalf("split count = %d, want 7", config.VNPUs.DeviceSplitCount)
+	}
+	if _, err := LoadConfig(writeConfig(t, "vnpus:\n  deviceSplitCount: invalid\n")); err == nil {
+		t.Fatal("expected invalid split count to fail decoding")
+	}
+}
+
+func TestResolveHamiCorePolicy(t *testing.T) {
+	for _, tc := range []struct{ value, want string }{
+		{"", "spatial"}, {" \t", "spatial"}, {"spatial", "spatial"},
+		{"dynamic", "dynamic"}, {"fixed", "fixed"}, {"overdraft", "overdraft"},
+		{" SPATIAL ", "spatial"}, {" Fixed ", "fixed"},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			got, err := ResolveHamiCorePolicy(tc.value)
+			if err != nil || got != tc.want {
+				t.Fatalf("ResolveHamiCorePolicy(%q) = %q, %v; want %q", tc.value, got, err, tc.want)
+			}
+		})
+	}
+	for _, value := range []string{"fixed-share", "elastic", "true", "0", "spacial"} {
+		if _, err := ResolveHamiCorePolicy(value); err == nil || !strings.Contains(err.Error(), "hamiCorePolicy") {
+			t.Fatalf("ResolveHamiCorePolicy(%q) error = %v, want policy error", value, err)
+		}
+	}
+}
+
+func TestLoadHamiCorePolicy(t *testing.T) {
+	for _, tc := range []struct{ field, want string }{
+		{"", "spatial"}, {"hamiCorePolicy: ''", "spatial"}, {"hamiCorePolicy: null", "spatial"},
+		{"hamiCorePolicy: spatial", "spatial"}, {"hamiCorePolicy: dynamic", "dynamic"},
+		{"hamiCorePolicy: fixed", "fixed"}, {"hamiCorePolicy: overdraft", "overdraft"},
+		{"hamiCorePolicy: ' SPATIAL '", "spatial"},
+	} {
+		t.Run(tc.field, func(t *testing.T) {
+			global, err := LoadConfig(writeConfig(t, "vnpus:\n  configs: []\n  "+tc.field+"\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := ResolveHamiCorePolicy(global.VNPUs.HamiCorePolicy)
+			if err != nil || got != tc.want {
+				t.Fatalf("global policy = %q, %v; want %q", got, err, tc.want)
+			}
+			node, err := LoadNodeConfig(writeConfig(t, "nodes:\n- name: test-node\n  "+tc.field+"\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err = ResolveHamiCorePolicy(node.Nodes[0].HamiCorePolicy)
+			if err != nil || got != tc.want {
+				t.Fatalf("node policy = %q, %v; want %q", got, err, tc.want)
+			}
+			if (tc.field == "" || tc.field == "hamiCorePolicy: ''" || tc.field == "hamiCorePolicy: null") && node.Nodes[0].HamiCorePolicy != "" {
+				t.Fatal("empty node policy must remain empty to inherit the global setting")
+			}
+		})
+	}
+}
+
+func TestLoadRejectsInvalidHamiCorePolicy(t *testing.T) {
+	for _, field := range []string{
+		"hamiCorePolicy: spacial", "hamiCorePolicy: fixed-share", "hamiCorePolicy: false",
+		"hamiCorePolicy: 1", "hamiCorePolicy: [spatial]", "hamiCorePolicy: {name: spatial}",
+	} {
+		t.Run(field, func(t *testing.T) {
+			if _, err := LoadConfig(writeConfig(t, "vnpus:\n  "+field+"\n")); err == nil || !strings.Contains(err.Error(), "hamiCorePolicy") {
+				t.Fatalf("global invalid policy error = %v", err)
+			}
+			if _, err := LoadNodeConfig(writeConfig(t, "nodes:\n- name: test-node\n  "+field+"\n")); err == nil || !strings.Contains(err.Error(), "hamiCorePolicy") {
+				t.Fatalf("node invalid policy error = %v", err)
+			}
+		})
+	}
+}

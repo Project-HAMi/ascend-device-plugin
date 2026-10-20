@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -147,7 +148,7 @@ func main() {
 	if *nodeConfigFile != "" {
 		err = mgr.LoadNodeConfig(*nodeConfigFile, *nodeName)
 		if err != nil {
-			klog.Errorf("load node config failed: %v", err)
+			klog.Fatalf("load node config failed: %v", err)
 		}
 	}
 	client.InitGlobalClient()
@@ -173,7 +174,7 @@ func main() {
 					klog.Errorf("recovered from panic in vNPU metrics server: %v", r)
 				}
 			}()
-			monitor.StartMetricsServerForModes(":9395", "/usr/local/hami-vnpu-core/containers", mgr.IsHamiVnpuCore(), mgr.IsEnpu())
+			monitor.StartMetricsServerForModes(":9395", filepath.Join(server.HamiCoreHostPath(), "containers"), mgr.IsHamiVnpuCore(), mgr.IsEnpu())
 		}()
 	} else {
 		klog.Info("hami-vnpu-core and ENPU disabled on this node; not starting the vNPU metrics server")

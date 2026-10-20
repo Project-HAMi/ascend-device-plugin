@@ -14,7 +14,7 @@ Memory slicing is supported based on virtualization template. For detailed infor
 
 ### 2. Soft Slicing with Runtime Interception (hami-vnpu-core)
 
-This project implements  a soft slicing mechanism based on `libvnpu.so` interception and `limiter` token scheduling. For detailed information, check [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core)
+The hami-core backend uses `libvnpu.so` for memory accounting and compute sharing. It defaults to cooperative CANN Cube/Vector budgets (`spatial`), with explicit `dynamic`, `fixed`, and `overdraft` time-scheduling policies available. See the [HAMi configuration guide](docs/hami.md#soft-slicing-configuration-hami-vnpu-core) and [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core).
 
 **Note:** `hami-vnpu-core` currently only supports ARM platforms.
 

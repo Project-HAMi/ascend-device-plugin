@@ -49,6 +49,7 @@ update-chart-docs:
 verify-helm-chart:
 	$(MAKE) update-chart-docs
 	git diff --exit-code -- charts/ascend-device-plugin/README.md charts/ascend-device-plugin/values.schema.json
+	bash scripts/test-vnpu-mode-chart.sh
 	@set -eu; \
 	manifest="$$(mktemp)"; \
 	trap 'rm -f "$$manifest"' EXIT; \

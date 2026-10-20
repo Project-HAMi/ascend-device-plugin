@@ -19,6 +19,7 @@ package manager
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"ascend-common/devmanager"
@@ -170,16 +171,21 @@ func (am *AscendManager) ResourceName() string {
 }
 
 func (am *AscendManager) VDeviceCount() int {
-	// Prefer the per-node override when present, mirroring IsHamiVnpuCore().
+	count := 0
 	if am.nodeConfig != nil && am.nodeConfig.VDeviceCount > 0 {
-		if am.IsEnpu() && am.nodeConfig.VDeviceCount > 100 {
-			klog.Warningf("vDeviceCount %d exceeds ENPU's 100 virtual-NPU slots; using 100", am.nodeConfig.VDeviceCount)
+		count = am.nodeConfig.VDeviceCount
+	} else if am.IsHamiVnpuCore() || am.IsEnpu() {
+		count = am.globalConfig.VNPUs.DeviceSplitCount
+		if count <= 0 {
+			count = 10
+		}
+	}
+	if count > 0 {
+		if am.IsEnpu() && count > 100 {
+			klog.Warningf("device count %d exceeds ENPU's 100 virtual-NPU slots; using 100", count)
 			return 100
 		}
-		return am.nodeConfig.VDeviceCount
-	}
-	if am.IsEnpu() && !am.IsHamiVnpuCore() {
-		return 100
+		return count
 	}
 	if len(am.config.Templates) == 0 {
 		return 1
@@ -375,23 +381,36 @@ func (am *AscendManager) GetNodeConfig() *internal.NodeConfig {
 }
 
 func (am *AscendManager) IsHamiVnpuCore() bool {
-	if am.nodeConfig != nil {
-		return am.nodeConfig.HamiVnpuCore
-	}
-	return am.globalConfig.VNPUs.HamiVnpuCore
+	mode, err := am.vnpuMode()
+	return err == nil && mode == internal.VNPUModeHamiCore
 }
 
 // IsEnpu returns whether ENPU is enabled, preferring the node setting.
 func (am *AscendManager) IsEnpu() bool {
-	if am.nodeConfig != nil && am.nodeConfig.Enpu != nil {
-		return *am.nodeConfig.Enpu
+	mode, err := am.vnpuMode()
+	return err == nil && mode == internal.VNPUModeENPU
+}
+
+func (am *AscendManager) vnpuMode() (string, error) {
+	mode, err := am.globalConfig.VNPUs.Mode()
+	if err != nil || am.nodeConfig == nil {
+		return mode, err
 	}
-	return am.globalConfig.VNPUs.Enpu
+	return am.nodeConfig.Mode(mode)
 }
 
 // EnpuPolicy returns the default ENPU scheduling policy.
 func (am *AscendManager) EnpuPolicy() string {
 	return am.globalConfig.VNPUs.EnpuPolicy
+}
+
+// HamiCorePolicy returns the runtime policy, preferring a nonempty node override.
+// Empty values are resolved to the default by the allocating server.
+func (am *AscendManager) HamiCorePolicy() string {
+	if am.nodeConfig != nil && strings.TrimSpace(am.nodeConfig.HamiCorePolicy) != "" {
+		return am.nodeConfig.HamiCorePolicy
+	}
+	return am.globalConfig.VNPUs.HamiCorePolicy
 }
 
 // DeviceCoreScaling returns the hami-core oversell ratio in effect, preferring

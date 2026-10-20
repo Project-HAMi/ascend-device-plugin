@@ -50,3 +50,29 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- define "ascend-device-plugin.nodeConfigMapName" -}}
 {{- default "hami-device-node-config" .Values.nodeConfigMap.name -}}
 {{- end -}}
+
+{{/* Keep the default mode and legacy precedence aligned with HAMi. */}}
+{{- define "ascend-device-plugin.vnpuMode" -}}
+{{- if hasKey .Values.enpu "enabled" -}}
+  {{- fail "enpu.enabled has been removed; use hamiVnpuMode: enpu" -}}
+{{- end -}}
+{{- if not (kindIs "bool" .Values.hamiVnpuCore.enabled) -}}
+  {{- fail "hamiVnpuCore.enabled must be a boolean; use hamiVnpuMode instead" -}}
+{{- end -}}
+{{- $mode := "" -}}
+{{- if ne .Values.hamiVnpuMode nil -}}
+  {{- if not (kindIs "string" .Values.hamiVnpuMode) -}}
+    {{- fail "hamiVnpuMode must be a string: template, hami-core (or hamiCore), or enpu" -}}
+  {{- end -}}
+  {{- $mode = lower (trim .Values.hamiVnpuMode) -}}
+{{- end -}}
+{{- if eq $mode "" -}}
+  {{- $mode = ternary "hami-core" "template" .Values.hamiVnpuCore.enabled -}}
+{{- else if eq $mode "hamicore" -}}
+  {{- $mode = "hami-core" -}}
+{{- end -}}
+{{- if not (has $mode (list "template" "hami-core" "enpu")) -}}
+  {{- fail (printf "hamiVnpuMode must be template, hami-core (or hamiCore), or enpu, got %q" .Values.hamiVnpuMode) -}}
+{{- end -}}
+{{- $mode -}}
+{{- end -}}

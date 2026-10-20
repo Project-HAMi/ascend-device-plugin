@@ -44,17 +44,22 @@ kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-pl
 ### Deploy ConfigMap
 
 * **HAMi and `ascend-device-plugin` in the same namespace (recommended)**: skip this step — HAMi's existing `hami-scheduler-device` ConfigMap already covers Ascend.
-* **Different namespaces**: deploy the Ascend ConfigMap into `ascend-device-plugin`'s own namespace, then manually merge its `vnpus:` section into HAMi's existing `hami-scheduler-device` ConfigMap without touching HAMi's other device entries. On HAMi < v2.9.0, keep that ConfigMap's own `vnpus` list layout — its scheduler cannot read `vnpus.configs`. Keep both copies in sync whenever you change templates, resourceNames, or `hamiVnpuCore`.
+* **Different namespaces**: deploy the Ascend ConfigMap into `ascend-device-plugin`'s own namespace, then manually merge its `vnpus:` section into HAMi's existing `hami-scheduler-device` ConfigMap without touching HAMi's other device entries. On HAMi < v2.9.0, keep that ConfigMap's own `vnpus` list layout — its scheduler cannot read `vnpus.configs`. Keep both copies in sync whenever you change templates, resourceNames, or `hamiVnpuMode`.
 
   ```bash
   kubectl apply -f https://raw.githubusercontent.com/Project-HAMi/ascend-device-plugin/main/ascend-device-configmap.yaml
   ```
 
-**Note:** `vnpus.hamiVnpuCore` and `vnpus.enpu` enable the two runtime soft-slicing backends; when both are `false`, template-based hard slicing is used. The `hami-vnpu-core` and `enpu` node settings override the global values.
+**Note:** `vnpus.hamiVnpuMode` selects `template`, `hami-core` (alias `hamiCore`), or `enpu`, matching the companion HAMi scheduler. Node `hamiVnpuMode` takes priority. An empty global mode uses `template`, or `hami-core` when the deprecated `vnpus.hamiVnpuCore` is true. The deprecated node `hami-vnpu-core` boolean is used only when node mode is empty; omitted node settings inherit the global mode. Replace the unreleased `vnpus.enpu` and node `enpu` flags with `hamiVnpuMode: enpu`; removed flags and invalid modes fail startup. Upgrade the scheduler before writing the new field to its shared ConfigMap.
+
+In `hami-core` and `enpu` modes, `vnpus.deviceSplitCount` sets virtual-device slots per physical NPU; omitted or nonpositive values default to `10`. HAMi Chart exposes `devices.ascend.deviceSplitCount`; the standalone plugin Chart exposes `deviceSplitCount` when it creates the configuration. A positive node `vDeviceCount` takes precedence. ENPU caps the effective count at `100`; template mode keeps its template-derived capacity.
+
+With two healthy NPUs and count `5`, kubelet advertises `10` virtual devices and HAMi registers `Count=5` per NPU. The scheduler limits allocations using that registered count; memory and core limits may be reached earlier. Restart the plugin after changing the shared ConfigMap to reload it. Use a plugin image containing split-count support; the Chart value alone does not add support to an older image.
+
 
 #### (Optional) **Node Custom Configuration Description**
 
-The `hami-device-node-config` is used to enable or override hami-vnpu-core for specific nodes within the cluster. Node-level settings take higher priority than the global `vnpus.hamiVnpuCore` switch.
+The `hami-device-node-config` is used to enable or override hami-vnpu-core for specific nodes within the cluster. Node `hamiVnpuMode` takes priority over global `vnpus.hamiVnpuMode`; an omitted mode inherits the global setting. For hami-core compute scheduling, node `hamiCorePolicy` similarly overrides global `vnpus.hamiCorePolicy`.
 
 It also supports `filterDevices` to configure devices ignored by HAMi on a specific node. By default, `filterDevices` is empty, which means no devices are ignored. A device is ignored when its UUID is listed in `uuid` or its index is listed in `index`, for example: `filterDevices: {index: [0, 1], uuid: []}`.
 
@@ -100,7 +105,7 @@ For more examples, see [examples](https://github.com/Project-HAMi/ascend-device-
 
 ### Soft Slicing Configuration (hami-vnpu-core)
 
-Use the annotation below whenever you intend **soft** slicing; omitting it keeps **template-based vNPU** behavior (see the note above).
+Use `huawei.com/vnpu-mode: hami-core` to select soft slicing explicitly. Without a mode annotation, the workload follows the node's backend as described above. The hami-core compute policy defaults to `spatial`; the default backend remains `template`.
 
 ```yaml
 apiVersion: v1
@@ -121,9 +126,29 @@ spec:
           huawei.com/Ascend910B3-core: "40"     # Request 40% core
 ```
 
-**Note:** `-core` is optional. Unlike `-memory` (which defaults to the whole NPU when omitted), omitting `-core` defaults to **0** — no dedicated compute-core reservation. It only takes effect under `huawei.com/vnpu-mode: hami-core`; setting it without that annotation is rejected.
+`-memory` is in MiB and defaults to the whole card when omitted. `-core` is optional: an omitted or zero value reserves no compute in HAMi and is translated to a runtime limit of **100**. Positive limits must be from 1 to 100; negative limits and limits above 100 are rejected. Use the explicit hami-core mode annotation when requesting a compute quota.
 
-The soft partitioning mechanism supports requesting multiple virtual devices within a same Pod. When performing multi-card parallel inference (e.g., using vLLM), the value of `--gpu-memory-utilization` must not exceed the ratio of the "container's total memory limit" to the "sum of physical memory of the selected cards".
+The plugin passes the scheduled quotas to the library as `NPU_MEMORY_LIMIT_MB` and `NPU_COMPUTE_LIMIT`, with `NPU_SCHED_POLICY` selecting the compute mechanism:
+
+| Policy | Compute behavior |
+| --- | --- |
+| `spatial` (default) | Cooperative CANN Cube/Vector core budgets, rounded up independently. For 20 Cube / 40 Vector cores, 31% becomes 7 / 13. Resource-aware operators consume these budgets; they are not exclusive hardware partitions or guaranteed token-throughput ratios. |
+| `dynamic` | Relative time-scheduling share, with idle capacity available for borrowing. |
+| `fixed` | Target percentage for the time scheduler's run/rest ratio. |
+| `overdraft` | Dynamic time scheduling with bounded borrowing while idle. |
+
+Set global `vnpus.hamiCorePolicy` in the device ConfigMap, or `hamiVnpuCore.defaultPolicy` in the standalone Chart. A node's `hamiCorePolicy` overrides the global value; a Pod's `huawei.com/npu-sched-policy` overrides both. If all are omitted, the policy is `spatial`. The accepted values are the four policies above. ENPU uses its separate `huawei.com/enpu-policy` annotation.
+
+```yaml
+metadata:
+  annotations:
+    huawei.com/vnpu-mode: hami-core
+    huawei.com/npu-sched-policy: overdraft
+```
+
+Deploy the updated plugin and its pinned hami-vnpu-core `b19ef02` library together. Older libraries do not recognize the new quota variables; the updated library rejects `NPU_MEM_QUOTA`, `NPU_PRIORITY`, and `NPU_FIXED_SHARE_RATIO`. Stop hami-core workloads before replacing the node library. When upgrading or changing policy, start new processes with fresh per-container local SHM files. Processes sharing one local SHM file must use the same policy, quotas, and PID namespace. Spatial bypasses time scheduling while keeping shared HBM accounting and process cleanup.
+
+Multi-card allocations require the same compute quota on every selected card; unequal compute quotas are rejected. HAMi's scheduled memory quota is per card. The plugin sums those quotas into `NPU_MEMORY_LIMIT_MB`, a container-wide HBM accounting limit across the selected devices. This aggregate limit does not enforce a separate memory ceiling on each card. For multi-card inference, keep `--gpu-memory-utilization` within the ratio of the total scheduled memory quota to the total physical memory of the selected cards. Use the Ascend runtime's container-local logical device IDs: selecting a different physical card does not make that card's host index the application's logical device index.
 
 ### vCANN-RT runtime slicing (`enpu`)
 
@@ -199,7 +224,7 @@ spec:
       resources:
         limits:
           huawei.com/Ascend910B3: "2"           # Request 2 virtual devices for parallel computation
-          huawei.com/Ascend910B3-memory: "65536" # Total memory limit for the container (64GiB combined across 2 cards)
+          huawei.com/Ascend910B3-memory: "32768" # 32GiB per card; runtime aggregate limit is 64GiB for 2 cards
           huawei.com/Ascend910B3-core: "50"
 ```
 

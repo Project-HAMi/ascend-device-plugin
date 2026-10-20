@@ -74,16 +74,20 @@ nodeConfigMap: # @schema required:true;additionalProperties:false
   # nodeConfigMap.name -- Per-node configuration ConfigMap name.
   name: hami-device-node-config # @schema required:true
 
+# hamiVnpuMode -- Default backend: template, hami-core (alias hamiCore), or enpu. Empty uses template, or hami-core if the deprecated hamiVnpuCore.enabled is true. Node mode takes priority.
+hamiVnpuMode: "" # @schema type:string
+
 hamiVnpuCore: # @schema required:true;additionalProperties:false
-  # hamiVnpuCore.enabled -- Enable hami-vnpu-core in the generated global device configuration.
+  # hamiVnpuCore.enabled -- Deprecated. Used only when hamiVnpuMode is empty; prefer hamiVnpuMode: hami-core.
   enabled: false # @schema required:true
+
+  # hamiVnpuCore.defaultPolicy -- Default hami-core compute policy: spatial, dynamic, fixed, or overdraft. Pod huawei.com/npu-sched-policy and node hamiCorePolicy override it.
+  defaultPolicy: spatial # @schema required:true;enum:[spatial,dynamic,fixed,overdraft]
 
   # hamiVnpuCore.deviceCoreScaling -- (float) hami-core compute oversell ratio. The plugin advertises `Devcore = round(100 * deviceCoreScaling)` so HAMi can admit more than 100% of `-core` on one card. Values below 1 are not supported.
   deviceCoreScaling: 1 # @schema required:true;type:number;minimum:1
 
 enpu: # @schema required:true;additionalProperties:false
-  # enpu.enabled -- Enable ENPU in the generated device config.
-  enabled: false # @schema required:true
   # enpu.runtimePath -- Host path to libvruntime.so.
   runtimePath: /usr/local/enpu/vcann-rt/lib/libvruntime.so # @schema required:true
   # enpu.monitorPath -- Host path to enpu-monitor.
@@ -103,13 +107,17 @@ enpu: # @schema required:true;additionalProperties:false
   # enpu.managerConfigRoot -- Manager config_dir or its vcann-rt subdirectory; empty uses configRoot.
   managerConfigRoot: "" # @schema type:string
 
+# deviceSplitCount -- Positive integer virtual-device slots per physical NPU in hami-core and ENPU modes. A positive node vDeviceCount takes precedence; ENPU is capped at 100. Template mode keeps its template calculation. Used when config.create=true.
+deviceSplitCount: 10 # @schema type:integer;minimum:1;required:true
+
 # @ignored
 deviceConfig: |- # @schema required:true
   vnpus:
-    hamiVnpuCore: {{ .Values.hamiVnpuCore.enabled }}
-    enpu: {{ .Values.enpu.enabled }}
+    hamiVnpuMode: {{ include "ascend-device-plugin.vnpuMode" . | quote }}
+    hamiCorePolicy: {{ .Values.hamiVnpuCore.defaultPolicy | quote }}
+    deviceSplitCount: {{ .Values.deviceSplitCount | int64 }}
     deviceCoreScaling: {{ .Values.hamiVnpuCore.deviceCoreScaling }}
-    enpuPolicy: {{ .Values.enpu.defaultPolicy }}
+    enpuPolicy: {{ .Values.enpu.defaultPolicy | quote }}
     configs:
     - chipName: 910A
       commonWord: Ascend910A
@@ -235,6 +243,6 @@ deviceConfig: |- # @schema required:true
       aiCore: 20
       aiCPU: 7
 
-# nodeConfig -- Per-node hami-vnpu-core configuration written to the node ConfigMap.
+# nodeConfig -- Per-node mode (hamiVnpuMode), hami-core policy (hamiCorePolicy), device count, compute scaling and device filters written to the node ConfigMap. Omitted fields inherit global mode and policy.
 nodeConfig: |- # @schema required:true
   nodes: []

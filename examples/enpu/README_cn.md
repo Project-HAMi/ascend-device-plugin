@@ -29,11 +29,11 @@ mem-swap 还需阅读所使用版本源码中的 `ubs-virt-enpu/enpu-manager/REA
 1. 部署包含 ENPU 适配的 HAMi scheduler 和 ascend-device-plugin。沿用现有 release 镜像编译、打包流程，将对应版本的 `libvruntime.so`、`enpu-monitor`、`ld.so.preload` 放入 device-plugin 镜像；插件安装到宿主机 `/usr/local/enpu/vcann-rt` 并注入业务容器。构建环境可参考官方文档中的预编译镜像，但该镜像不等于已经包含所需版本运行库的业务镜像。
 2. 管理员负责在节点安装 Ascend 驱动，在业务镜像中安装兼容版本的 CANN，按官方文档配置 `device-share`，并部署 ascend-docker-runtime 和 `ascend` RuntimeClass。业务镜像还需提供可执行的 `/usr/bin/systemd-detect-virt` 及其依赖。PyTorch 示例另需 `torch_npu`，vLLM 示例另需 vLLM-Ascend。
 3. 本适配在 A3/910C 按物理 DIE 分配，当前路径要求节点为 `INDEP_POLICY`。这是本适配采用的单 DIE 部署方式；[MindCluster 官方软切分说明](https://www.hiascend.com/document/detail/en/mindcluster/2610/clustersched/schedulingug/docs/en/scheduling/usage/virtual_instance/virtual_instance_with_vcann_rt/01_soft_allocation_scheduling_inference.md) 对应 `useSingleDieMode=true`，不是“所有 mem-swap 实现都不支持联合模式”的结论。节点模式由管理员按官方说明配置，插件只检查、不自动更改。
-4. scheduler 与 plugin 共用完整的 `hami-scheduler-device` ConfigMap，保证 `vnpus.configs` 的型号、资源名和 `vnpus.enpuPolicy` 一致。示例使用节点级 `enpu: true`；插件会注册节点能力供 scheduler 识别，不必把整个集群的 `vnpus.enpu` 改成 `true`。
+4. scheduler 与 plugin 共用完整的 `hami-scheduler-device` ConfigMap，保证 `vnpus.configs` 的型号、资源名和 `vnpus.enpuPolicy` 一致。示例使用节点级 `hamiVnpuMode: enpu`；插件会注册节点能力供 scheduler 识别，不必把整个集群的 `vnpus.hamiVnpuMode` 改成 `enpu`。
 
 插件复用内容相同的运行库文件；已有文件与镜像内文件内容不同时，插件启动失败。更换运行库版本前，按[升级与回滚流程](../../enpu-runtime-assets/README.md)停止 ENPU 业务、暂停插件，只备份并移走这三个 ENPU 运行库文件，再部署新镜像。保留原有 hami-vnpu-core 文件。
 
-将 [device-plugin-values.yaml](device-plugin-values.yaml) 合并到现有插件 chart 的 values，保留现有镜像、节点选择及其他设置。目标节点须匹配插件的 `nodeSelector`（默认 `ascend=on`）；`nodeConfig` 本身不会给节点加标签。Pod 中的 `schedulerName: hami-scheduler` 也应与实际 HAMi 配置一致。`nodeConfig` 是整段 YAML 字符串，Helm 会整段替换；必须保留已有节点条目，仅追加或修改选定的 ENPU 节点。节点条目中的 `hami-vnpu-core` 应显式填写，省略也会覆盖全局值为 `false`。
+将 [device-plugin-values.yaml](device-plugin-values.yaml) 合并到现有插件 chart 的 values，保留现有镜像、节点选择及其他设置。目标节点须匹配插件的 `nodeSelector`（默认 `ascend=on`）；`nodeConfig` 本身不会给节点加标签。Pod 中的 `schedulerName: hami-scheduler` 也应与实际 HAMi 配置一致。`nodeConfig` 是整段 YAML 字符串，Helm 会整段替换；必须保留已有节点条目，仅追加或修改选定的 ENPU 节点。在选定节点填写 `hamiVnpuMode: enpu`。节点条目未设置模式时继承全局模式；旧字段 `hami-vnpu-core` 仅在显式填写时覆盖全局模式。
 
 例如，在仓库根目录更新**现有独立插件 release**（替换 release 名、命名空间和现有 values 路径）：
 
@@ -43,7 +43,7 @@ helm upgrade <existing-plugin-release> ./charts/ascend-device-plugin \
   -f <existing-plugin-values.yaml> -f examples/enpu/device-plugin-values.yaml
 ```
 
-如已由其他 chart 管理插件，修改原有部署，不要重复安装同名 DaemonSet、ConfigMap 或 RuntimeClass。其他节点继续保留原 hami-core/模板硬切分配置；同一物理 DIE 不混用 hami-core 和 ENPU。全局 `vnpus.enpu` / chart `enpu.enabled` 适用于明确要全局启用的情况，而本示例选择节点级启用。
+如已由其他 chart 管理插件，修改原有部署，不要重复安装同名 DaemonSet、ConfigMap 或 RuntimeClass。其他节点继续保留原 hami-core/模板硬切分配置；同一物理 DIE 不混用 hami-core 和 ENPU。全局 `vnpus.hamiVnpuMode: enpu` / chart `hamiVnpuMode: enpu` 适用于明确要全局启用的情况，而本示例选择节点级启用。
 
 ## 普通软切分
 
@@ -95,7 +95,7 @@ helm upgrade <existing-plugin-release> ./charts/ascend-device-plugin \
 
 缺失或失败的数据不会填成零：对应 success 指标变为 `0`，受影响的样本不输出。配置读取失败时，该分配的全部指标都可能缺失，因此应同时检查全局状态和每容器状态；成功采集得到的零值仍是有效数据。
 
-本接入不提供 ENPU 每 Pod 算力利用率，不会将整 DIE 利用率复制给每个 Pod，配置配额也不是所有策略下的严格上限。mem-swap 配置支持不同的显存 request 和 limit，但实测用量仅包含 HBM 驻留，不包含换出到 CPU 的字节数或 sleep 状态；该端点不是 enpu-manager exporter。仅启用 hami-core 及原有 template 路径时保持原采集行为；同时启用 hami-core 与 ENPU 时，整设备指标由 DCMI 提供且只输出一次。
+本接入不提供 ENPU 每 Pod 算力利用率，不会将整 DIE 利用率复制给每个 Pod，配置配额也不是所有策略下的严格上限。mem-swap 配置支持不同的显存 request 和 limit，但实测用量仅包含 HBM 驻留，不包含换出到 CPU 的字节数或 sleep 状态；该端点不是 enpu-manager exporter。仅启用 hami-core 及原有 template 路径时保持原采集行为；ENPU 节点的整设备指标由 DCMI 提供且只输出一次。
 
 手动检查运行时可在 ENPU 业务容器内执行 `/usr/local/enpu/vcann-rt/tools/enpu-monitor`。上游 release **1.0.0** 向 stderr 输出三项：AI Core 配额（%）、显存上限和显存用量；显存字段虽标为 `MB`，实际为整数 MiB。它没有 HTTP 端点或每 Pod 利用率输出；`best-effort` 下 CLI 配额显示 `0` 不代表 HAMi 配置了零配额。插件采集器不会调用或解析该 CLI。
 
