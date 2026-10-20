@@ -30,8 +30,9 @@ import (
 
 // chipKey identifies an NPU chip by npu-smi's -i (card) and -c (chip) coordinates.
 type chipKey struct {
-	Card int32
-	Chip int32
+	Card    int32
+	Chip    int32
+	NPUOnly bool // Card holds the physical NPU ID when the driver uses -i without -c.
 }
 
 // npuSmiCandidates lists host paths where npu-smi may live, in priority order.
@@ -97,10 +98,14 @@ func applyDeviceShare(chips []chipKey, enabled bool) error {
 	for _, c := range chips {
 		card := strconv.Itoa(int(c.Card))
 		chip := strconv.Itoa(int(c.Chip))
-		out, err := runNpuSmi("set", "-t", "device-share", "-i", card, "-c", chip, "-d", flag)
+		args := []string{"set", "-t", "device-share", "-i", card}
+		if !c.NPUOnly {
+			args = append(args, "-c", chip)
+		}
+		args = append(args, "-d", flag)
+		out, err := runNpuSmi(args...)
 		if err != nil {
-			return fmt.Errorf("npu-smi set device-share -i %s -c %s -d %s: %w: %s",
-				card, chip, flag, err, strings.TrimSpace(string(out)))
+			return fmt.Errorf("npu-smi %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 		}
 		klog.V(4).Infof("device-share card=%s chip=%s set to %s", card, chip, flag)
 	}
@@ -113,9 +118,20 @@ func (ps *PluginServer) enableNodeDeviceShare() error {
 		klog.V(3).Infof("node %s has no runtime soft-slice backend, skipping device-share", ps.nodeName)
 		return nil
 	}
+	mode := "card-chip"
+	if m, ok := ps.mgr.(interface{ DeviceShareMode() string }); ok {
+		mode = m.DeviceShareMode()
+	}
+	if mode != "card-chip" && mode != "npu-id" {
+		return fmt.Errorf("invalid deviceShareMode %q", mode)
+	}
 	chipSet := map[chipKey]struct{}{}
 	for _, d := range ps.mgr.GetDevices() {
-		chipSet[chipKey{Card: d.CardID, Chip: d.DeviceID}] = struct{}{}
+		key := chipKey{Card: d.CardID, Chip: d.DeviceID}
+		if mode == "npu-id" {
+			key = chipKey{Card: d.PhyID, NPUOnly: true}
+		}
+		chipSet[key] = struct{}{}
 	}
 	if len(chipSet) == 0 {
 		klog.Warningf("node %s is hami-vnpu-core but no devices found for device-share", ps.nodeName)

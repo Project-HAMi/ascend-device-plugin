@@ -215,6 +215,44 @@ func TestEnableNodeDeviceShare_FlipsAllChipsDeduped(t *testing.T) {
 	}
 }
 
+type npuIDShareManager struct {
+	*FakeManager
+}
+
+func (npuIDShareManager) DeviceShareMode() string { return "npu-id" }
+
+func TestEnableNodeDeviceShare_950UsesPhysicalNPUID(t *testing.T) {
+	seen := map[string]int{}
+	withFakeNpuSmi(t, func(args ...string) ([]byte, error) {
+		if len(args) != 7 || args[6] != "1" {
+			t.Errorf("unexpected npu-smi args: %v", args)
+			return nil, nil
+		}
+		seen[args[4]]++
+		return nil, nil
+	})
+	ps := &PluginServer{
+		nodeName: "node-950",
+		mgr: npuIDShareManager{FakeManager: &FakeManager{
+			IsHamiVnpuCoreFunc: func() bool { return true },
+			GetDevicesFunc: func() []*manager.Device {
+				return []*manager.Device{
+					{PhyID: 0, CardID: -1, DeviceID: -1},
+					{PhyID: 7, CardID: -1, DeviceID: -1},
+					{PhyID: 0, CardID: -1, DeviceID: -1},
+				}
+			},
+		}},
+	}
+	if err := ps.enableNodeDeviceShare(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := map[string]int{"0": 1, "7": 1}
+	if !reflect.DeepEqual(seen, want) {
+		t.Fatalf("device-share calls mismatch:\ngot  %v\nwant %v", seen, want)
+	}
+}
+
 func TestEnableNodeDeviceShare_FlipFailureFailsFast(t *testing.T) {
 	withFakeNpuSmi(t, func(args ...string) ([]byte, error) {
 		return []byte("E80001 not allowed"), fmt.Errorf("exit status 1")
