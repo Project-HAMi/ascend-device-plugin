@@ -2,11 +2,15 @@ package monitor
 
 import (
 	"ascend-common/common-utils/hwlog"
+	"ascend-common/devmanager"
 	"ascend-common/devmanager/common"
 	"ascend-common/devmanager/dcmi"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
+
+	"github.com/Project-HAMi/ascend-device-plugin/internal"
 )
 
 type DeviceStat struct {
@@ -19,9 +23,12 @@ type DeviceStat struct {
 }
 
 var (
-	dcMgr     *dcmi.DcManager
-	dcMgrOnce sync.Once
-	dcMgrErr  error
+	hostMgr     devmanager.DeviceInterface
+	hostMgrOnce sync.Once
+	hostMgrErr  error
+	dcMgr       *dcmi.DcManager
+	dcMgrOnce   sync.Once
+	dcMgrErr    error
 )
 
 func getDcManager() (*dcmi.DcManager, error) {
@@ -44,44 +51,67 @@ func getDcManager() (*dcmi.DcManager, error) {
 	return dcMgr, dcMgrErr
 }
 
+func getHostDeviceManager() (devmanager.DeviceInterface, error) {
+	hostMgrOnce.Do(func() {
+		hostMgr, hostMgrErr = devmanager.AutoInit("", 30)
+		if hostMgrErr != nil {
+			hostMgrErr = fmt.Errorf("auto-init device manager: %w", hostMgrErr)
+		}
+	})
+	return hostMgr, hostMgrErr
+}
+
+// ConfigureHostDeviceManager reuses the plugin's already initialized manager,
+// avoiding a second DCMI initialization in the metrics goroutine.
+func ConfigureHostDeviceManager(mgr devmanager.DeviceInterface) {
+	hostMgrOnce.Do(func() {
+		hostMgr = mgr
+	})
+}
+
 func collectHostDeviceStats() ([]DeviceStat, error) {
-	mgr, err := getDcManager()
+	mgr, err := getHostDeviceManager()
 	if err != nil {
 		return nil, err
 	}
 
-	_, ids, err := mgr.DcGetLogicIDList()
+	_, ids, err := mgr.GetDeviceList()
 	if err != nil {
 		return nil, fmt.Errorf("get logic ids: %w", err)
+	}
+	dieType := dcmi.VDIE
+	if chip, chipErr := mgr.GetValidChipInfo(); chipErr == nil && internal.ChipFamily(chip.Name) != "" {
+		dieType = dcmi.DDIE
 	}
 
 	var devices []DeviceStat
 	for _, logicID := range ids {
-		cardID, deviceID, err := mgr.DcGetCardIDDeviceID(logicID)
-		if err != nil {
-			continue
+		uuid, _ := mgr.GetDieID(logicID, dieType)
+
+		product, productErr := mgr.GetProductType(logicID)
+		product = strings.TrimSpace(product)
+		if productErr != nil || product == "" {
+			if chip, chipErr := mgr.GetChipInfo(logicID); chipErr == nil && chip != nil {
+				product = strings.TrimSpace(chip.Name)
+			}
 		}
-
-		uuid, _ := mgr.DcGetDieID(cardID, deviceID, dcmi.VDIE)
-
-		pt, _ := mgr.DcGetProductType(cardID, deviceID)
 
 		memTotal := uint64(0)
 		memUsed := uint64(0)
-		if memInfo, err := mgr.DcGetMemoryInfo(cardID, deviceID); err == nil {
-			memTotal = memInfo.MemorySize
-			memUsed = memInfo.MemorySize - memInfo.MemoryAvailable
+		if hbm, hbmErr := mgr.GetDeviceHbmInfo(logicID); hbmErr == nil && hbm != nil && hbm.Usage <= hbm.MemorySize {
+			memTotal = hbm.MemorySize
+			memUsed = hbm.Usage
 		}
 
 		aicorePct := uint32(0)
-		if rate, err := mgr.DcGetDeviceUtilizationRate(cardID, deviceID, common.AICore); err == nil {
-			aicorePct = uint32(rate)
+		if rate, rateErr := mgr.GetDeviceUtilizationRate(logicID, common.AICore); rateErr == nil {
+			aicorePct = rate
 		}
 
 		devices = append(devices, DeviceStat{
 			Index:       int(logicID),
 			UUID:        uuid,
-			DeviceType:  pt,
+			DeviceType:  product,
 			MemoryTotal: memTotal,
 			MemoryUsed:  memUsed,
 			AICorePct:   aicorePct,

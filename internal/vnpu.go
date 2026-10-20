@@ -164,8 +164,11 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 type NodeConfig struct {
-	Name         string `json:"name" yaml:"name"`
-	HamiVnpuMode string `json:"hamiVnpuMode,omitempty" yaml:"hamiVnpuMode,omitempty"`
+	// EnableExperimental950 opts this node into Ascend 950 discovery and reporting.
+	EnableExperimental950 bool   `json:"enableExperimental950,omitempty" yaml:"enableExperimental950,omitempty"`
+	DeviceShareMode       string `json:"deviceShareMode,omitempty" yaml:"deviceShareMode,omitempty"`
+	Name                  string `json:"name" yaml:"name"`
+	HamiVnpuMode          string `json:"hamiVnpuMode,omitempty" yaml:"hamiVnpuMode,omitempty"`
 	// Deprecated: used only when HamiVnpuMode is empty; nil inherits the global mode.
 	HamiVnpuCore      *bool         `json:"hami-vnpu-core,omitempty" yaml:"hami-vnpu-core,omitempty"`
 	VDeviceCount      int           `json:"vDeviceCount" yaml:"vDeviceCount"`
@@ -246,4 +249,54 @@ func LoadNodeConfig(path string) (*NodeListConfig, error) {
 		}
 	}
 	return &yamlData, nil
+}
+
+// ChipFamily accepts a family name or a SoC name with an underscore SKU suffix.
+// It does not infer PR/DT from a bare "950" or an A5 board label.
+func ChipFamily(name string) string {
+	name = strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(name)), "ASCEND")
+	base, suffix, hasSuffix := strings.Cut(name, "_")
+	if hasSuffix {
+		if suffix == "" {
+			return ""
+		}
+		for _, c := range suffix {
+			if !(c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+				return ""
+			}
+		}
+	}
+	switch base {
+	case "950PR":
+		return "Ascend950PR"
+	case "950DT":
+		return "Ascend950DT"
+	}
+	return ""
+}
+
+// MatchChipConfig preserves exact matching for existing chips. Only a generic 950
+// family entry can match a SKU; one SKU must never match a different SKU.
+func MatchChipConfig(chip string, names []string) (int, error) {
+	for i, name := range names {
+		if name == chip {
+			return i, nil
+		}
+	}
+	family := ChipFamily(chip)
+	found := -1
+	if family != "" {
+		for i, name := range names {
+			if ChipFamily(name) == family && !strings.Contains(name, "_") {
+				if found >= 0 {
+					return -1, fmt.Errorf("ambiguous %s configs for chip %q", family, chip)
+				}
+				found = i
+			}
+		}
+	}
+	if found < 0 {
+		return -1, fmt.Errorf("can not find vnpu config for chip %s", chip)
+	}
+	return found, nil
 }

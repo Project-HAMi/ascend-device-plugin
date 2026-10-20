@@ -18,6 +18,8 @@ package manager
 
 import (
 	"fmt"
+	"math"
+	"runtime"
 	"sort"
 	"sync"
 
@@ -115,6 +117,26 @@ func (am *AscendManager) shouldCheckIgnored() bool {
 	return am.nodeConfig != nil && !am.nodeConfig.FilterDevices.IsEmpty()
 }
 
+func (am *AscendManager) isAscend950() bool {
+	return internal.ChipFamily(am.config.ChipName) != ""
+}
+
+func (am *AscendManager) deviceDieType() dcmi.DieType {
+	if am.isAscend950() {
+		return dcmi.DDIE
+	}
+	return dcmi.VDIE
+}
+
+// deviceIndex is the filter index. On Ascend 950, NPU ID equals Chip Phy-ID.
+func (am *AscendManager) deviceIndex(logicID int32) (int32, error) {
+	if am.isAscend950() {
+		return am.mgr.GetPhysicIDFromLogicID(logicID)
+	}
+	cardID, _, err := am.mgr.GetCardIDDeviceID(logicID)
+	return cardID, err
+}
+
 func (am *AscendManager) LoadConfig(path string) error {
 	config, err := internal.LoadConfig(path)
 	if err != nil {
@@ -127,16 +149,15 @@ func (am *AscendManager) LoadConfig(path string) error {
 	if chipInfo.Type != "Ascend" {
 		return fmt.Errorf("chip type is not Ascend")
 	}
-	idx := -1
+	names := make([]string, len(config.VNPUs.Configs))
 	for i, vnpu := range config.VNPUs.Configs {
-		if vnpu.ChipName == chipInfo.Name {
-			idx = i
-			break
-		}
+		names[i] = vnpu.ChipName
 	}
-	if idx == -1 {
-		return fmt.Errorf("can not find vnpu config for chip %s", chipInfo.Name)
+	idx, err := internal.MatchChipConfig(chipInfo.Name, names)
+	if err != nil {
+		return err
 	}
+	klog.Infof("detected Ascend chip type=%q name=%q, selected config=%q", chipInfo.Type, chipInfo.Name, names[idx])
 	am.config = config.VNPUs.Configs[idx]
 	am.globalConfig = *config
 	sort.Slice(am.config.Templates, func(i, j int) bool {
@@ -191,18 +212,23 @@ func (am *AscendManager) UpdateDevice() error {
 			klog.Errorf("failed to get physic id from logic id: %v", err)
 			return err
 		}
-		cardID, deviceID, err := am.mgr.GetCardIDDeviceID(ID)
-		if err != nil {
-			klog.Errorf("failed to get card id from device id: %v", err)
-			return err
+		cardID, deviceID := int32(-1), int32(-1)
+		deviceIndex := phyID
+		if !am.isAscend950() {
+			cardID, deviceID, err = am.mgr.GetCardIDDeviceID(ID)
+			if err != nil {
+				klog.Errorf("failed to get card id from device id: %v", err)
+				return err
+			}
+			deviceIndex = cardID
 		}
-		uuid, err := am.mgr.GetDieID(ID, dcmi.VDIE)
+		uuid, err := am.mgr.GetDieID(ID, am.deviceDieType())
 		if err != nil {
 			klog.Errorf("failed to get uuid from device id: %v", err)
 			return err
 		}
-		if am.shouldIgnoreDevice(uuid, cardID) {
-			klog.V(4).Infof("ignore device matched filterDevices uuid=%s index=%d logicID=%d phyID=%d deviceID=%d", uuid, cardID, ID, phyID, deviceID)
+		if am.shouldIgnoreDevice(uuid, deviceIndex) {
+			klog.V(4).Infof("ignore device matched filterDevices uuid=%s index=%d logicID=%d phyID=%d deviceID=%d", uuid, deviceIndex, ID, phyID, deviceID)
 			continue
 		}
 		health, err := am.mgr.GetDeviceHealth(ID)
@@ -256,14 +282,14 @@ func (am *AscendManager) GetIDs() []int32 {
 
 	availableIDs := make([]int32, 0, len(IDs))
 	for _, id := range IDs {
-		cardID, _, err := am.mgr.GetCardIDDeviceID(id)
+		cardID, err := am.deviceIndex(id)
 		if err != nil {
-			klog.Warningf("failed to get card/device ID for logic ID %d: %v", id, err)
+			klog.Warningf("failed to get device index for logic ID %d: %v", id, err)
 			continue
 		}
 		uuid := ""
 		if am.nodeConfig.FilterDevices.HasUUID() {
-			uuid, err = am.mgr.GetDieID(id, dcmi.VDIE)
+			uuid, err = am.mgr.GetDieID(id, am.deviceDieType())
 			if err != nil {
 				klog.Warningf("failed to get uuid for logic ID %d: %v", id, err)
 				continue
@@ -285,14 +311,14 @@ func (am *AscendManager) GetUnHealthIDs() []int32 {
 	var unhealthy []int32
 	for _, d := range IDs {
 		if filterDevicesEnabled {
-			cardID, _, err := am.mgr.GetCardIDDeviceID(d)
+			cardID, err := am.deviceIndex(d)
 			if err != nil {
-				klog.Warningf("failed to get card/device ID for logic ID %d: %v", d, err)
+				klog.Warningf("failed to get device index for logic ID %d: %v", d, err)
 				continue
 			}
 			uuid := ""
 			if am.nodeConfig.FilterDevices.HasUUID() {
-				uuid, err = am.mgr.GetDieID(d, dcmi.VDIE)
+				uuid, err = am.mgr.GetDieID(d, am.deviceDieType())
 				if err != nil {
 					klog.Warningf("failed to get uuid for logic ID %d: %v", d, err)
 					continue
@@ -315,6 +341,10 @@ func (am *AscendManager) GetUnHealthIDs() []int32 {
 }
 
 func (am *AscendManager) CleanupIdleVNPUs() error {
+	if am.isAscend950() {
+		// Ascend 950 does not create hardware template vNPU instances.
+		return nil
+	}
 	klog.Info("Starting cleanup of idle vNPUs...")
 
 	_, IDs, err := am.mgr.GetDeviceList()
@@ -415,4 +445,54 @@ func (am *AscendManager) DeviceCoreScaling() float64 {
 		return am.nodeConfig.DeviceCoreScaling
 	}
 	return am.globalConfig.VNPUs.DeviceCoreScaling
+}
+
+// ValidateExperimental950 runs after global and node configuration are loaded.
+func (am *AscendManager) ValidateExperimental950() error {
+	return am.validateExperimental950(runtime.GOARCH)
+}
+
+func (am *AscendManager) validateExperimental950(arch string) error {
+	family := internal.ChipFamily(am.config.ChipName)
+	if family == "" {
+		return nil
+	}
+	if am.nodeConfig == nil || !am.nodeConfig.EnableExperimental950 {
+		return fmt.Errorf("%s requires node enableExperimental950: true", family)
+	}
+	if !am.IsHamiVnpuCore() {
+		return fmt.Errorf("%s requires hami-core mode", family)
+	}
+	if arch != "arm64" {
+		return fmt.Errorf("%s nodes are arm64, got %s", family, arch)
+	}
+	if am.config.CommonWord != family || am.config.ResourceName != "huawei.com/"+family {
+		return fmt.Errorf("950 commonWord/resourceName must use canonical family %s", family)
+	}
+	if am.config.MemoryAllocatable <= 0 || am.config.MemoryAllocatable > math.MaxInt32 || am.config.MemoryCapacity < am.config.MemoryAllocatable {
+		return fmt.Errorf("%s requires memoryAllocatable and memoryCapacity in MiB (capacity >= allocatable > 0)", family)
+	}
+	if len(am.config.Templates) != 0 {
+		return fmt.Errorf("%s must not define hardware templates", family)
+	}
+	if am.nodeConfig.VDeviceCount < 2 {
+		return fmt.Errorf("%s requires node vDeviceCount >= 2", family)
+	}
+	if am.nodeConfig.DeviceShareMode != "card-chip" && am.nodeConfig.DeviceShareMode != "npu-id" {
+		return fmt.Errorf("%s requires node deviceShareMode: card-chip or npu-id", family)
+	}
+	return nil
+}
+
+// DeviceShareMode selects the SMI command layout recorded for this node.
+func (am *AscendManager) DeviceShareMode() string {
+	if am.nodeConfig != nil && am.nodeConfig.DeviceShareMode != "" {
+		return am.nodeConfig.DeviceShareMode
+	}
+	return "card-chip"
+}
+
+// DeviceManager exposes the initialized DCMI manager to in-process reporters.
+func (am *AscendManager) DeviceManager() devmanager.DeviceInterface {
+	return am.mgr
 }

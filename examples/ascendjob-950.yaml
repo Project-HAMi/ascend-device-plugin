@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ascend950dt-job
+  annotations:
+    huawei.com/vnpu-mode: hami-core
+spec:
+  runtimeClassName: ascend
+  containers:
+    - name: ubuntu-container
+      image: ascendhub.huawei.com/public-ascendhub/ascend-mindspore:23.0.RC3-centos7
+      command: ["bash", "-c", "sleep 86400"]
+      resources:
+        limits:
+          # One Ascend950DT, memory in MiB, core percentage 1-100.
+          huawei.com/Ascend950DT: 1
+          huawei.com/Ascend950DT-memory: 4096
+          huawei.com/Ascend950DT-core: 30

@@ -115,6 +115,16 @@ deviceConfig: |- # @schema required:true
     deviceCoreScaling: {{ .Values.hamiVnpuCore.deviceCoreScaling }}
     enpuPolicy: {{ .Values.enpu.defaultPolicy | quote }}
     configs:
+    # Ascend950DT: 8 NPUs, 98304 MiB HBM, one die per NPU.
+    - chipName: Ascend950DT
+      commonWord: Ascend950DT
+      resourceName: huawei.com/Ascend950DT
+      resourceMemoryName: huawei.com/Ascend950DT-memory
+      resourceCoreName: huawei.com/Ascend950DT-core
+      memoryAllocatable: 98304
+      memoryCapacity: 98304
+      aiCore: 0
+      templates: []
     - chipName: 910A
       commonWord: Ascend910A
       resourceName: huawei.com/Ascend910A
@@ -240,5 +250,6 @@ deviceConfig: |- # @schema required:true
       aiCPU: 7
 
 # nodeConfig -- Per-node mode (hamiVnpuMode), device count, compute scaling and device filters written to the node ConfigMap. Omitted mode inherits the global mode.
+# An Ascend 950 node also sets enableExperimental950, deviceShareMode and vDeviceCount. See examples/ascend950-node-config.yaml.
 nodeConfig: |- # @schema required:true
   nodes: []

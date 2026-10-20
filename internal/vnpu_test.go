@@ -387,6 +387,33 @@ func TestLoadNodeConfigModes(t *testing.T) {
 	}
 }
 
+func TestMatchChipConfig(t *testing.T) {
+	for _, tc := range []struct {
+		chip  string
+		names []string
+		want  int
+	}{
+		{"Ascend950PR", []string{"910B3", "Ascend950PR", "Ascend950DT"}, 1},
+		{"Ascend950PR_957c", []string{"Ascend950PR", "Ascend950DT"}, 0},
+		{"950DT", []string{"Ascend950PR", "Ascend950DT"}, 1},
+		{"Ascend950PR_957c", []string{"Ascend950PR", "Ascend950PR_957c"}, 1},
+		{"Ascend950PR_957c", []string{"Ascend950PR_9579"}, -1},
+		{"950", []string{"Ascend950PR", "Ascend950DT"}, -1},
+		{"Ascend950PRFake", []string{"Ascend950PR"}, -1},
+		{"Ascend950PR_", []string{"Ascend950PR"}, -1},
+		{"Ascend950PR_957c", []string{"Ascend950PR", "950PR"}, -1},
+		{"910B3", []string{"910B3", "Ascend950PR"}, 0},
+		{"Ascend910B3", []string{"910B3"}, -1},
+	} {
+		t.Run(tc.chip, func(t *testing.T) {
+			got, err := MatchChipConfig(tc.chip, tc.names)
+			if got != tc.want || (err != nil) != (tc.want < 0) {
+				t.Fatalf("got (%d,%v), want %d", got, err, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadConfigDeviceSplitCount(t *testing.T) {
 	config, err := LoadConfig(writeConfig(t, "vnpus:\n  deviceSplitCount: 7\n  configs: []\n"))
 	if err != nil {

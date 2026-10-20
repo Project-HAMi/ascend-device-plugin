@@ -1,0 +1,10 @@
+# Node ConfigMap content for an Ascend 950 node.
+# enableExperimental950 opts the node into 950 discovery and reporting.
+# vDeviceCount is the number of scheduler slots registered for each physical NPU.
+nodes:
+  - name: <node-name>
+    hamiVnpuMode: hami-core
+    enableExperimental950: true
+    deviceShareMode: npu-id
+    vDeviceCount: 8
+    deviceCoreScaling: 1

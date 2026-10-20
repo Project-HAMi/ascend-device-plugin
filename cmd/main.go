@@ -145,6 +145,10 @@ func main() {
 			klog.Fatalf("load node config failed: %v", err)
 		}
 	}
+	if err := mgr.ValidateExperimental950(); err != nil {
+		klog.Fatalf("ascend 950 configuration: %v", err)
+	}
+	monitor.ConfigureHostDeviceManager(mgr.DeviceManager())
 	server, err := server.NewPluginServer(mgr, *nodeName, *checkIdleVNPUInterval, *enablePeriodicIdleVNPUCleanup)
 	if err != nil {
 		klog.Fatalf("init PluginServer failed, error is %v", err)
