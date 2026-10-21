@@ -387,22 +387,36 @@ func TestLoadNodeConfigModes(t *testing.T) {
 	}
 }
 
+func TestChipFamily950DTOnly(t *testing.T) {
+	for _, name := range []string{"Ascend950DT", "950DT", "ascend950dt_957c"} {
+		if got := ChipFamily(name); got != "Ascend950DT" {
+			t.Fatalf("ChipFamily(%q) = %q, want Ascend950DT", name, got)
+		}
+	}
+	for _, name := range []string{"Ascend950PR", "950PR", "Ascend950PR_957c", "950", "Ascend950DT_", "Ascend950DT_a-b"} {
+		if got := ChipFamily(name); got != "" {
+			t.Fatalf("ChipFamily(%q) = %q, want unsupported", name, got)
+		}
+	}
+}
+
 func TestMatchChipConfig(t *testing.T) {
 	for _, tc := range []struct {
 		chip  string
 		names []string
 		want  int
 	}{
-		{"Ascend950PR", []string{"910B3", "Ascend950PR", "Ascend950DT"}, 1},
-		{"Ascend950PR_957c", []string{"Ascend950PR", "Ascend950DT"}, 0},
-		{"950DT", []string{"Ascend950PR", "Ascend950DT"}, 1},
-		{"Ascend950PR_957c", []string{"Ascend950PR", "Ascend950PR_957c"}, 1},
-		{"Ascend950PR_957c", []string{"Ascend950PR_9579"}, -1},
-		{"950", []string{"Ascend950PR", "Ascend950DT"}, -1},
-		{"Ascend950PRFake", []string{"Ascend950PR"}, -1},
-		{"Ascend950PR_", []string{"Ascend950PR"}, -1},
-		{"Ascend950PR_957c", []string{"Ascend950PR", "950PR"}, -1},
-		{"910B3", []string{"910B3", "Ascend950PR"}, 0},
+		{"Ascend950DT", []string{"910B3", "Ascend950DT"}, 1},
+		{"Ascend950DT_957c", []string{"910B3", "Ascend950DT"}, 1},
+		{"950DT", []string{"910B3", "Ascend950DT"}, 1},
+		{"Ascend950DT_957c", []string{"Ascend950DT", "Ascend950DT_957c"}, 1},
+		{"Ascend950DT_957c", []string{"Ascend950DT_9579"}, -1},
+		{"950", []string{"Ascend950DT"}, -1},
+		{"Ascend950PR_957c", []string{"Ascend950DT"}, -1},
+		{"Ascend950DTFake", []string{"Ascend950DT"}, -1},
+		{"Ascend950DT_", []string{"Ascend950DT"}, -1},
+		{"Ascend950DT_957c", []string{"Ascend950DT", "950DT"}, -1},
+		{"910B3", []string{"910B3", "Ascend950DT"}, 0},
 		{"Ascend910B3", []string{"910B3"}, -1},
 	} {
 		t.Run(tc.chip, func(t *testing.T) {

@@ -250,6 +250,6 @@ deviceConfig: |- # @schema required:true
       aiCPU: 7
 
 # nodeConfig -- Per-node mode (hamiVnpuMode), device count, compute scaling and device filters written to the node ConfigMap. Omitted mode inherits the global mode.
-# An Ascend 950 node also sets enableExperimental950, deviceShareMode and vDeviceCount. See examples/ascend950-node-config.yaml.
+# An Ascend950DT node also sets enableExperimental950, deviceShareMode and vDeviceCount. See examples/ascend950-node-config.yaml.
 nodeConfig: |- # @schema required:true
   nodes: []

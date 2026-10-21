@@ -128,7 +128,7 @@ func (am *AscendManager) deviceDieType() dcmi.DieType {
 	return dcmi.VDIE
 }
 
-// deviceIndex is the filter index. On Ascend 950, NPU ID equals Chip Phy-ID.
+// deviceIndex is the filter index. On Ascend950DT, NPU ID equals Chip Phy-ID.
 func (am *AscendManager) deviceIndex(logicID int32) (int32, error) {
 	if am.isAscend950() {
 		return am.mgr.GetPhysicIDFromLogicID(logicID)
@@ -342,7 +342,7 @@ func (am *AscendManager) GetUnHealthIDs() []int32 {
 
 func (am *AscendManager) CleanupIdleVNPUs() error {
 	if am.isAscend950() {
-		// Ascend 950 does not create hardware template vNPU instances.
+		// Ascend950DT does not create hardware template vNPU instances.
 		return nil
 	}
 	klog.Info("Starting cleanup of idle vNPUs...")

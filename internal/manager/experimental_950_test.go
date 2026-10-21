@@ -55,7 +55,7 @@ func (d *update950DeviceManager) GetDeviceHealth(int32) (uint32, error) {
 
 func test950Manager() *AscendManager {
 	return &AscendManager{
-		config:       internal.VNPUConfig{ChipName: "Ascend950PR", CommonWord: "Ascend950PR", ResourceName: "huawei.com/Ascend950PR", MemoryAllocatable: 32768, MemoryCapacity: 65536},
+		config:       internal.VNPUConfig{ChipName: "Ascend950DT", CommonWord: "Ascend950DT", ResourceName: "huawei.com/Ascend950DT", MemoryAllocatable: 98304, MemoryCapacity: 98304},
 		globalConfig: internal.Config{VNPUs: internal.VNPUsConfig{HamiVnpuMode: "hami-core", DeviceSplitCount: 4}},
 		nodeConfig:   &internal.NodeConfig{EnableExperimental950: true, DeviceShareMode: "npu-id", VDeviceCount: 4},
 	}
@@ -89,12 +89,12 @@ func Test950Validation(t *testing.T) {
 }
 
 func Test950LoadConfigAndSlotOverride(t *testing.T) {
-	m := &AscendManager{mgr: &chipInfoDeviceManager{chipName: "Ascend950PR_957c"}}
-	config := "vnpus:\n  hamiVnpuMode: hami-core\n  deviceSplitCount: 4\n  configs:\n  - chipName: Ascend950PR\n    commonWord: Ascend950PR\n"
+	m := &AscendManager{mgr: &chipInfoDeviceManager{chipName: "Ascend950DT_957c"}}
+	config := "vnpus:\n  hamiVnpuMode: hami-core\n  deviceSplitCount: 4\n  configs:\n  - chipName: Ascend950DT\n    commonWord: Ascend950DT\n"
 	if err := m.LoadConfig(writeConfig(t, config)); err != nil {
 		t.Fatal(err)
 	}
-	if m.CommonWord() != "Ascend950PR" || m.VDeviceCount() != 4 {
+	if m.CommonWord() != "Ascend950DT" || m.VDeviceCount() != 4 {
 		t.Fatal("950 match/slot count incorrect")
 	}
 	m.nodeConfig = &internal.NodeConfig{VDeviceCount: 6}

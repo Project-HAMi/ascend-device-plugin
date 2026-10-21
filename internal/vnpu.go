@@ -164,7 +164,7 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 type NodeConfig struct {
-	// EnableExperimental950 opts this node into Ascend 950 discovery and reporting.
+	// EnableExperimental950 opts this node into Ascend950DT discovery and reporting.
 	EnableExperimental950 bool   `json:"enableExperimental950,omitempty" yaml:"enableExperimental950,omitempty"`
 	DeviceShareMode       string `json:"deviceShareMode,omitempty" yaml:"deviceShareMode,omitempty"`
 	Name                  string `json:"name" yaml:"name"`
@@ -251,8 +251,8 @@ func LoadNodeConfig(path string) (*NodeListConfig, error) {
 	return &yamlData, nil
 }
 
-// ChipFamily accepts a family name or a SoC name with an underscore SKU suffix.
-// It does not infer PR/DT from a bare "950" or an A5 board label.
+// ChipFamily accepts Ascend950DT or a 950DT SoC name with an underscore SKU suffix.
+// Other 950 variants and bare "950" or A5 board labels are not supported.
 func ChipFamily(name string) string {
 	name = strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(name)), "ASCEND")
 	base, suffix, hasSuffix := strings.Cut(name, "_")
@@ -267,16 +267,14 @@ func ChipFamily(name string) string {
 		}
 	}
 	switch base {
-	case "950PR":
-		return "Ascend950PR"
 	case "950DT":
 		return "Ascend950DT"
 	}
 	return ""
 }
 
-// MatchChipConfig preserves exact matching for existing chips. Only a generic 950
-// family entry can match a SKU; one SKU must never match a different SKU.
+// MatchChipConfig preserves exact matching for existing chips. Only a generic
+// Ascend950DT entry can match a 950DT SKU; one SKU must never match another SKU.
 func MatchChipConfig(chip string, names []string) (int, error) {
 	for i, name := range names {
 		if name == chip {
