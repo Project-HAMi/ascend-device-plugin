@@ -95,9 +95,9 @@ func (c *vNPUCollector) Collect(ch chan<- prometheus.Metric) {
 		klog.Errorf("Host device stats: %v", err)
 	}
 
-	podMemByDevice := c.collectPodMetrics(ch, hostDevices)
+	c.collectPodMetrics(ch, hostDevices)
 	if !c.skipHostMetrics {
-		c.collectHostMetrics(ch, hostDevices, podMemByDevice)
+		c.collectHostMetrics(ch, hostDevices)
 	}
 }
 
@@ -108,24 +108,22 @@ func formatDeviceType(deviceType string) string {
 	return "Ascend-" + deviceType
 }
 
-func (c *vNPUCollector) collectHostMetrics(ch chan<- prometheus.Metric, devices []DeviceStat, podMemByDevice map[string]uint64) {
+func (c *vNPUCollector) collectHostMetrics(ch chan<- prometheus.Metric, devices []DeviceStat) {
 	for _, d := range devices {
 		hostUsed := float64(d.MemoryUsed) * 1024 * 1024
-		// Override with pod aggregate if available (more accurate in device-share mode)
-		if sum, ok := podMemByDevice[d.UUID]; ok && sum > 0 {
-			hostUsed = float64(sum)
-		}
 		labels := []string{fmt.Sprint(d.Index), d.UUID, formatDeviceType(d.DeviceType)}
-		ch <- prometheus.MustNewConstMetric(hostGPUdesc, prometheus.GaugeValue, hostUsed, labels...)
+		if d.MemoryTotal > 0 {
+			ch <- prometheus.MustNewConstMetric(hostGPUdesc, prometheus.GaugeValue, hostUsed, labels...)
+		}
 		ch <- prometheus.MustNewConstMetric(hostGPUUtilizationdesc, prometheus.GaugeValue, float64(d.AICorePct), labels...)
 	}
 }
 
-func (c *vNPUCollector) collectPodMetrics(ch chan<- prometheus.Metric, devices []DeviceStat) map[string]uint64 {
-	entries, err := c.lister.ListContainers()
+func (c *vNPUCollector) collectPodMetrics(ch chan<- prometheus.Metric, devices []DeviceStat) {
+	entries, err := c.lister.ListContainers(devices)
 	if err != nil {
 		klog.Errorf("List containers: %v", err)
-		return nil
+		return
 	}
 
 	utilByUUID := make(map[string]float64)
@@ -133,43 +131,26 @@ func (c *vNPUCollector) collectPodMetrics(ch chan<- prometheus.Metric, devices [
 		utilByUUID[d.UUID] = float64(d.AICorePct)
 	}
 
-	podMemByDevice := make(map[string]uint64)
-
 	for _, e := range entries {
-		memoryLimit := e.Stats.MemoryLimit
 		memoryContextSize := uint64(0)
 		memoryModuleSize := uint64(0)
 		memoryBufferSize := uint64(0)
 
-		// ReadMemoryByDevice sums hbm_used per-NPU-device (0..hbmDevices-1).
-		// Each DeviceUUID entry maps to the same index in DeviceMemory.
-		devMem := e.DeviceMemory
-
-		for i, devUUID := range e.DeviceUUIDs {
-			memoryUsed := uint64(0)
-			if i < len(devMem) {
-				memoryUsed = devMem[i]
-			}
-
+		for _, device := range e.Devices {
 			baseLabels := []string{
 				e.Namespace,
 				e.PodName,
 				e.ContainerName,
-				strconv.Itoa(i),
-				devUUID,
+				strconv.Itoa(device.Index),
+				device.UUID,
 			}
 
-			ch <- prometheus.MustNewConstMetric(ctrvGPUdesc, prometheus.GaugeValue, float64(memoryUsed), baseLabels...)
-			ch <- prometheus.MustNewConstMetric(ctrvGPUlimitdesc, prometheus.GaugeValue, float64(memoryLimit), baseLabels...)
-			ch <- prometheus.MustNewConstMetric(ctrDeviceUtilizationdesc, prometheus.GaugeValue, utilByUUID[devUUID], baseLabels...)
+			ch <- prometheus.MustNewConstMetric(ctrvGPUdesc, prometheus.GaugeValue, float64(device.MemoryUsed), baseLabels...)
+			ch <- prometheus.MustNewConstMetric(ctrvGPUlimitdesc, prometheus.GaugeValue, float64(device.MemoryLimit), baseLabels...)
+			ch <- prometheus.MustNewConstMetric(ctrDeviceUtilizationdesc, prometheus.GaugeValue, utilByUUID[device.UUID], baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrDeviceMemoryContextDesc, prometheus.GaugeValue, float64(memoryContextSize), baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrDeviceMemoryModuleDesc, prometheus.GaugeValue, float64(memoryModuleSize), baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrDeviceMemoryBufferDesc, prometheus.GaugeValue, float64(memoryBufferSize), baseLabels...)
-
-			if devUUID != "" {
-				podMemByDevice[devUUID] += memoryUsed
-			}
 		}
 	}
-	return podMemByDevice
 }

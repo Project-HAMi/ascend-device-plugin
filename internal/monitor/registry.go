@@ -15,6 +15,7 @@ const (
 	localShmMemUsedOffset       = 8
 	localShmComputePrioOffset   = 16
 	localShmActiveWorkersOffset = 48
+	localShmInitializedOffset   = 6220
 
 	// ProcessSlot: pid@0, hbm_used[8]@8, is_active@72, size 80.
 	procSlotSize      = 80
@@ -51,7 +52,10 @@ func OpenLocalShmem(path string) (*ShmemReader, error) {
 	if err != nil {
 		return nil, err
 	}
-	if fi.Size() < int64(localShmProcsOffset+procSlotSize) {
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("not a regular file: %s", path)
+	}
+	if fi.Size() < int64(localShmInitializedOffset+4) {
 		return nil, fmt.Errorf("file too small: %d bytes", fi.Size())
 	}
 
@@ -74,6 +78,12 @@ func (r *ShmemReader) ReadPodStats() PodStats {
 	}
 }
 
+// Initialized is published after the manager has configured the resource limits.
+// active_workers is not an initialization/liveness flag: spatial does not use it.
+func (r *ShmemReader) Initialized() bool {
+	return atomic.LoadUint32((*uint32)(unsafe.Pointer(&r.data[localShmInitializedOffset]))) == 1
+}
+
 // ReadMemoryByDevice sums HBM usage per-device across all active process slots.
 func (r *ShmemReader) ReadMemoryByDevice() [hbmDevices]uint64 {
 	var devMem [hbmDevices]uint64
@@ -83,7 +93,8 @@ func (r *ShmemReader) ReadMemoryByDevice() [hbmDevices]uint64 {
 			break
 		}
 		isActive := atomic.LoadUint32((*uint32)(unsafe.Pointer(&r.data[base+procSlotActive])))
-		if isActive == 0 {
+		pid := atomic.LoadInt32((*int32)(unsafe.Pointer(&r.data[base+procSlotPID])))
+		if isActive != 1 || pid <= 0 {
 			continue
 		}
 		for d := 0; d < hbmDevices; d++ {

@@ -344,7 +344,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 					"ASCEND_VISIBLE_DEVICES": "3",
 					"NPU_MEMORY_LIMIT_MB":    "16384",
 					"NPU_COMPUTE_LIMIT":      "4",
-					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/3_global_registry",
+					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/global_registry",
 				},
 				mounts: []*v1beta1.Mount{
 					{HostPath: "/usr/local/bin/npu-smi", ContainerPath: "/usr/local/bin/npu-smi", ReadOnly: true},
@@ -387,7 +387,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 					"NPU_MEMORY_LIMIT_MB":    "65536",
 					"NPU_COMPUTE_LIMIT":      "100",
 					"NPU_SCHED_POLICY":       "spatial",
-					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/3_global_registry",
+					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/global_registry",
 				},
 			},
 		},
@@ -454,7 +454,7 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 					"ASCEND_VISIBLE_DEVICES": "3",
 					"NPU_MEMORY_LIMIT_MB":    "8738",
 					"NPU_COMPUTE_LIMIT":      "4",
-					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/3_global_registry",
+					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/global_registry",
 				},
 				mounts: []*v1beta1.Mount{
 					{HostPath: "/usr/local/bin/npu-smi", ContainerPath: "/usr/local/bin/npu-smi", ReadOnly: true},
@@ -645,9 +645,9 @@ func TestBuildContainerAllocateResponse(t *testing.T) {
 			want: buildContainerAllocateResponseWant{
 				envs: map[string]string{
 					"ASCEND_VISIBLE_DEVICES": "0,1",
-					"NPU_MEMORY_LIMIT_MB":    "65536",
+					"NPU_MEMORY_LIMIT_MB":    "32768",
 					"NPU_COMPUTE_LIMIT":      "8",
-					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/0_global_registry",
+					"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/global_registry",
 				},
 			},
 		},

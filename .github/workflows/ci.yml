@@ -82,23 +82,20 @@ jobs:
 
   build-vnpu:
     runs-on: ubuntu-22.04-arm
-    container:
-      image: ghcr.io/dsfans2014/ascend-device-plugin/ascend-lib:0.2
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-    - name: Cache cargo
-      uses: Swatinem/rust-cache@v2
-    - name: Build
-      run: cargo build --release
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    - name: Build with the core's official CANN 8.5.2 Dockerfile
+      run: make build-in-docker PLATFORM=linux/arm64 OUT_DIR=../artifacts
       working-directory: ./libvnpu
     - name: Prepare artifacts for upload
       run: |
-        mkdir -p ./artifacts
-        cp libvnpu/target/release/libvnpu.so ./artifacts/
+        test -s ./artifacts/libvnpu.so
+        test -s ./artifacts/build-info.json
+        (cd ./artifacts && sha256sum -c SHA256SUMS)
         echo "/hami-vnpu-core/libvnpu.so" > ./artifacts/ld.so.preload
     - name: upload artifacts
       uses: actions/upload-artifact@v4

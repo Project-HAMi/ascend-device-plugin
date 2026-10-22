@@ -39,9 +39,8 @@ func (ps *PluginServer) hamiCorePolicy(pod *v1.Pod) (string, error) {
 	return policy, nil
 }
 
-// HAMi annotates memory per selected card. The core has one container-wide HBM
-// ledger, so aggregate those reservations. Its single compute setting applies
-// to every selected device and cannot represent heterogeneous compute quotas.
+// The core applies its scalar memory and compute settings independently to
+// every selected card, so heterogeneous per-card quotas cannot be represented.
 func (ps *PluginServer) hamiCoreQuota(devices device.ContainerDevices, lookup map[string]RuntimeInfo) (int64, int32, error) {
 	var memoryLimit int64
 	var computeLimit int32
@@ -66,14 +65,14 @@ func (ps *PluginServer) hamiCoreQuota(devices device.ContainerDevices, lookup ma
 		if memory <= 0 {
 			return 0, 0, fmt.Errorf("cannot determine positive HAMi memory quota for %s", allocation.UUID)
 		}
-		if memory > math.MaxInt64-memoryLimit {
-			return 0, 0, fmt.Errorf("combined HAMi memory quota overflows int64")
-		}
-		memoryLimit += memory
 		// The runtime converts MiB to a u64 byte count.
-		if uint64(memoryLimit) > math.MaxUint64/(1024*1024) {
-			return 0, 0, fmt.Errorf("combined HAMi memory quota overflows runtime byte count")
+		if uint64(memory) > math.MaxUint64/(1024*1024) {
+			return 0, 0, fmt.Errorf("HAMi memory quota for %s overflows runtime byte count", allocation.UUID)
 		}
+		if memoryLimit != 0 && memoryLimit != memory {
+			return 0, 0, fmt.Errorf("HAMi core requires the same memory quota on every device: got %d and %d MiB", memoryLimit, memory)
+		}
+		memoryLimit = memory
 		compute := int32(100)
 		if info.Core != nil && *info.Core != 0 {
 			compute = *info.Core
@@ -119,8 +118,9 @@ func (ps *PluginServer) buildHamiCoreAllocateResponse(resp *v1beta1.ContainerAll
 	resp.Envs["NPU_MEMORY_LIMIT_MB"] = strconv.FormatInt(memory, 10)
 	resp.Envs["NPU_COMPUTE_LIMIT"] = strconv.FormatInt(int64(compute), 10)
 	resp.Envs["NPU_SCHED_POLICY"] = policy
-	physicalID := ps.mgr.GetDeviceByUUID(devices[0].UUID).PhyID
-	resp.Envs["NPU_GLOBAL_SHM_PATH"] = fmt.Sprintf("/hami-shared-region/%d_global_registry", physicalID)
+	// The core appends the physical device ID; overlapping allocations must use
+	// the same base regardless of their selected device order.
+	resp.Envs["NPU_GLOBAL_SHM_PATH"] = "/hami-shared-region/global_registry"
 
 	containerShmemDir := filepath.Join(hostHookPath, "containers", fmt.Sprintf("%s_%s", pod.UID, ctrName))
 	if err := os.RemoveAll(containerShmemDir); err != nil {

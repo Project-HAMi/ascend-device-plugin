@@ -6,11 +6,13 @@ import (
 	"ascend-common/devmanager/dcmi"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 )
 
 type DeviceStat struct {
 	Index       int
+	PhysicalID  int
 	UUID        string
 	DeviceType  string
 	MemoryUsed  uint64
@@ -62,13 +64,29 @@ func collectHostDeviceStats() ([]DeviceStat, error) {
 			continue
 		}
 
-		uuid, _ := mgr.DcGetDieID(cardID, deviceID, dcmi.VDIE)
+		physicalID, err := mgr.DcGetPhysicIDFromLogicID(logicID)
+		if err != nil {
+			continue
+		}
+		uuid, err := mgr.DcGetDieID(cardID, deviceID, dcmi.VDIE)
+		if err != nil || uuid == "" {
+			continue
+		}
 
 		pt, _ := mgr.DcGetProductType(cardID, deviceID)
+		if strings.TrimSpace(pt) == "" {
+			if chip, err := mgr.DcGetChipInfo(cardID, deviceID); err == nil && chip != nil {
+				pt = chip.Name
+			}
+		}
 
 		memTotal := uint64(0)
 		memUsed := uint64(0)
-		if memInfo, err := mgr.DcGetMemoryInfo(cardID, deviceID); err == nil {
+		// Ascend 910 reports HBM through FuncDcmiGetDeviceHbmInfo, not the DDR interface.
+		if hbm, err := dcmi.FuncDcmiGetDeviceHbmInfo(cardID, deviceID); err == nil && hbm != nil && hbm.MemorySize > 0 && hbm.Usage <= hbm.MemorySize {
+			memTotal = hbm.MemorySize
+			memUsed = hbm.Usage
+		} else if memInfo, err := mgr.DcGetMemoryInfo(cardID, deviceID); err == nil && memInfo != nil && memInfo.MemorySize > 0 && memInfo.MemoryAvailable <= memInfo.MemorySize {
 			memTotal = memInfo.MemorySize
 			memUsed = memInfo.MemorySize - memInfo.MemoryAvailable
 		}
@@ -80,6 +98,7 @@ func collectHostDeviceStats() ([]DeviceStat, error) {
 
 		devices = append(devices, DeviceStat{
 			Index:       int(logicID),
+			PhysicalID:  int(physicalID),
 			UUID:        uuid,
 			DeviceType:  pt,
 			MemoryTotal: memTotal,

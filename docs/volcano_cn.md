@@ -145,6 +145,20 @@ spec:
 
 支持的芯片型号、`ResourceName`/`ResourceMemoryName`/`ResourceCoreName` 完整列表，以及显存分配的取整规则，请参阅 Volcano 官方的 [Ascend vNPU 使用指南](https://github.com/volcano-sh/volcano/blob/master/docs/user-guide/how_to_use_vnpu.md#hami-mode)。
 
+逐卡独立记账需要同时部署本插件及其锁定的 hami-vnpu-core `9f7be4c` 运行库。多卡分配要求所选各卡的显存和算力配额分别相同。例如，申请 4 张 Ascend910B3，每张卡 20 GiB 显存、50% 算力：
+
+```yaml
+resources:
+  limits:
+    huawei.com/Ascend910B3: "4"
+    huawei.com/Ascend910B3-memory: "20480" # 每张卡 20 GiB
+    huawei.com/Ascend910B3-core: "50"      # 每张卡 50% 算力
+```
+
+插件注入 `NPU_MEMORY_LIMIT_MB=20480` 和 `NPU_COMPUTE_LIMIT=50`，每张卡分别应用这两个配额；`-memory` 不应填写 `"81920"`。默认算力策略为 `spatial`。策略选择和升级要求参阅 [HAMi 配置说明](hami_cn.md#软切分配置-hami-vnpu-core)。
+
+`NPU_GLOBAL_SHM_PATH=/hami-shared-region/global_registry` 和 `NPU_LOCAL_SHM_PATH=/hami-vnpu-shmem/vnpu_local_shmem` 是不绑定首卡的基础路径。应用首次使用某张卡时，core 在两个路径后追加 `.device-<physicalID>`。本地域按容器、物理卡分别记账，全局域使用跨容器共享的相同基础路径。业务仍使用容器内的逻辑设备号。
+
 ## 监控
 
 当节点运行在 **hami-vnpu-core(软切)模式**时，设备插件会在 **`:9395/metrics`** 启动内置 **Prometheus exporter**，上报物理设备级和每容器的 vNPU 使用指标。传统的模板 vNPU(或整卡)模式**不会**启动它——那种模式没有软切数据可导出。
@@ -162,6 +176,8 @@ curl -s $POD_IP:9395/metrics | grep hami_
 | :--- | :--- | :--- |
 | `hami_host_gpu_memory_used_bytes` | `device_index`, `device_uuid`, `device_type` | 物理 NPU 已用显存(字节) |
 | `hami_host_gpu_utilization_ratio` | `device_index`, `device_uuid`, `device_type` | 物理 NPU AICore 利用率(0–100) |
-| `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 每容器 vNPU 已用显存(字节) |
-| `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 每容器 vNPU 显存上限(字节) |
+| `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 该容器在该 NPU 上由 hook 记账的显存(字节) |
+| `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 该容器在该 NPU 上的显存上限(字节) |
 | `hami_container_device_utilization_ratio` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 容器所在设备的 AICore 利用率(0–100) |
+
+对于逐卡 SHM 域，`vdevice_index` 为宿主机物理设备 ID，`device_uuid` 标识对应物理卡；旧版无后缀 SHM 保留注解/数组的顺序索引。仅导出已初始化的域。容器显存指标表示 hook 记账的分配量，宿主机显存指标保留 DCMI 上报的物理 HBM 使用量。容器利用率指标取所在整张卡的利用率，同卡容器共享这个数值。
