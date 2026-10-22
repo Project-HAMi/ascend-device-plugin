@@ -63,6 +63,10 @@ func (ps *PluginServer) watchAndRegister() {
 			timer = time.After(5 * time.Second)
 			continue
 		}
+		// Chips that were still busy when Start() enabled device-share are
+		// re-driven here; the driver accepts the switch once their workloads
+		// have finished.
+		ps.retryPendingDeviceShare()
 		// Publish to kubelet whenever the device set changed, in either
 		// direction. The send is bounded so that a missing ListAndWatch
 		// consumer cannot stall this loop, which would also stop the HAMi node
@@ -93,7 +97,13 @@ func (ps *PluginServer) watchAndRegister() {
 // so that a change in device count or in per-device health can be detected.
 func (ps *PluginServer) deviceFingerprint() string {
 	var sb strings.Builder
+	pending := ps.pendingShareChips()
 	for _, dev := range ps.mgr.GetDevices() {
+		// A chip waiting for device-share is not published at all, so it has
+		// to change the fingerprint the moment it is withheld or restored.
+		if pending[chipKey{Card: dev.CardID, Chip: dev.DeviceID}] {
+			continue
+		}
 		sb.WriteString(dev.UUID)
 		if dev.Health {
 			sb.WriteString("=1;")
@@ -107,8 +117,15 @@ func (ps *PluginServer) deviceFingerprint() string {
 func (ps *PluginServer) registerHAMi() error {
 	devs := ps.mgr.GetDevices()
 	apiDevices := make([]*device.DeviceInfo, 0, len(devs))
-	// hami currently believes that the index starts from 0 and is continuous.
+	pending := ps.pendingShareChips()
+	// hami currently believes that the index starts from 0 and is continuous,
+	// so Index counts the devices actually reported, while the position in
+	// devs stays the physical index getDeviceNetworkID needs.
+	index := 0
 	for i, dev := range devs {
+		if pending[chipKey{Card: dev.CardID, Chip: dev.DeviceID}] {
+			continue
+		}
 		softSlice := ps.mgr.IsHamiVnpuCore() || managerUsesENPU(ps.mgr)
 		scaling := ps.mgr.DeviceCoreScaling()
 		if managerUsesENPU(ps.mgr) && !ps.mgr.IsHamiVnpuCore() {
@@ -116,7 +133,7 @@ func (ps *PluginServer) registerHAMi() error {
 		}
 		devcore := internal.AdvertisedDevcore(softSlice, scaling, dev.AICore)
 		device := &device.DeviceInfo{
-			Index:   uint(i),
+			Index:   uint(index),
 			ID:      dev.UUID,
 			Count:   int32(ps.mgr.VDeviceCount()),
 			Devmem:  int32(dev.Memory),
@@ -138,6 +155,7 @@ func (ps *PluginServer) registerHAMi() error {
 			}
 		}
 		apiDevices = append(apiDevices, device)
+		index++
 	}
 
 	data, err := json.Marshal(apiDevices)

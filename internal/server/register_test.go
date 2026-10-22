@@ -603,3 +603,96 @@ func TestRegisterHAMi(t *testing.T) {
 		})
 	}
 }
+
+// A chip whose device-share the driver refused is still laid out as a whole
+// chip, so it must not reach the HAMi annotation until the switch succeeds.
+func TestRegisterHAMi_PendingChipsAreNotRegistered(t *testing.T) {
+	// Not parallel: setupFakeClient swaps the package-level client.KubeClient.
+
+	devs := []*manager.Device{
+		{UUID: "uuid0", CardID: 0, DeviceID: 0, Memory: 32768, AICore: 30, Health: true},
+		{UUID: "uuid1", CardID: 0, DeviceID: 1, Memory: 32768, AICore: 30, Health: true},
+		{UUID: "uuid2", CardID: 1, DeviceID: 0, Memory: 32768, AICore: 30, Health: true},
+		{UUID: "uuid3", CardID: 1, DeviceID: 1, Memory: 32768, AICore: 30, Health: true},
+		{UUID: "uuid4", CardID: 2, DeviceID: 0, Memory: 32768, AICore: 30, Health: true},
+	}
+	ps := &PluginServer{
+		nodeName:      "pending-share-node",
+		registerAnno:  "hami.io/node-register-Ascend910B",
+		handshakeAnno: "hami.io/node-handshake-Ascend910B",
+		mgr: &FakeManager{
+			GetDevicesFunc:     func() []*manager.Device { return devs },
+			VDeviceCountFunc:   func() int { return 1 },
+			CommonWordFunc:     func() string { return "Ascend910B" },
+			IsHamiVnpuCoreFunc: func() bool { return true },
+		},
+		pendingDeviceShare: []shareTarget{{chipKey: chipKey{Card: 0, Chip: 1}, LogicID: 1}},
+	}
+	cleanup := setupFakeClient(nil, []*v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "pending-share-node", Annotations: map[string]string{}}},
+	})
+	defer cleanup()
+
+	if err := ps.registerHAMi(); err != nil {
+		t.Fatalf("registerHAMi: %v", err)
+	}
+	updated, err := client.KubeClient.CoreV1().Nodes().Get(context.Background(), "pending-share-node", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	got, err := device.UnMarshalNodeDevices(updated.Annotations[ps.registerAnno])
+	if err != nil {
+		t.Fatalf("unmarshal node devices: %v", err)
+	}
+
+	if len(got) != 4 {
+		t.Fatalf("registered %d devices, want 4 (uuid1 is waiting for device-share)", len(got))
+	}
+	for _, d := range got {
+		if d.ID == "uuid1" {
+			t.Fatal("uuid1 is waiting for device-share and must not be registered")
+		}
+	}
+	// HAMi requires the index to start at 0 and be continuous over the
+	// devices actually reported.
+	for i, d := range got {
+		if d.Index != uint(i) {
+			t.Fatalf("device[%d] Index = %d, want %d", i, d.Index, i)
+		}
+	}
+	// NetworkID still follows the chip's position in the driver's list, not
+	// its position in the reported slice: uuid4 sits at physical index 4.
+	last := got[len(got)-1]
+	if last.ID != "uuid4" {
+		t.Fatalf("last registered device = %q, want uuid4", last.ID)
+	}
+	if netID := int(last.CustomInfo["NetworkID"].(float64)); netID != 1 {
+		t.Fatalf("uuid4 NetworkID = %d, want 1 (physical index 4)", netID)
+	}
+}
+
+// The fingerprint drives the kubelet update, so withholding a chip and
+// restoring it must both be visible to watchAndRegister.
+func TestDeviceFingerprint_TracksPendingDeviceShare(t *testing.T) {
+	t.Parallel()
+
+	devs := []*manager.Device{
+		{UUID: "uuid0", CardID: 0, DeviceID: 0, Health: true},
+		{UUID: "uuid1", CardID: 0, DeviceID: 1, Health: true},
+	}
+	ps := &PluginServer{mgr: &FakeManager{GetDevicesFunc: func() []*manager.Device { return devs }}}
+
+	all := ps.deviceFingerprint()
+	ps.setPendingDeviceShare([]shareTarget{{chipKey: chipKey{Card: 0, Chip: 1}, LogicID: 1}})
+	withheld := ps.deviceFingerprint()
+	if withheld == all {
+		t.Fatal("fingerprint unchanged while a chip is withheld; kubelet would never be told")
+	}
+	if strings.Contains(withheld, "uuid1") {
+		t.Fatalf("fingerprint %q still lists the withheld chip", withheld)
+	}
+	ps.setPendingDeviceShare(nil)
+	if restored := ps.deviceFingerprint(); restored != all {
+		t.Fatalf("fingerprint after the chip is switched = %q, want %q", restored, all)
+	}
+}
