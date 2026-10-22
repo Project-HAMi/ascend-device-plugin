@@ -272,6 +272,7 @@ func (am *AscendManager) ListVirtualDevices(logicID int32) ([]VirtualDevice, err
 	if err != nil {
 		return nil, fmt.Errorf("get virtual devices for logic id %d: %w", logicID, err)
 	}
+	ignored := am.shouldIgnoreDeviceForCleanup(logicID, cardID)
 	result := make([]VirtualDevice, 0, len(infos.VDevInfo))
 	for _, info := range infos.VDevInfo {
 		result = append(result, VirtualDevice{
@@ -281,7 +282,7 @@ func (am *AscendManager) ListVirtualDevices(logicID int32) ([]VirtualDevice, err
 			DeviceID:        deviceID,
 			TemplateName:    info.QueryInfo.Name,
 			IsContainerUsed: int32(info.QueryInfo.IsContainerUsed),
-			Ignored:         am.shouldIgnoreDeviceForCleanup(logicID, cardID),
+			Ignored:         ignored,
 		})
 	}
 	return result, nil
@@ -291,10 +292,14 @@ func (am *AscendManager) shouldIgnoreDeviceForCleanup(logicID, cardID int32) boo
 	if !am.shouldCheckIgnored() {
 		return false
 	}
-	uuid, err := am.mgr.GetDieID(logicID, dcmi.VDIE)
-	if err != nil {
-		klog.Warningf("failed to get uuid for logic ID %d while checking cleanup filter: %v", logicID, err)
-		return true
+	uuid := ""
+	if am.nodeConfig.FilterDevices.HasUUID() {
+		var err error
+		uuid, err = am.mgr.GetDieID(logicID, dcmi.VDIE)
+		if err != nil {
+			klog.Warningf("failed to get uuid for logic ID %d while checking cleanup filter: %v", logicID, err)
+			return true
+		}
 	}
 	return am.shouldIgnoreDevice(uuid, cardID)
 }

@@ -556,6 +556,45 @@ func TestNewPluginServer(t *testing.T) {
 	}
 }
 
+func TestNewPluginServerCleanupInterval(t *testing.T) {
+	const commonWord = "TestCleanupInterval"
+	original, existed := device.InRequestDevices[commonWord]
+	t.Cleanup(func() {
+		if existed {
+			device.InRequestDevices[commonWord] = original
+		} else {
+			delete(device.InRequestDevices, commonWord)
+		}
+	})
+
+	for _, tc := range []struct {
+		name     string
+		interval int
+		enabled  bool
+		wantErr  bool
+	}{
+		{name: "enabled positive interval", interval: 60, enabled: true},
+		{name: "enabled zero interval", interval: 0, enabled: true, wantErr: true},
+		{name: "enabled negative interval", interval: -1, enabled: true, wantErr: true},
+		{name: "disabled zero interval", interval: 0},
+		{name: "disabled negative interval", interval: -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mgr := &FakeManager{CommonWordFunc: func() string { return commonWord }}
+			ps, err := NewPluginServer(mgr, "test-node", tc.interval, tc.enabled)
+			if tc.wantErr {
+				if err == nil || ps != nil {
+					t.Fatalf("NewPluginServer() = (%v, %v), want rejected cleanup interval", ps, err)
+				}
+				return
+			}
+			if err != nil || ps == nil {
+				t.Fatalf("NewPluginServer() = (%v, %v), want valid configuration", ps, err)
+			}
+		})
+	}
+}
+
 func TestNewPluginServer_RegistersInRequestDevices(t *testing.T) {
 	commonWord := "Ascend910"
 	origVal := device.InRequestDevices[commonWord]

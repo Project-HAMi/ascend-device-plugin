@@ -128,6 +128,9 @@ func podUsesENPU(pod *v1.Pod) bool {
 }
 
 func NewPluginServer(mgr manager.Manager, nodeName string, checkIdleVNPUInterval int, enablePeriodicIdleVNPUCleanup bool) (*PluginServer, error) {
+	if enablePeriodicIdleVNPUCleanup && checkIdleVNPUInterval <= 0 {
+		return nil, fmt.Errorf("check_idle_vnpu_interval must be greater than zero when periodic idle vNPU cleanup is enabled")
+	}
 	commonWord := mgr.CommonWord()
 	server := &PluginServer{
 		commonWord:                    commonWord,
