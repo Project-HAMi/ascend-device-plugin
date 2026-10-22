@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -31,9 +32,16 @@ type ContainerEntry struct {
 	ContainerName string
 	Namespace     string
 	PodName       string
-	Stats         PodStats
-	DeviceMemory  [hbmDevices]uint64
-	DeviceUUIDs   []string
+	Devices       []ContainerDeviceStats
+}
+
+type ContainerDeviceStats struct {
+	// Physical device ID for per-device domains; legacy files retain their
+	// historical annotation/column ordinal as vdevice_index.
+	Index       int
+	UUID        string
+	MemoryUsed  uint64
+	MemoryLimit uint64
 }
 
 type ContainerLister struct {
@@ -120,7 +128,7 @@ func ascendDeviceResource(pod *corev1.Pod, ctrName string) string {
 
 // ListContainers enumerates container directories and reads shmem from each.
 // Directory format: {podUID}_{containerName}.
-func (l *ContainerLister) ListContainers() ([]ContainerEntry, error) {
+func (l *ContainerLister) ListContainers(devices []DeviceStat) ([]ContainerEntry, error) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -143,6 +151,12 @@ func (l *ContainerLister) ListContainers() ([]ContainerEntry, error) {
 	}
 
 	var result []ContainerEntry
+	uuidByPhysical := make(map[int]string, len(devices))
+	for _, device := range devices {
+		if device.PhysicalID >= 0 && device.UUID != "" {
+			uuidByPhysical[device.PhysicalID] = device.UUID
+		}
+	}
 	for _, dirent := range entries {
 		if !dirent.IsDir() {
 			continue
@@ -167,13 +181,6 @@ func (l *ContainerLister) ListContainers() ([]ContainerEntry, error) {
 			continue
 		}
 
-		shmemPath := filepath.Join(l.containersPath, name, "vnpu_local_shmem")
-		reader, err := OpenLocalShmem(shmemPath)
-		if err != nil {
-			klog.V(5).Infof("Skip shmem %s: %v", shmemPath, err)
-			continue
-		}
-
 		var devUUIDs []string
 		if key := ascendDeviceResource(pod, ctrName); key != "" {
 			if anno, ok := pod.Annotations[key]; ok {
@@ -188,16 +195,96 @@ func (l *ContainerLister) ListContainers() ([]ContainerEntry, error) {
 			}
 		}
 
+		deviceStats := readContainerDevices(filepath.Join(l.containersPath, name), devUUIDs, uuidByPhysical)
+		if len(deviceStats) == 0 {
+			continue
+		}
 		result = append(result, ContainerEntry{
 			PodUID:        podUID,
 			ContainerName: ctrName,
 			Namespace:     pod.Namespace,
 			PodName:       pod.Name,
-			Stats:         reader.ReadPodStats(),
-			DeviceMemory:  reader.ReadMemoryByDevice(),
-			DeviceUUIDs:   devUUIDs,
+			Devices:       deviceStats,
 		})
-		_ = reader.Close()
 	}
 	return result, nil
+}
+
+const localShmemName = "vnpu_local_shmem"
+
+// New cores use a separate accounting domain for each physical NPU. The slot
+// array retains its ABI, but only column zero belongs to that domain. The pod's
+// runtime annotation is a UUID allowlist, not a per-container device ordering.
+func readContainerDevices(dir string, devUUIDs []string, uuidByPhysical map[int]string) []ContainerDeviceStats {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	allowed := make(map[string]bool, len(devUUIDs))
+	for _, uuid := range devUUIDs {
+		allowed[uuid] = true
+	}
+	var result []ContainerDeviceStats
+	hasDeviceDomains := false
+	for _, file := range files {
+		suffix, found := strings.CutPrefix(file.Name(), localShmemName+".device-")
+		if !found {
+			continue
+		}
+		// Never mix stale unsuffixed data with any new-format domain, including
+		// one that is still being initialized or cannot currently be resolved.
+		hasDeviceDomains = true
+		physical, err := strconv.ParseUint(suffix, 10, 31)
+		if err != nil || strconv.FormatUint(physical, 10) != suffix || !file.Type().IsRegular() {
+			continue
+		}
+		uuid := uuidByPhysical[int(physical)]
+		if uuid == "" || !allowed[uuid] {
+			continue
+		}
+		if stats, ok := readContainerShmem(filepath.Join(dir, file.Name())); ok {
+			result = append(result, ContainerDeviceStats{
+				Index: int(physical), UUID: uuid, MemoryUsed: stats.memory[0], MemoryLimit: stats.limit,
+			})
+		}
+	}
+	if hasDeviceDomains {
+		return result
+	}
+	// Preserve the legacy annotation/column ordering only for unsuffixed cores.
+	// Those columns do not identify physical devices.
+	if stats, ok := readContainerShmem(filepath.Join(dir, localShmemName)); ok {
+		seen := make(map[string]bool)
+		for i, uuid := range devUUIDs {
+			if i >= len(stats.memory) {
+				break
+			}
+			if uuid == "" || seen[uuid] {
+				continue
+			}
+			seen[uuid] = true
+			result = append(result, ContainerDeviceStats{
+				Index: i, UUID: uuid, MemoryUsed: stats.memory[i], MemoryLimit: stats.limit,
+			})
+		}
+	}
+	return result
+}
+
+type containerShmemStats struct {
+	memory [hbmDevices]uint64
+	limit  uint64
+}
+
+func readContainerShmem(path string) (containerShmemStats, bool) {
+	reader, err := OpenLocalShmem(path)
+	if err != nil {
+		klog.V(5).Infof("Skip shmem %s: %v", path, err)
+		return containerShmemStats{}, false
+	}
+	defer func() { _ = reader.Close() }()
+	if !reader.Initialized() {
+		return containerShmemStats{}, false
+	}
+	return containerShmemStats{memory: reader.ReadMemoryByDevice(), limit: reader.ReadPodStats().MemoryLimit}, true
 }

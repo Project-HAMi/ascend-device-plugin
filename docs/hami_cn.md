@@ -119,9 +119,9 @@ spec:
       ...
       resources:
         limits:
-          huawei.com/Ascend910B3: "1"           # 请求 1 块物理 NPU
-          huawei.com/Ascend910B3-memory: "28672" # 请求 28Gi 显存
-          huawei.com/Ascend910B3-core: "40"      # 请求 40% 的算力
+          huawei.com/Ascend910B3: "4"           # 在 4 张物理 NPU 上各申请一份资源
+          huawei.com/Ascend910B3-memory: "20480" # 每张卡 20 GiB 显存
+          huawei.com/Ascend910B3-core: "50"      # 每张卡 50% 算力
 ```
 
 `-memory` 单位为 MiB，省略时默认使用整卡。`-core` 是可选的：省略或为零时，HAMi 不预留算力，插件将运行时上限设为 **100**。正数上限必须在 1–100 之间；负数和大于 100 的配额会被拒绝。申请算力配额时请显式添加 hami-core 模式注解。
@@ -144,9 +144,15 @@ metadata:
     huawei.com/npu-sched-policy: overdraft
 ```
 
-应同时部署更新后的插件及其锁定的 hami-vnpu-core `b19ef02` 运行库。旧运行库不识别新配额变量；新运行库会拒绝 `NPU_MEM_QUOTA`、`NPU_PRIORITY` 和 `NPU_FIXED_SHARE_RATIO`。替换节点运行库前先停止 hami-core 业务。升级或切换策略时，使用新进程及新的容器级本地 SHM 文件；共享同一本地 SHM 文件的进程必须使用相同策略、配额和 PID 命名空间。Spatial 绕过时间调度，同时保留共享 HBM 记账和进程清理。
+应同时部署更新后的插件及其锁定的 hami-vnpu-core `9f7be4c` 运行库。旧运行库不提供本次逐卡独立记账语义。运行库会拒绝 `NPU_MEM_QUOTA`、`NPU_PRIORITY` 和 `NPU_FIXED_SHARE_RATIO`。替换节点运行库前先停止 hami-core 业务。升级或切换策略时，使用新进程及新的容器级本地 SHM 文件；共享同一本地 SHM 域的进程必须使用相同策略、配额和 PID 命名空间。Spatial 绕过时间调度，同时保留共享 HBM 记账和进程清理。
 
-多卡分配要求每张卡的算力配额相同，不同算力配额会被拒绝。HAMi 调度的显存配额按卡计算，插件将各卡配额相加后写入 `NPU_MEMORY_LIMIT_MB`，用于所选设备之间的容器级 HBM 总量记账；这个聚合上限不提供各卡独立显存限额。多卡推理时，`--gpu-memory-utilization` 不应超过申请的显存总量与所选卡物理显存总量的比例。业务使用 Ascend 运行时在容器内的逻辑设备号：HAMi 选中其他物理卡时，不应把宿主机卡号直接当作业务的逻辑设备号。
+CI 直接使用锁定子模块中的官方 CANN 8.5.2 Dockerfile 编译 core。本地复用相同构建方式：`make -C libvnpu build-in-docker PLATFORM=linux/arm64 OUT_DIR=../artifacts`，产物 `libvnpu.so`、`build-info.json` 和 `SHA256SUMS` 导出到 `artifacts/`。
+
+多卡分配要求每张卡的显存和算力配额分别相同，不同配额会被拒绝。`NPU_MEMORY_LIMIT_MB` 和 `NPU_COMPUTE_LIMIT` 都对每张卡独立生效。上例申请 4 张卡，每张卡 20 GiB 显存、50% 算力，插件注入 `NPU_MEMORY_LIMIT_MB=20480` 和 `NPU_COMPUTE_LIMIT=50`。`-memory` 应填写 `"20480"`，不要填写 `"81920"`。
+
+插件传入不绑定首卡的基础路径：`NPU_GLOBAL_SHM_PATH=/hami-shared-region/global_registry` 和 `NPU_LOCAL_SHM_PATH=/hami-vnpu-shmem/vnpu_local_shmem`。应用首次使用某张卡时，core 在两个路径后追加 `.device-<physicalID>`，初始化该物理卡对应的域。本地记账按容器、物理卡分别隔离；跨容器的全局调度域使用相同的共享基础路径。业务仍使用 Ascend 运行时在容器内的逻辑设备号，不能把 HAMi 选中的宿主机物理卡号直接当作逻辑设备号。
+
+多卡推理时，按每张卡的显存配额与物理容量设置 `--gpu-memory-utilization`，并为运行时分配留出空间。
 
 ### vCANN-RT 运行时软切分（enpu）
 
@@ -218,11 +224,11 @@ spec:
           --port 8002 \
           --enforce-eager \
           --tensor-parallel-size 2 \
-          --gpu-memory-utilization 0.5   # 关键参数：总申请显存 64Gi / 总物理显存 128Gi = 0.5
+          --gpu-memory-utilization 0.5   # 按每卡计算：32 GiB 配额 / 64 GiB 物理容量
       resources:
         limits:
           huawei.com/Ascend910B3: "2"           # 申请 2 块虚拟设备进行并行计算
-          huawei.com/Ascend910B3-memory: "32768" # 每卡 32GiB，2 卡运行时聚合上限为 64GiB
+          huawei.com/Ascend910B3-memory: "32768" # 每张卡独立限制为 32 GiB
           huawei.com/Ascend910B3-core: "50"
 ```
 
@@ -243,6 +249,8 @@ curl -s $POD_IP:9395/metrics | grep hami_
 | :--- | :--- | :--- |
 | `hami_host_gpu_memory_used_bytes` | `device_index`, `device_uuid`, `device_type` | 物理 NPU 已用显存(字节) |
 | `hami_host_gpu_utilization_ratio` | `device_index`, `device_uuid`, `device_type` | 物理 NPU AICore 利用率(0–100) |
-| `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 每容器 vNPU 已用显存(字节) |
-| `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 每容器 vNPU 显存上限(字节) |
+| `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 该容器在该 NPU 上由 hook 记账的显存(字节) |
+| `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 该容器在该 NPU 上的显存上限(字节) |
 | `hami_container_device_utilization_ratio` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 容器所在设备的 AICore 利用率(0–100) |
+
+对于逐卡 SHM 域，`vdevice_index` 为宿主机物理设备 ID，`device_uuid` 标识对应物理卡；旧版无后缀 SHM 保留注解/数组的顺序索引。仅导出已初始化的域。容器显存指标表示 hook 记账的分配量，宿主机显存指标保留 DCMI 上报的物理 HBM 使用量。容器利用率指标取所在整张卡的利用率，同卡容器共享这个数值。

@@ -82,7 +82,7 @@ func TestHamiCoreAllocateCanonicalEnvironmentAndMounts(t *testing.T) {
 		"NPU_MEMORY_LIMIT_MB":    "2048",
 		"NPU_COMPUTE_LIMIT":      "31",
 		"NPU_SCHED_POLICY":       "spatial",
-		"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/7_global_registry",
+		"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/global_registry",
 		"NPU_LOCAL_SHM_PATH":     "/hami-vnpu-shmem/vnpu_local_shmem",
 	}
 	if !reflect.DeepEqual(response.Envs, wantEnvs) {
@@ -208,28 +208,39 @@ func TestHamiCoreAllocateQuotaValidation(t *testing.T) {
 		{name: "negative fallback device capacity", lookup: map[string]RuntimeInfo{"card-seven": {}}, deviceMem: hamiTestInt64(-1), wantErr: "positive HAMi memory quota"},
 		{name: "maximum representable byte count", lookup: map[string]RuntimeInfo{"card-seven": {Memory: hamiTestInt64(maxMemoryMiB)}}, wantMemory: maxMemoryMiB, wantCore: 100},
 		{name: "single card byte overflow", lookup: map[string]RuntimeInfo{"card-seven": {Memory: hamiTestInt64(maxMemoryMiB + 1)}}, wantErr: "runtime byte count"},
-		{name: "different per-card memory sums", secondCard: true, lookup: map[string]RuntimeInfo{
+		{name: "equal per-card memory is not summed", secondCard: true, lookup: map[string]RuntimeInfo{
+			"card-seven": {Memory: hamiTestInt64(20480), Core: hamiTestInt32(33)},
+			"card-two":   {Memory: hamiTestInt64(20480), Core: hamiTestInt32(33)},
+		}, wantMemory: 20480, wantCore: 33},
+		{name: "different per-card memory rejected", secondCard: true, lookup: map[string]RuntimeInfo{
 			"card-seven": {Memory: hamiTestInt64(1024), Core: hamiTestInt32(33)},
 			"card-two":   {Memory: hamiTestInt64(2048), Core: hamiTestInt32(33)},
-		}, wantMemory: 3072, wantCore: 33},
-		{name: "fallback memory sums per selected device", secondCard: true, lookup: map[string]RuntimeInfo{
+		}, wantErr: "same memory quota"},
+		{name: "different fallback device capacities rejected", secondCard: true, lookup: map[string]RuntimeInfo{
 			"card-seven": {}, "card-two": {},
-		}, wantMemory: 98304, wantCore: 100},
+		}, wantErr: "same memory quota"},
+		{name: "equal fallback device capacities", secondCard: true, deviceMem: hamiTestInt64(32768), lookup: map[string]RuntimeInfo{
+			"card-seven": {}, "card-two": {},
+		}, wantMemory: 32768, wantCore: 100},
 		{name: "mixed missing and zero cores share full quota", secondCard: true, lookup: map[string]RuntimeInfo{
-			"card-seven": {}, "card-two": {Core: hamiTestInt32(0)},
-		}, wantMemory: 98304, wantCore: 100},
+			"card-seven": {Memory: hamiTestInt64(20480)}, "card-two": {Memory: hamiTestInt64(20480), Core: hamiTestInt32(0)},
+		}, wantMemory: 20480, wantCore: 100},
 		{name: "different per-card compute rejected", secondCard: true, lookup: map[string]RuntimeInfo{
-			"card-seven": {Core: hamiTestInt32(10)}, "card-two": {Core: hamiTestInt32(30)},
+			"card-seven": {Memory: hamiTestInt64(20480), Core: hamiTestInt32(10)},
+			"card-two":   {Memory: hamiTestInt64(20480), Core: hamiTestInt32(30)},
 		}, wantErr: "same compute quota"},
 		{name: "missing second runtime allocation", secondCard: true, lookup: map[string]RuntimeInfo{
 			"card-seven": {},
 		}, wantErr: "missing HAMi runtime allocation for card-two"},
-		{name: "combined byte overflow", secondCard: true, lookup: map[string]RuntimeInfo{
-			"card-seven": {Memory: hamiTestInt64(maxMemoryMiB)}, "card-two": {Memory: hamiTestInt64(1)},
+		{name: "maximum per-card byte counts are not summed", secondCard: true, lookup: map[string]RuntimeInfo{
+			"card-seven": {Memory: hamiTestInt64(maxMemoryMiB)}, "card-two": {Memory: hamiTestInt64(maxMemoryMiB)},
+		}, wantMemory: maxMemoryMiB, wantCore: 100},
+		{name: "second card byte overflow", secondCard: true, lookup: map[string]RuntimeInfo{
+			"card-seven": {Memory: hamiTestInt64(maxMemoryMiB)}, "card-two": {Memory: hamiTestInt64(maxMemoryMiB + 1)},
 		}, wantErr: "runtime byte count"},
-		{name: "combined signed quota overflow", secondCard: true, lookup: map[string]RuntimeInfo{
+		{name: "second card maximum signed quota rejected", secondCard: true, lookup: map[string]RuntimeInfo{
 			"card-seven": {Memory: hamiTestInt64(1)}, "card-two": {Memory: hamiTestInt64(math.MaxInt64)},
-		}, wantErr: "overflows int64"},
+		}, wantErr: "runtime byte count"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ps, devices := hamiTestServer(t)
@@ -259,13 +270,72 @@ func TestHamiCoreAllocateQuotaValidation(t *testing.T) {
 				"NPU_MEMORY_LIMIT_MB":    strconv.FormatInt(test.wantMemory, 10),
 				"NPU_COMPUTE_LIMIT":      strconv.FormatInt(int64(test.wantCore), 10),
 				"ASCEND_VISIBLE_DEVICES": visible,
-				"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/7_global_registry",
+				"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/global_registry",
 			} {
 				if got := response.Envs[key]; got != want {
 					t.Errorf("%s = %q, want %q", key, got, want)
 				}
 			}
 		})
+	}
+}
+
+func TestHamiCoreAllocateGlobalSHMIndependentOfDeviceOrder(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		devices device.ContainerDevices
+		visible string
+	}{
+		{name: "single card seven", devices: device.ContainerDevices{{UUID: "card-seven"}}, visible: "7"},
+		{name: "single card two", devices: device.ContainerDevices{{UUID: "card-two"}}, visible: "2"},
+		{name: "seven then two", devices: device.ContainerDevices{{UUID: "card-seven"}, {UUID: "card-two"}}, visible: "7,2"},
+		{name: "two then seven", devices: device.ContainerDevices{{UUID: "card-two"}, {UUID: "card-seven"}}, visible: "2,7"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ps, _ := hamiTestServer(t)
+			response, err := ps.buildContainerAllocateResponse(hamiTestPod("ordered-pod"), "worker", test.devices, map[string]RuntimeInfo{
+				"card-seven": {Memory: hamiTestInt64(20480), Core: hamiTestInt32(50)},
+				"card-two":   {Memory: hamiTestInt64(20480), Core: hamiTestInt32(50)},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for key, want := range map[string]string{
+				"ASCEND_VISIBLE_DEVICES": test.visible,
+				"NPU_MEMORY_LIMIT_MB":    "20480",
+				"NPU_COMPUTE_LIMIT":      "50",
+				"NPU_GLOBAL_SHM_PATH":    "/hami-shared-region/global_registry",
+				"NPU_LOCAL_SHM_PATH":     "/hami-vnpu-shmem/vnpu_local_shmem",
+			} {
+				if got := response.Envs[key]; got != want {
+					t.Errorf("%s = %q, want %q", key, got, want)
+				}
+			}
+			mount := hamiTestMount(t, response, "/hami-vnpu-shmem")
+			if want := filepath.Join(hostHookPath, "containers", "ordered-pod_worker"); mount.HostPath != want || mount.ReadOnly {
+				t.Errorf("local SHM mount = %+v, want writable %s", mount, want)
+			}
+		})
+	}
+}
+
+// Four cards each receive the requested 20 GiB, never an 80 GiB runtime limit.
+func TestHamiCoreAllocateFourCardsKeepPerCardMemory(t *testing.T) {
+	ps, cards := hamiTestServer(t)
+	var devices device.ContainerDevices
+	lookup := make(map[string]RuntimeInfo)
+	for i := 0; i < 4; i++ {
+		uuid := "four-card-" + strconv.Itoa(i)
+		cards[uuid] = &manager.Device{UUID: uuid, LogicID: int32(i), PhyID: int32(i + 4), Memory: 65536}
+		devices = append(devices, device.ContainerDevice{UUID: uuid})
+		lookup[uuid] = RuntimeInfo{Memory: hamiTestInt64(20480), Core: hamiTestInt32(50)}
+	}
+	response, err := ps.buildContainerAllocateResponse(hamiTestPod("four-card-pod"), "worker", devices, lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := response.Envs["NPU_MEMORY_LIMIT_MB"]; got != "20480" {
+		t.Fatalf("four cards at 20 GiB injected %q MiB, want 20480 per card", got)
 	}
 }
 

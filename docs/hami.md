@@ -121,9 +121,9 @@ spec:
       ...
       resources:
         limits:
-          huawei.com/Ascend910B3: "1"           # Request 1 physical NPU
-          huawei.com/Ascend910B3-memory: "28672"     # Request 28Gi memory
-          huawei.com/Ascend910B3-core: "40"     # Request 40% core
+          huawei.com/Ascend910B3: "4"           # Request shares on 4 physical NPUs
+          huawei.com/Ascend910B3-memory: "20480" # 20 GiB on each NPU
+          huawei.com/Ascend910B3-core: "50"      # 50% compute on each NPU
 ```
 
 `-memory` is in MiB and defaults to the whole card when omitted. `-core` is optional: an omitted or zero value reserves no compute in HAMi and is translated to a runtime limit of **100**. Positive limits must be from 1 to 100; negative limits and limits above 100 are rejected. Use the explicit hami-core mode annotation when requesting a compute quota.
@@ -146,9 +146,15 @@ metadata:
     huawei.com/npu-sched-policy: overdraft
 ```
 
-Deploy the updated plugin and its pinned hami-vnpu-core `b19ef02` library together. Older libraries do not recognize the new quota variables; the updated library rejects `NPU_MEM_QUOTA`, `NPU_PRIORITY`, and `NPU_FIXED_SHARE_RATIO`. Stop hami-core workloads before replacing the node library. When upgrading or changing policy, start new processes with fresh per-container local SHM files. Processes sharing one local SHM file must use the same policy, quotas, and PID namespace. Spatial bypasses time scheduling while keeping shared HBM accounting and process cleanup.
+Deploy the updated plugin and its pinned hami-vnpu-core `9f7be4c` library together. Older libraries do not provide this per-card accounting behavior. The library rejects `NPU_MEM_QUOTA`, `NPU_PRIORITY`, and `NPU_FIXED_SHARE_RATIO`. Stop hami-core workloads before replacing the node library. When upgrading or changing policy, start new processes with fresh per-container local SHM files. Processes sharing one local SHM domain must use the same policy, quotas, and PID namespace. Spatial bypasses time scheduling while keeping shared HBM accounting and process cleanup.
 
-Multi-card allocations require the same compute quota on every selected card; unequal compute quotas are rejected. HAMi's scheduled memory quota is per card. The plugin sums those quotas into `NPU_MEMORY_LIMIT_MB`, a container-wide HBM accounting limit across the selected devices. This aggregate limit does not enforce a separate memory ceiling on each card. For multi-card inference, keep `--gpu-memory-utilization` within the ratio of the total scheduled memory quota to the total physical memory of the selected cards. Use the Ascend runtime's container-local logical device IDs: selecting a different physical card does not make that card's host index the application's logical device index.
+CI builds the core with the pinned submodule's official CANN 8.5.2 Dockerfile. To use the same build locally, run `make -C libvnpu build-in-docker PLATFORM=linux/arm64 OUT_DIR=../artifacts`. This exports `libvnpu.so`, `build-info.json`, and `SHA256SUMS` into `artifacts/`.
+
+Multi-card allocations require the same memory and compute quotas on every selected card; unequal quotas are rejected. Both `NPU_MEMORY_LIMIT_MB` and `NPU_COMPUTE_LIMIT` apply independently to each card. In the example above, four cards each receive 20 GiB and 50% compute: the plugin sets `NPU_MEMORY_LIMIT_MB=20480` and `NPU_COMPUTE_LIMIT=50`. Request `-memory: "20480"`, not `"81920"`.
+
+The plugin passes neutral base paths, `NPU_GLOBAL_SHM_PATH=/hami-shared-region/global_registry` and `NPU_LOCAL_SHM_PATH=/hami-vnpu-shmem/vnpu_local_shmem`. When an application first uses a card, the core appends `.device-<physicalID>` to both paths and initializes that card's domain. Local accounting is per container and physical card; global scheduling domains use the same shared base across containers. Neither base path selects the first card. Applications use the Ascend runtime's container-local logical device IDs, even when HAMi selects different host physical cards.
+
+For multi-card inference, size `--gpu-memory-utilization` against each card's quota and physical capacity, leaving room for runtime allocations.
 
 ### vCANN-RT runtime slicing (`enpu`)
 
@@ -220,11 +226,11 @@ spec:
           --port 8002 \
           --enforce-eager \
           --tensor-parallel-size 2 \
-          --gpu-memory-utilization 0.5   # Key parameter: Total requested memory 64Gi / Total physical memory 128Gi = 0.5
+          --gpu-memory-utilization 0.5   # Per card: 32 GiB quota / 64 GiB physical capacity
       resources:
         limits:
           huawei.com/Ascend910B3: "2"           # Request 2 virtual devices for parallel computation
-          huawei.com/Ascend910B3-memory: "32768" # 32GiB per card; runtime aggregate limit is 64GiB for 2 cards
+          huawei.com/Ascend910B3-memory: "32768" # Independent 32 GiB limit on each card
           huawei.com/Ascend910B3-core: "50"
 ```
 
@@ -245,6 +251,8 @@ curl -s $POD_IP:9395/metrics | grep hami_
 | :--- | :--- | :--- |
 | `hami_host_gpu_memory_used_bytes` | `device_index`, `device_uuid`, `device_type` | Physical NPU memory used (bytes) |
 | `hami_host_gpu_utilization_ratio` | `device_index`, `device_uuid`, `device_type` | Physical NPU AICore utilization (0–100) |
-| `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | Per-container vNPU memory used (bytes) |
-| `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | Per-container vNPU memory limit (bytes) |
+| `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | Hook-accounted memory for this container on this NPU (bytes) |
+| `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | This container's memory limit on this NPU (bytes) |
 | `hami_container_device_utilization_ratio` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | AICore utilization of the device the container runs on (0–100) |
+
+For per-device SHM domains, `vdevice_index` is the host physical device ID and `device_uuid` identifies that card. Legacy unsuffixed SHM retains its annotation/array ordinal. Only initialized domains are exported. Container memory describes hook-accounted allocations; host memory remains physical HBM usage reported by DCMI. The container utilization metric is the whole card's utilization, shared by containers on that card.

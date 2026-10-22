@@ -145,6 +145,20 @@ spec:
           huawei.com/Ascend310P-core: "90"
 ```
 
+Deploy this plugin with its pinned hami-vnpu-core `9f7be4c` library for per-card accounting. Multi-card allocations require equal memory and compute quotas on all selected cards. For four Ascend910B3 cards with 20 GiB memory and 50% compute each, use:
+
+```yaml
+resources:
+  limits:
+    huawei.com/Ascend910B3: "4"
+    huawei.com/Ascend910B3-memory: "20480" # 20 GiB per card
+    huawei.com/Ascend910B3-core: "50"      # 50% per card
+```
+
+The plugin sets `NPU_MEMORY_LIMIT_MB=20480` and `NPU_COMPUTE_LIMIT=50`, applied independently to every card; do not request `-memory: "81920"`. The default compute policy is `spatial`. See the [HAMi configuration guide](hami.md#soft-slicing-configuration-hami-vnpu-core) for policy selection and upgrades.
+
+`NPU_GLOBAL_SHM_PATH=/hami-shared-region/global_registry` and `NPU_LOCAL_SHM_PATH=/hami-vnpu-shmem/vnpu_local_shmem` are neutral base paths. On first use of a card, the core appends `.device-<physicalID>` to both paths. Local domains isolate container/card accounting; global domains share the same base across containers. No path is tied to the first allocated card. Applications continue to use container-local logical device IDs.
+
 ## Monitoring
 
 When a node runs in **hami-vnpu-core (soft slicing) mode**, the device plugin starts an **embedded Prometheus exporter** on **`:9395/metrics`** that reports physical-device and per-container vNPU usage. It is **not** started for the legacy template-based vNPU (or whole-card) path, which has no soft-slice data to export.
@@ -162,6 +176,8 @@ curl -s $POD_IP:9395/metrics | grep hami_
 | :--- | :--- | :--- |
 | `hami_host_gpu_memory_used_bytes` | `device_index`, `device_uuid`, `device_type` | Physical NPU memory used (bytes) |
 | `hami_host_gpu_utilization_ratio` | `device_index`, `device_uuid`, `device_type` | Physical NPU AICore utilization (0–100) |
-| `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | Per-container vNPU memory used (bytes) |
-| `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | Per-container vNPU memory limit (bytes) |
+| `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | Hook-accounted memory for this container on this NPU (bytes) |
+| `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | This container's memory limit on this NPU (bytes) |
 | `hami_container_device_utilization_ratio` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | AICore utilization of the device the container runs on (0–100) |
+
+For per-device SHM domains, `vdevice_index` is the host physical device ID and `device_uuid` identifies that card. Legacy unsuffixed SHM retains its annotation/array ordinal. Only initialized domains are exported. Container memory describes hook-accounted allocations; host memory remains physical HBM usage reported by DCMI. The container utilization metric is the whole card's utilization, shared by containers on that card.
