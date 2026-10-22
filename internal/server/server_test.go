@@ -440,7 +440,8 @@ func TestAllocate(t *testing.T) {
 // ============================================================================
 
 func TestNewPluginServer(t *testing.T) {
-	t.Parallel()
+	// The constructor writes HAMi's shared registration map, so these cases
+	// must run sequentially and restore their registrations.
 
 	type newPluginServerArgs struct {
 		commonWord string
@@ -534,7 +535,14 @@ func TestNewPluginServer(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+			original, existed := device.InRequestDevices[tc.args.commonWord]
+			t.Cleanup(func() {
+				if existed {
+					device.InRequestDevices[tc.args.commonWord] = original
+				} else {
+					delete(device.InRequestDevices, tc.args.commonWord)
+				}
+			})
 			mgr := &FakeManager{CommonWordFunc: func() string { return tc.args.commonWord }}
 			ps, err := NewPluginServer(mgr, tc.args.nodeName, 60, false)
 			if (err != nil) != tc.wantErr {
