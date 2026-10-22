@@ -8,7 +8,9 @@ RUN apt update -y && apt install -y gcc make wget ca-certificates
 # Install the official Go toolchain (matches go.mod). Avoids the fragile
 # longsleep/golang-backports PPA, which depends on Launchpad API availability
 # and flakes in CI (especially on the emulated arm64 leg).
-RUN wget -qO /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
+RUN wget --no-verbose --tries=5 --waitretry=5 --timeout=60 \
+    --retry-on-http-error=429,500,502,503,504 \
+    -O /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
     && tar -C /usr/local -xzf /tmp/go.tgz \
     && rm /tmp/go.tgz
 ENV PATH=/usr/local/go/bin:/root/go/bin:$PATH
