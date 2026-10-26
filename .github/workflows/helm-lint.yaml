@@ -31,6 +31,7 @@ jobs:
               - 'ascend-device-plugin.yaml'
               - 'charts/ascend-device-plugin/**'
               - 'Makefile'
+              - 'hack/verify-chart-version-bump*'
               - '.github/workflows/helm-lint.yaml'
               - '.github/workflows/build-helm-release.yaml'
 
@@ -63,6 +64,14 @@ jobs:
         run: |
           make verify-helm-chart
           make verify-helm-release-path
+
+      - name: Verify chart version bump
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "${BASE_REF}"
+          make test-chart-version-bump
+          make verify-chart-version-bump BASE_REF=FETCH_HEAD
 
       - name: Verify manifest and chart image alignment
         shell: bash
