@@ -51,7 +51,7 @@ docker buildx build -t $IMAGE_NAME .
 
 ### Build an ENPU-enabled image
 
-CI builds official ENPU release `1.0.0` in the official ARM64 build image and bundles the verified assets alongside hami-vnpu-core. For a local build, prepare the existing hami-vnpu-core assets and run `make docker-enpu VERSION=<image-tag>` on an ARM64 Linux host with Docker, Git and Python 3. The official image includes CANN and the driver SDK, so no NPU or host driver installation is required for compilation. See [release build prerequisites and options](enpu-runtime-assets/README.md). Plain `docker build` only packages assets already prepared.
+CI and plain `docker build` reuse the public ENPU release `1.0.0` / CANN `9.1.0` runtime image pinned by digest in the Dockerfile, verify its assets, and bundle them alongside hami-vnpu-core. CI builds the AMD64 and ARM64 plugin images on native runners; only main and version-tag pushes publish a combined manifest. Prepare the existing hami-vnpu-core assets before building locally. To rebuild ENPU from source instead, run `make docker-enpu VERSION=<image-tag>` on an ARM64 Linux host with Docker, Git and Python 3. No NPU or host driver installation is required for compilation. See [release build prerequisites and options](enpu-runtime-assets/README.md).
 
 ## License
 

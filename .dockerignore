@@ -1,0 +1,10 @@
+**/.git
+.github
+_output
+ascend-device-plugin
+libvnpu
+mind-cluster/*
+!mind-cluster/component/
+mind-cluster/component/*
+!mind-cluster/component/ascend-common/
+!mind-cluster/component/npu-exporter/

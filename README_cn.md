@@ -51,4 +51,4 @@ docker buildx build -t $IMAGE_NAME .
 
 ### 构建包含 ENPU 的镜像
 
-CI 使用官方 ARM64 编译镜像构建 ENPU release `1.0.0`，校验产物后与 hami-vnpu-core 一起打包。若需本地构建，在具备 Docker、Git 和 Python 3 的 ARM64 Linux 构建机上，先准备原有 hami-vnpu-core 产物，再执行 `make docker-enpu VERSION=<image-tag>`。官方镜像已包含 CANN 和驱动 SDK，编译不需要 NPU 硬件或宿主机驱动。前提与参数见 [release 构建说明](enpu-runtime-assets/README.md)。直接执行 `docker build` 只打包已准备好的产物。
+CI 和直接执行 `docker build` 默认复用 Dockerfile 中按 digest 固定的公开 ENPU release `1.0.0` / CANN `9.1.0` 运行库镜像，校验产物后与 hami-vnpu-core 一起打包。CI 在原生 AMD64 和 ARM64 runner 上分别构建插件镜像，仅 main 和版本标签推送会发布合并后的 manifest。本地构建前仍需准备 hami-vnpu-core 产物；如需从源码重新编译 ENPU，可在具备 Docker、Git 和 Python 3 的 ARM64 Linux 构建机上执行 `make docker-enpu VERSION=<image-tag>`，编译不需要 NPU 硬件或宿主机驱动。前提与参数见 [release 构建说明](enpu-runtime-assets/README.md)。

@@ -31,7 +31,7 @@ enpu-runtime:
 docker-enpu: enpu-runtime
 	@test -s lib/hami-vnpu-core/libvnpu.so -a -s lib/hami-vnpu-core/ld.so.preload || \
 		{ echo 'Prepare the existing hami-vnpu-core assets in lib/hami-vnpu-core before building the device-plugin image.' >&2; exit 1; }
-	$(MAKE) docker
+	$(MAKE) docker DOCKER_BUILD_ARGS="$(DOCKER_BUILD_ARGS) --target runtime-local"
 
 lint:
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.0
