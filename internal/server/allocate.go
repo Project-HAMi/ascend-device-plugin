@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
@@ -57,6 +58,15 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, ctrName stri
 	resp.Envs["ASCEND_VISIBLE_DEVICES"] = ascendVisibleDevices
 
 	vnpuMode := pod.Annotations[VNPUModeAnnotation]
+	if managerIsFullCardOnly(ps.mgr) {
+		requestedMode := strings.TrimSpace(vnpuMode)
+		if requestedMode != "" && !strings.EqualFold(requestedMode, VNPUModeTemplate) {
+			return nil, fmt.Errorf("Ascend950DT supports whole-card allocation only; pod vnpu mode %q is not supported", vnpuMode)
+		}
+		if ascendVNPUSpec != "" {
+			return nil, fmt.Errorf("Ascend950DT supports whole-card allocation only; vNPU template %q is not supported", ascendVNPUSpec)
+		}
+	}
 	effectiveHamiCore := vnpuMode == VNPUModeHamiCore || (vnpuMode == "" && ps.mgr.IsHamiVnpuCore())
 	effectiveENPU := podUsesENPU(pod)
 	klog.V(4).Infof("Pod %s vnpu mode: %q, effectiveHamiCore: %v, effectiveENPU: %v", pod.Name, vnpuMode, effectiveHamiCore, effectiveENPU)

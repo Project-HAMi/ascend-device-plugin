@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"ascend-common/devmanager"
+	"ascend-common/devmanager/common"
 	"ascend-common/devmanager/dcmi"
 
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
@@ -58,6 +59,7 @@ type Manager interface {
 type AscendManager struct {
 	mu           sync.RWMutex
 	mgr          devmanager.DeviceInterface
+	v2Mgr        *ascend950DTManager
 	config       internal.VNPUConfig
 	globalConfig internal.Config
 	devs         []*Device
@@ -67,7 +69,11 @@ type AscendManager struct {
 func NewAscendManager() (*AscendManager, error) {
 	mgr, err := devmanager.AutoInit("", 30)
 	if err != nil {
-		return nil, fmt.Errorf("failed to auto-init device manager: %w", err)
+		v2Mgr, v2Err := newAscend950DTManager()
+		if v2Err != nil {
+			return nil, fmt.Errorf("failed to auto-init device manager: %v; Ascend950DT DCMI v2 detection failed: %w", err, v2Err)
+		}
+		return &AscendManager{v2Mgr: v2Mgr, devs: []*Device{}}, nil
 	}
 	return &AscendManager{
 		mgr:  mgr,
@@ -84,6 +90,22 @@ func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error 
 
 	for _, n := range nodeConfigList.Nodes {
 		if n.Name == nodeName {
+			if am.v2Mgr != nil {
+				globalMode, err := am.globalConfig.VNPUs.Mode()
+				if err != nil {
+					return fmt.Errorf("resolve Ascend950DT global mode: %w", err)
+				}
+				mode, err := n.Mode(globalMode)
+				if err != nil {
+					return fmt.Errorf("resolve Ascend950DT node mode: %w", err)
+				}
+				if mode != internal.VNPUModeTemplate {
+					return fmt.Errorf("Ascend950DT supports full-card allocation only; node %s mode=%q", nodeName, mode)
+				}
+				if n.VDeviceCount < 0 || n.VDeviceCount > 1 {
+					return fmt.Errorf("Ascend950DT supports one whole-card device per physical card; node %s vDeviceCount=%d", nodeName, n.VDeviceCount)
+				}
+			}
 			am.nodeConfig = &n
 			klog.Infof("Successfully matched node config for %s: %+v", nodeName, n)
 			return nil
@@ -121,9 +143,14 @@ func (am *AscendManager) LoadConfig(path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load config from %s: %w", path, err)
 	}
-	chipInfo, err := am.mgr.GetValidChipInfo()
-	if err != nil {
-		return fmt.Errorf("failed to get valid chip info: %w", err)
+	var chipInfo common.ChipInfo
+	if am.v2Mgr != nil {
+		chipInfo = am.v2Mgr.chipInfo
+	} else {
+		chipInfo, err = am.mgr.GetValidChipInfo()
+		if err != nil {
+			return fmt.Errorf("failed to get valid chip info: %w", err)
+		}
 	}
 	if chipInfo.Type != "Ascend" {
 		return fmt.Errorf("chip type is not Ascend")
@@ -140,6 +167,18 @@ func (am *AscendManager) LoadConfig(path string) error {
 	}
 	am.config = config.VNPUs.Configs[idx]
 	am.globalConfig = *config
+	if am.v2Mgr != nil {
+		mode, err := config.VNPUs.Mode()
+		if err != nil {
+			return fmt.Errorf("resolve Ascend950DT mode: %w", err)
+		}
+		if mode != internal.VNPUModeTemplate {
+			return fmt.Errorf("Ascend950DT supports full-card allocation only; hamiVnpuMode=%q", mode)
+		}
+		if err := am.v2Mgr.validateConfig(am.config); err != nil {
+			return err
+		}
+	}
 	sort.Slice(am.config.Templates, func(i, j int) bool {
 		return am.config.Templates[i].Memory < am.config.Templates[j].Memory
 	})
@@ -156,6 +195,9 @@ func (am *AscendManager) ResourceName() string {
 }
 
 func (am *AscendManager) VDeviceCount() int {
+	if am.v2Mgr != nil {
+		return 1
+	}
 	count := 0
 	if am.nodeConfig != nil && am.nodeConfig.VDeviceCount > 0 {
 		count = am.nodeConfig.VDeviceCount
@@ -179,6 +221,28 @@ func (am *AscendManager) VDeviceCount() int {
 }
 
 func (am *AscendManager) UpdateDevice() error {
+	if am.v2Mgr != nil {
+		devices, _, err := am.v2Mgr.discover(am.config)
+		if err != nil {
+			klog.Errorf("Ascend950DT discovery failed; clearing advertised devices: %v", err)
+			devices = []*Device{}
+		} else if am.shouldCheckIgnored() {
+			available := make([]*Device, 0, len(devices))
+			for _, dev := range devices {
+				if am.shouldIgnoreDevice(dev.UUID, dev.CardID) {
+					klog.V(4).Infof("ignore Ascend950DT device matched filterDevices uuid=%s index=%d logicID=%d phyID=%d deviceID=%d",
+						dev.UUID, dev.CardID, dev.LogicID, dev.PhyID, dev.DeviceID)
+					continue
+				}
+				available = append(available, dev)
+			}
+			devices = available
+		}
+		am.mu.Lock()
+		am.devs = devices
+		am.mu.Unlock()
+		return nil
+	}
 	_, IDs, err := am.mgr.GetDeviceList()
 	if err != nil {
 		klog.Errorf("failed to get device list: %v", err)
@@ -246,6 +310,17 @@ func (am *AscendManager) GetDeviceByUUID(UUID string) *Device {
 }
 
 func (am *AscendManager) GetIDs() []int32 {
+	if am.v2Mgr != nil {
+		am.mu.RLock()
+		defer am.mu.RUnlock()
+		ids := make([]int32, 0, len(am.devs))
+		for _, dev := range am.devs {
+			if !am.shouldIgnoreDevice(dev.UUID, dev.CardID) {
+				ids = append(ids, dev.LogicID)
+			}
+		}
+		return ids
+	}
 	_, IDs, err := am.mgr.GetDeviceList()
 	if err != nil {
 		klog.Errorf("failed to get device list: %v", err)
@@ -278,6 +353,25 @@ func (am *AscendManager) GetIDs() []int32 {
 }
 
 func (am *AscendManager) GetUnHealthIDs() []int32 {
+	if am.v2Mgr != nil {
+		am.mu.RLock()
+		devices := append([]*Device(nil), am.devs...)
+		am.mu.RUnlock()
+		var unhealthy []int32
+		for _, dev := range devices {
+			if am.shouldIgnoreDevice(dev.UUID, dev.CardID) {
+				continue
+			}
+			health, err := am.v2Mgr.api.deviceHealth(dev.LogicID)
+			if err != nil || health != 0 {
+				if err != nil {
+					klog.Errorf("dcmiv2_get_device_health failed for logic ID %d; reporting unhealthy: %v", dev.LogicID, err)
+				}
+				unhealthy = append(unhealthy, dev.LogicID)
+			}
+		}
+		return unhealthy
+	}
 	_, IDs, err := am.mgr.GetDeviceList()
 	if err != nil {
 		return nil
@@ -316,6 +410,10 @@ func (am *AscendManager) GetUnHealthIDs() []int32 {
 }
 
 func (am *AscendManager) CleanupIdleVNPUs() error {
+	if am.v2Mgr != nil {
+		klog.V(2).Info("Skipping vNPU cleanup for whole-card-only Ascend950DT")
+		return nil
+	}
 	klog.Info("Starting cleanup of idle vNPUs...")
 
 	_, IDs, err := am.mgr.GetDeviceList()
@@ -382,14 +480,26 @@ func (am *AscendManager) GetNodeConfig() *internal.NodeConfig {
 }
 
 func (am *AscendManager) IsHamiVnpuCore() bool {
+	if am.v2Mgr != nil {
+		return false
+	}
 	mode, err := am.vnpuMode()
 	return err == nil && mode == internal.VNPUModeHamiCore
 }
 
 // IsEnpu returns whether ENPU is enabled, preferring the node setting.
 func (am *AscendManager) IsEnpu() bool {
+	if am.v2Mgr != nil {
+		return false
+	}
 	mode, err := am.vnpuMode()
 	return err == nil && mode == internal.VNPUModeENPU
+}
+
+// IsFullCardOnly reports the 950DT backend's allocation constraint to the
+// server so pod-level runtime overrides cannot enable a slicing mode.
+func (am *AscendManager) IsFullCardOnly() bool {
+	return am.v2Mgr != nil
 }
 
 func (am *AscendManager) vnpuMode() (string, error) {

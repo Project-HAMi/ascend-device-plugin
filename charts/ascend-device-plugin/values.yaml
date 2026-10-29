@@ -242,6 +242,14 @@ deviceConfig: |- # @schema required:true
       memoryCapacity: 65536
       aiCore: 20
       aiCPU: 7
+    - chipName: Ascend950DT
+      commonWord: Ascend950DT
+      resourceName: huawei.com/Ascend950DT
+      resourceMemoryName: huawei.com/Ascend950DT-memory
+      memoryAllocatable: 98304
+      memoryCapacity: 98304
+      aiCore: 32
+      templates: []
 
 # nodeConfig -- Per-node mode (hamiVnpuMode), hami-core policy (hamiCorePolicy), device count, compute scaling and device filters written to the node ConfigMap. Omitted fields inherit global mode and policy.
 nodeConfig: |- # @schema required:true
