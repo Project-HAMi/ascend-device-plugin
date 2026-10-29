@@ -185,7 +185,7 @@ jobs:
         name: image-digest-${{ matrix.arch }}
         path: ${{ runner.temp }}/digests/*
         if-no-files-found: error
-        retention-days: 1
+        retention-days: 30
         overwrite: true
 
   # Keep the existing build check name and fail if either architecture failed.
