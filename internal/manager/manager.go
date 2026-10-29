@@ -91,17 +91,6 @@ func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error 
 	for _, n := range nodeConfigList.Nodes {
 		if n.Name == nodeName {
 			if am.v2Mgr != nil {
-				globalMode, err := am.globalConfig.VNPUs.Mode()
-				if err != nil {
-					return fmt.Errorf("resolve Ascend950DT global mode: %w", err)
-				}
-				mode, err := n.Mode(globalMode)
-				if err != nil {
-					return fmt.Errorf("resolve Ascend950DT node mode: %w", err)
-				}
-				if mode != internal.VNPUModeTemplate {
-					return fmt.Errorf("Ascend950DT supports full-card allocation only; node %s mode=%q", nodeName, mode)
-				}
 				if n.VDeviceCount < 0 || n.VDeviceCount > 1 {
 					return fmt.Errorf("Ascend950DT supports one whole-card device per physical card; node %s vDeviceCount=%d", nodeName, n.VDeviceCount)
 				}
@@ -168,13 +157,6 @@ func (am *AscendManager) LoadConfig(path string) error {
 	am.config = config.VNPUs.Configs[idx]
 	am.globalConfig = *config
 	if am.v2Mgr != nil {
-		mode, err := config.VNPUs.Mode()
-		if err != nil {
-			return fmt.Errorf("resolve Ascend950DT mode: %w", err)
-		}
-		if mode != internal.VNPUModeTemplate {
-			return fmt.Errorf("Ascend950DT supports full-card allocation only; hamiVnpuMode=%q", mode)
-		}
 		if err := am.v2Mgr.validateConfig(am.config); err != nil {
 			return err
 		}
@@ -183,6 +165,22 @@ func (am *AscendManager) LoadConfig(path string) error {
 		return am.config.Templates[i].Memory < am.config.Templates[j].Memory
 	})
 	klog.Infof("load config: %v", am.config)
+	return nil
+}
+
+// ValidateWholeCardMode checks the effective vNPU mode after global and node
+// configuration have both been loaded.
+func (am *AscendManager) ValidateWholeCardMode() error {
+	if am.v2Mgr == nil {
+		return nil
+	}
+	mode, err := am.vnpuMode()
+	if err != nil {
+		return fmt.Errorf("resolve Ascend950DT mode: %w", err)
+	}
+	if mode != internal.VNPUModeTemplate {
+		return fmt.Errorf("Ascend950DT supports full-card allocation only; hamiVnpuMode=%q", mode)
+	}
 	return nil
 }
 

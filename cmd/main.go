@@ -146,6 +146,9 @@ func main() {
 			klog.Fatalf("load node config failed: %v", err)
 		}
 	}
+	if err = mgr.ValidateWholeCardMode(); err != nil {
+		klog.Fatalf("validate allocation mode failed: %v", err)
+	}
 	pluginServer, err := server.NewPluginServer(mgr, *nodeName, *checkIdleVNPUInterval, *enablePeriodicIdleVNPUCleanup)
 	if err != nil {
 		klog.Fatalf("init PluginServer failed, error is %v", err)

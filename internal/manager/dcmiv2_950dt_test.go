@@ -182,9 +182,12 @@ func TestAscend950DTLoadConfigEnforcesWholeCardAndCapacity(t *testing.T) {
 			}
 			am := newFake950DTManager(t, api)
 			err := am.LoadConfig(writeConfig(t, tt.content))
+			if err == nil {
+				err = am.ValidateWholeCardMode()
+			}
 			if tt.wantError == "" {
 				if err != nil {
-					t.Fatalf("LoadConfig() error = %v", err)
+					t.Fatalf("LoadConfig()/ValidateWholeCardMode() error = %v", err)
 				}
 				if got := am.VDeviceCount(); got != 1 {
 					t.Fatalf("VDeviceCount() = %d, want 1", got)
@@ -194,6 +197,36 @@ func TestAscend950DTLoadConfigEnforcesWholeCardAndCapacity(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
 				t.Fatalf("LoadConfig() error = %v, want substring %q", err, tt.wantError)
 			}
+		})
+	}
+}
+
+func TestAscend950DTWholeCardModeUsesEffectiveNodeMode(t *testing.T) {
+	for _, globalMode := range []string{"hami-core", "enpu"} {
+		t.Run(globalMode, func(t *testing.T) {
+			t.Run("node template override", func(t *testing.T) {
+				am := newFake950DTManager(t, newFake950DTAPI())
+				if err := am.LoadConfig(writeConfig(t, config950DT(globalMode, "[]", 98304, 32))); err != nil {
+					t.Fatalf("LoadConfig() error = %v", err)
+				}
+				node := "nodes:\n- name: test-node\n  hamiVnpuMode: template\n"
+				if err := am.LoadNodeConfig(writeConfig(t, node), "test-node"); err != nil {
+					t.Fatalf("LoadNodeConfig() error = %v", err)
+				}
+				if err := am.ValidateWholeCardMode(); err != nil {
+					t.Fatalf("ValidateWholeCardMode() error = %v, want nil", err)
+				}
+			})
+
+			t.Run("without node override", func(t *testing.T) {
+				am := newFake950DTManager(t, newFake950DTAPI())
+				if err := am.LoadConfig(writeConfig(t, config950DT(globalMode, "[]", 98304, 32))); err != nil {
+					t.Fatalf("LoadConfig() error = %v", err)
+				}
+				if err := am.ValidateWholeCardMode(); err == nil || !strings.Contains(err.Error(), "full-card allocation only") {
+					t.Fatalf("ValidateWholeCardMode() error = %v, want full-card allocation only", err)
+				}
+			})
 		})
 	}
 }
@@ -269,8 +302,11 @@ func TestAscend950DTNodeConfigRejectsSlicing(t *testing.T) {
 			}
 			node := "nodes:\n- name: test-node\n  " + strings.ReplaceAll(tc.yaml, "\n", "\n  ") + "\n"
 			err := am.LoadNodeConfig(writeConfig(t, node), "test-node")
+			if err == nil && tc.name == "mode" {
+				err = am.ValidateWholeCardMode()
+			}
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("LoadNodeConfig() error = %v, want substring %q", err, tc.want)
+				t.Fatalf("LoadNodeConfig()/ValidateWholeCardMode() error = %v, want substring %q", err, tc.want)
 			}
 		})
 	}
