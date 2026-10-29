@@ -260,6 +260,41 @@ func TestAscend950DTHealthQueryFailureIsUnhealthyAndCleanupIsSkipped(t *testing.
 	}
 }
 
+func TestAscend950DTDiscoveryFailurePreservesDevicesUntilRecovery(t *testing.T) {
+	api := newFake950DTAPI()
+	am := newFake950DTManager(t, api)
+	if err := am.LoadConfig(writeConfig(t, config950DT("template", "[]", 98304, 32))); err != nil {
+		t.Fatal(err)
+	}
+	if err := am.UpdateDevice(); err != nil {
+		t.Fatal(err)
+	}
+	original := am.GetDevices()
+	if len(original) != 2 || !original[0].Health || !original[1].Health {
+		t.Fatalf("initial devices = %+v", original)
+	}
+	saved := api.hbm[0]
+	delete(api.hbm, 0)
+	if err := am.UpdateDevice(); err != nil {
+		t.Fatal(err)
+	}
+	failed := am.GetDevices()
+	if len(failed) != 2 || failed[0].UUID != original[0].UUID || failed[1].UUID != original[1].UUID || failed[0].Health || failed[1].Health {
+		t.Fatalf("failed discovery devices = %+v", failed)
+	}
+	if !original[0].Health || !original[1].Health {
+		t.Fatal("previous device objects were mutated")
+	}
+	api.hbm[0] = saved
+	if err := am.UpdateDevice(); err != nil {
+		t.Fatal(err)
+	}
+	recovered := am.GetDevices()
+	if len(recovered) != 2 || recovered[0].UUID != original[0].UUID || recovered[1].UUID != original[1].UUID || !recovered[0].Health || !recovered[1].Health {
+		t.Fatalf("recovered devices = %+v", recovered)
+	}
+}
+
 func TestAscend950DTUpdateDeviceAppliesNodeFiltersBeforePublishing(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

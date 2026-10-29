@@ -222,8 +222,15 @@ func (am *AscendManager) UpdateDevice() error {
 	if am.v2Mgr != nil {
 		devices, _, err := am.v2Mgr.discover(am.config)
 		if err != nil {
-			klog.Errorf("Ascend950DT discovery failed; clearing advertised devices: %v", err)
-			devices = []*Device{}
+			klog.Errorf("Ascend950DT discovery failed; marking known devices unhealthy: %v", err)
+			am.mu.RLock()
+			devices = make([]*Device, 0, len(am.devs))
+			for _, dev := range am.devs {
+				unhealthy := *dev
+				unhealthy.Health = false
+				devices = append(devices, &unhealthy)
+			}
+			am.mu.RUnlock()
 		} else if am.shouldCheckIgnored() {
 			available := make([]*Device, 0, len(devices))
 			for _, dev := range devices {
