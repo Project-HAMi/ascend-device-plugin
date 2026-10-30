@@ -124,6 +124,9 @@ deviceConfig: |- # @schema required:true
       memoryAllocatable: 98304
       memoryCapacity: 98304
       aiCore: 0
+      # Driver 25.1.rc3 does not support vNPU templates
+      # (npu-smi set -t create-vnpu -h => "This device does not support setting create-vnpu").
+      # Keep this list empty. 950DT runs hamiVnpuMode: hami-core.
       templates: []
     - chipName: 910A
       commonWord: Ascend910A

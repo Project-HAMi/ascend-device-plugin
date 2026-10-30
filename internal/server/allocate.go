@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
@@ -13,6 +15,7 @@ import (
 	"github.com/Project-HAMi/HAMi/pkg/device"
 	"github.com/Project-HAMi/HAMi/pkg/device-plugin/nvidiadevice/nvinternal/plugin"
 	"github.com/Project-HAMi/HAMi/pkg/util"
+	"github.com/Project-HAMi/ascend-device-plugin/internal"
 )
 
 var hostHookPath string
@@ -24,9 +27,123 @@ func init() {
 	}
 }
 
+func roHostMount(path string) *v1beta1.Mount {
+	return &v1beta1.Mount{HostPath: path, ContainerPath: path, ReadOnly: true}
+}
+
+func hostDirExists(path string) bool {
+	candidates := []string{path}
+	const ascendRoot = "/usr/local/Ascend/"
+	if strings.HasPrefix(path, ascendRoot) {
+		// The device plugin sees the host Ascend tree at /host/ascend.
+		candidates = append([]string{"/host/ascend/" + strings.TrimPrefix(path, ascendRoot)}, candidates...)
+	}
+	for _, candidate := range candidates {
+		st, err := os.Stat(candidate)
+		if err == nil && st.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// hamiCoreHostMounts mounts the driver files the workload needs.
+// npu-smi on Ascend 950 is /usr/local/sbin/npu-smi; a missing host path
+// fails the pod, so only an existing candidate is used.
+// CANN 9 on this machine lives under /usr/local/Ascend/cann, not
+// ascend-toolkit/latest. Those directories are mounted only when present.
+func hamiCoreHostMounts() []*v1beta1.Mount {
+	smi := "/usr/local/bin/npu-smi"
+	if found, err := resolveNpuSmi(); err == nil && found != "" {
+		smi = found
+	}
+	mounts := []*v1beta1.Mount{
+		roHostMount(smi),
+		roHostMount("/etc/ascend_install.info"),
+		roHostMount("/usr/local/Ascend/driver/lib64/driver"),
+		roHostMount("/usr/local/Ascend/driver/version.info"),
+	}
+	for _, path := range []string{
+		"/usr/local/Ascend/driver/lib64/common",
+		"/usr/local/Ascend/cann",
+		"/usr/local/Ascend/ascend-toolkit/latest",
+	} {
+		if hostDirExists(path) {
+			mounts = append(mounts, roHostMount(path))
+		}
+	}
+	return mounts
+}
+
+func ascendDockerRuntimePresent() bool {
+	for _, path := range []string{
+		"/usr/local/Ascend/Ascend-Docker-Runtime/ascend-docker-runtime",
+		"/host/ascend/Ascend-Docker-Runtime/ascend-docker-runtime",
+	} {
+		st, err := os.Stat(path)
+		if err == nil && !st.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func ascend950DeviceSpecs(phyID int32) []*v1beta1.DeviceSpec {
+	var specs []*v1beta1.DeviceSpec
+	add := func(path string) {
+		specs = append(specs, &v1beta1.DeviceSpec{
+			ContainerPath: path,
+			HostPath:      path,
+			Permissions:   "rwm",
+		})
+	}
+	add(fmt.Sprintf("/dev/davinci%d", phyID))
+	add("/dev/davinci_manager")
+	for _, dir := range []string{"/dev/uburma", "/dev/ummu"} {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			add(filepath.Join(dir, entry.Name()))
+		}
+	}
+	return specs
+}
+
+func ascendRuntimeLibPath() string {
+	var dirs []string
+	for _, path := range []string{
+		"/usr/local/Ascend/cann/lib64",
+		"/usr/local/Ascend/cann/aarch64-linux/lib64",
+		"/usr/local/Ascend/ascend-toolkit/latest/lib64",
+		"/usr/local/Ascend/ascend-toolkit/latest/aarch64-linux/lib64",
+		"/usr/local/Ascend/driver/lib64/driver",
+		"/usr/local/Ascend/driver/lib64/common",
+	} {
+		if hostDirExists(path) {
+			dirs = append(dirs, path)
+		}
+	}
+	return strings.Join(dirs, ":")
+}
+
 // buildContainerAllocateResponse builds the allocate response for a single container.
 func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, ctrName string, containerDevs device.ContainerDevices, rtInfoLookup map[string]RuntimeInfo) (*v1beta1.ContainerAllocateResponse, error) {
 	resp := &v1beta1.ContainerAllocateResponse{}
+	is950 := internal.ChipFamily(ps.mgr.CommonWord()) != ""
+	if is950 {
+		if pod.Annotations[VNPUModeAnnotation] != VNPUModeHamiCore || !ps.mgr.IsHamiVnpuCore() || len(containerDevs) != 1 {
+			return nil, fmt.Errorf("experimental 950 requires explicit hami-core on a hami-core node and exactly one device per container")
+		}
+		info := rtInfoLookup[containerDevs[0].UUID]
+		if info.Memory == nil || *info.Memory <= 0 || info.Core == nil || *info.Core <= 0 || *info.Core > 100 {
+			return nil, fmt.Errorf("experimental 950 requires positive memory and core quota (1-100)")
+		}
+	}
 
 	var (
 		IDs            []int32
@@ -111,18 +228,17 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, ctrName stri
 		return resp, nil
 	}
 	if effectiveHamiCore {
+		if is950 {
+			d := ps.mgr.GetDeviceByUUID(containerDevs[0].UUID)
+			if d.LogicID < 0 || *memories[0] > d.Memory {
+				return nil, fmt.Errorf("invalid 950 device mapping or memory quota exceeds device capacity")
+			}
+			// Ascend 950 uses DCMI v2, whose process-memory API is addressed by logic ID.
+			resp.Envs["NPU_DCMI_DEVICE"] = fmt.Sprintf("v2:%d", d.LogicID)
+			resp.Envs["NPU_FAIL_CLOSED"] = "1"
+		}
 		// 1. Handle volume mount injection
-		var mounts []*v1beta1.Mount
-		// A.Huawei driver and SMI toolchain (Read-Only)
-		driverPaths := []string{
-			"/usr/local/bin/npu-smi",
-			"/etc/ascend_install.info",
-			"/usr/local/Ascend/driver/lib64/driver",
-			"/usr/local/Ascend/driver/version.info",
-		}
-		for _, p := range driverPaths {
-			mounts = append(mounts, &v1beta1.Mount{HostPath: p, ContainerPath: p, ReadOnly: true})
-		}
+		mounts := hamiCoreHostMounts()
 
 		mounts = append(mounts, &v1beta1.Mount{
 			HostPath:      "/usr/local/hami-vnpu-core",
@@ -154,6 +270,18 @@ func (ps *PluginServer) buildContainerAllocateResponse(pod *v1.Pod, ctrName stri
 		if len(cores) > 0 && cores[0] != nil {
 			resp.Envs["NPU_PRIORITY"] = strconv.FormatInt(int64(*cores[0]), 10)
 			klog.V(4).InfoS("Core priority set", "value", *cores[0])
+		}
+		if is950 {
+			// 950 core quotas are fixed time shares, not weighted best-effort tokens.
+			resp.Envs["NPU_FIXED_SHARE_RATIO"] = "1"
+			// The Ascend OCI runtime injects these nodes itself. Without that
+			// runtime, kubelet still injects the paths returned here.
+			if !ascendDockerRuntimePresent() {
+				resp.Devices = ascend950DeviceSpecs(IDs[0])
+			}
+		}
+		if libPath := ascendRuntimeLibPath(); libPath != "" {
+			resp.Envs["LD_LIBRARY_PATH"] = libPath
 		}
 
 		// Set GLOBAL_SHM_PATH based on the first device ID.

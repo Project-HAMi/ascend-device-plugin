@@ -22,6 +22,7 @@ import (
 	"runtime"
 	"sort"
 	"sync"
+	"time"
 
 	"ascend-common/devmanager"
 	"ascend-common/devmanager/dcmi"
@@ -57,12 +58,13 @@ type Manager interface {
 }
 
 type AscendManager struct {
-	mu           sync.RWMutex
-	mgr          devmanager.DeviceInterface
-	config       internal.VNPUConfig
-	globalConfig internal.Config
-	devs         []*Device
-	nodeConfig   *internal.NodeConfig
+	mu                sync.RWMutex
+	mgr               devmanager.DeviceInterface
+	config            internal.VNPUConfig
+	globalConfig      internal.Config
+	devs              []*Device
+	nodeConfig        *internal.NodeConfig
+	healthUnavailable bool
 }
 
 func NewAscendManager() (*AscendManager, error) {
@@ -126,6 +128,59 @@ func (am *AscendManager) deviceDieType() dcmi.DieType {
 		return dcmi.DDIE
 	}
 	return dcmi.VDIE
+}
+
+// deviceIdentity prefers the hardware die ID. If that query fails, the
+// physical ID from the same driver still identifies the device. Ascend950DT
+// die-id queries have failed in a mismatched container image (DCMI -8010)
+// while the host driver still enumerates the NPU.
+func (am *AscendManager) deviceIdentity(logicID, phyID int32) string {
+	primary := am.deviceDieType()
+	alternate := dcmi.DDIE
+	if primary == dcmi.DDIE {
+		alternate = dcmi.VDIE
+	}
+	for _, dieType := range []dcmi.DieType{primary, alternate} {
+		uuid, err := am.mgr.GetDieID(logicID, dieType)
+		if err == nil && uuid != "" {
+			return uuid
+		}
+		klog.Warningf("die ID type %d unavailable for logicID %d phyID %d: %v", dieType, logicID, phyID, err)
+	}
+	if phyID >= 0 {
+		return fmt.Sprintf("phy-%d", phyID)
+	}
+	return fmt.Sprintf("logic-%d", logicID)
+}
+
+// deviceHealthy keeps the NPU registered when the health query fails or hangs.
+// A failed query is not a detected fault.
+func (am *AscendManager) deviceHealthy(logicID int32) bool {
+	if am.healthUnavailable {
+		return true
+	}
+	type healthResult struct {
+		code uint32
+		err  error
+	}
+	ch := make(chan healthResult, 1)
+	go func() {
+		code, err := am.mgr.GetDeviceHealth(logicID)
+		ch <- healthResult{code, err}
+	}()
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			am.healthUnavailable = true
+			klog.Warningf("device health unavailable for logicID %d, keeping the device registered: %v", logicID, res.err)
+			return true
+		}
+		return res.code == 0
+	case <-time.After(time.Second):
+		am.healthUnavailable = true
+		klog.Warningf("device health timed out for logicID %d, keeping the device registered", logicID)
+		return true
+	}
 }
 
 // deviceIndex is the filter index. On Ascend950DT, NPU ID equals Chip Phy-ID.
@@ -222,19 +277,10 @@ func (am *AscendManager) UpdateDevice() error {
 			}
 			deviceIndex = cardID
 		}
-		uuid, err := am.mgr.GetDieID(ID, am.deviceDieType())
-		if err != nil {
-			klog.Errorf("failed to get uuid from device id: %v", err)
-			return err
-		}
+		uuid := am.deviceIdentity(ID, phyID)
 		if am.shouldIgnoreDevice(uuid, deviceIndex) {
 			klog.V(4).Infof("ignore device matched filterDevices uuid=%s index=%d logicID=%d phyID=%d deviceID=%d", uuid, deviceIndex, ID, phyID, deviceID)
 			continue
-		}
-		health, err := am.mgr.GetDeviceHealth(ID)
-		if err != nil {
-			klog.Errorf("failed to get device health: %v", err)
-			return err
 		}
 		newDevs = append(newDevs, &Device{
 			UUID:     uuid,
@@ -244,7 +290,7 @@ func (am *AscendManager) UpdateDevice() error {
 			DeviceID: deviceID,
 			Memory:   am.config.MemoryAllocatable,
 			AICore:   am.config.AICore,
-			Health:   health == 0,
+			Health:   am.deviceHealthy(ID),
 		})
 	}
 	am.mu.Lock()
@@ -461,7 +507,12 @@ func (am *AscendManager) validateExperimental950(arch string) error {
 		return fmt.Errorf("%s requires node enableExperimental950: true", family)
 	}
 	if !am.IsHamiVnpuCore() {
-		return fmt.Errorf("%s requires hami-core mode", family)
+		// Ascend950DT driver 25.1.rc3 rejects vNPU creation:
+		//   npu-smi set -t create-vnpu -h => "This device does not support setting create-vnpu"
+		// libdcmi only has 910/910B/310P template tables, so template mode cannot work.
+		return fmt.Errorf("%s requires hami-core mode: the driver reports "+
+			"\"This device does not support setting create-vnpu\", so vNPU template hard slicing is "+
+			"unavailable; use hamiVnpuMode: hami-core (fixed memory quota + fixed time slice)", family)
 	}
 	if arch != "arm64" {
 		return fmt.Errorf("%s nodes are arm64, got %s", family, arch)

@@ -131,3 +131,51 @@ func Test950UpdateDeviceUsesDCMIV2IDs(t *testing.T) {
 		t.Fatalf("unexpected DCMI v2 device metadata: %+v", devices[1])
 	}
 }
+
+func TestUpdateDeviceUsesPhysicalIDWhenDieIDUnavailable(t *testing.T) {
+	m := &AscendManager{
+		mgr:    &dieUnavailableManager{},
+		config: internal.VNPUConfig{ChipName: "Ascend910", MemoryAllocatable: 32768},
+	}
+	if err := m.UpdateDevice(); err != nil {
+		t.Fatal(err)
+	}
+	devices := m.GetDevices()
+	if len(devices) != 2 || devices[0].UUID != "phy-0" || devices[1].UUID != "phy-7" {
+		t.Fatalf("expected physical IDs after die ID failure, got %+v", devices)
+	}
+}
+
+type dieUnavailableManager struct {
+	update950DeviceManager
+}
+
+func (d *dieUnavailableManager) GetCardIDDeviceID(int32) (int32, int32, error) {
+	return 1, 0, nil
+}
+
+func (d *dieUnavailableManager) GetDieID(int32, dcmi.DieType) (string, error) {
+	return "", errors.New("die id unavailable")
+}
+
+func TestUpdateDeviceKeepsDeviceWhenHealthUnavailable(t *testing.T) {
+	m := &AscendManager{
+		mgr:    &healthUnavailableManager{},
+		config: internal.VNPUConfig{ChipName: "Ascend910", MemoryAllocatable: 32768},
+	}
+	if err := m.UpdateDevice(); err != nil {
+		t.Fatal(err)
+	}
+	devices := m.GetDevices()
+	if len(devices) != 2 || !devices[0].Health || !devices[1].Health {
+		t.Fatalf("expected both devices to stay registered, got %+v", devices)
+	}
+}
+
+type healthUnavailableManager struct {
+	dieUnavailableManager
+}
+
+func (d *healthUnavailableManager) GetDeviceHealth(int32) (uint32, error) {
+	return 0, errors.New("health unavailable")
+}
