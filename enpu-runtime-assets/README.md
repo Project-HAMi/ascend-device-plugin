@@ -1,12 +1,16 @@
 # ENPU release assets
 
-CI builds these files from the official release and bundles them alongside hami-vnpu-core in the device-plugin image. Generated binaries are not committed. To build locally:
+CI and the default Dockerfile target copy these files from a public, digest-pinned runtime image and bundle them alongside hami-vnpu-core. They do not compile ENPU on every build. Generated binaries are not committed.
+
+The default input is `ghcr.io/dynamia-ai/enpu-runtime:1.0.0-cann9.1.0-r1@sha256:9c50f27e6a361322c8eb68e4e5c0f97402c96f6c373bb94e28705f94e5ae176a`. It is anonymously readable and contains only release assets, their checksums, build metadata and the upstream license. The Dockerfile verifies the packaged checksums. Use `--build-arg ENPU_RUNTIME_IMAGE=<image>@sha256:<digest>` to select an explicitly verified replacement; avoid floating tags.
+
+To rebuild the same official release from source and package the local output:
 
 ```sh
 make docker-enpu VERSION=<image-tag>
 ```
 
-`docker-enpu` runs `enpu-runtime` first. Run it on an ARM64 Linux build host with Docker, Git and Python 3. The official image supplies the compiler, CANN and driver SDK; the build host does not need an NPU or an installed Ascend driver. The existing `lib/hami-vnpu-core` assets must also be prepared using the project's `build-vnpu` workflow; this target preserves that backend in the image. Use `make enpu-runtime` to build only the ENPU assets.
+`docker-enpu` runs `enpu-runtime` first, then selects the Dockerfile `runtime-local` target so the newly built files are used instead of the prebuilt image. Run it on an ARM64 Linux build host with Docker, Git and Python 3. The official image supplies the compiler, CANN and driver SDK; the build host does not need an NPU or an installed Ascend driver. The existing `lib/hami-vnpu-core` assets must also be prepared using the project's `build-vnpu` workflow; this target preserves that backend in the image. Use `make enpu-runtime` to build only the ENPU assets.
 
 The build is pinned to:
 
@@ -33,4 +37,4 @@ make docker-enpu VERSION=<image-tag> \
 
 This release provides ordinary ENPU soft slicing, without mem-swap. To upgrade an existing node, stop its ENPU workloads and pause the device-plugin on that node. Back up and move only these three existing files out of their installation paths: `/usr/local/enpu/vcann-rt/lib/libvruntime.so`, `/usr/local/enpu/vcann-rt/tools/enpu-monitor`, and `/usr/local/enpu/vcann-rt/ld.so.preload`. Keep the hami-vnpu-core assets in place. The plugin refuses to overwrite files with different contents. Deploy the new image through the existing Helm chart and resume the plugin so it installs the verified new assets; remove any test hostPath mounts over the plugin executable or `/usr/local/enpu-runtime-assets`. For rollback, stop ENPU workloads and pause the plugin again, restore the three backed-up files and the previous plugin image, then resume the plugin.
 
-CI runs `build-enpu` on an ARM64 runner and downloads its five generated assets alongside the existing `build-vnpu` artifacts. The image job checks that every ENPU asset is present and verifies the checksums before building the existing AMD64/ARM64 image variants. ENPU runtime assets are ARM64; bundling them does not enable ENPU on AMD64. Plain `docker build` only packages assets already prepared and does not compile ENPU automatically.
+CI retains the existing `build-vnpu` job and downloads its artifacts for each native AMD64/ARM64 image build. ENPU assets are copied from the same pinned image for both platforms, without executing its binaries. PR and manually dispatched builds validate images without publishing. On main or version-tag pushes, both platform images must succeed before a combined manifest is published; the workflow verifies that the manifest contains both architectures and then removes its temporary digest artifacts. ENPU runtime assets remain ARM64; bundling them does not enable ENPU on AMD64. Plain `docker build` uses the prebuilt assets; use `make docker-enpu` for a source rebuild.
