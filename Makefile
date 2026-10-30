@@ -81,7 +81,22 @@ verify-helm-release-path:
 	package_line="$$(grep -n 'helm package "$${{ env.CHART_PATH }}" --destination .cr-release-packages' .github/workflows/build-helm-release.yaml | cut -d: -f1)"; \
 	if [ -z "$$show_line" ] || [ -z "$$package_line" ] || [ "$$show_line" -ge "$$package_line" ]; then echo 'GHCR existence check must precede packaging' >&2; exit 1; fi
 
+# BASE_REF is the ref the chart is compared against, e.g. origin/main.
+BASE_REF ?= origin/main
+
+.PHONY: verify-chart-version-bump
+verify-chart-version-bump:
+	@set -eu; \
+	base="$$(mktemp -d)"; \
+	trap 'rm -rf "$$base"' EXIT; \
+	git archive "$(BASE_REF)" charts/ascend-device-plugin | tar -x -C "$$base"; \
+	hack/verify-chart-version-bump.sh "$$base/charts/ascend-device-plugin" charts/ascend-device-plugin
+
+.PHONY: test-chart-version-bump
+test-chart-version-bump:
+	hack/verify-chart-version-bump_test.sh
+
 clean:
 	rm -rf ./ascend-device-plugin
 
-.PHONY: all ascend-device-plugin tidy test lint clean enpu-runtime docker-enpu update-chart-docs verify-helm-chart verify-helm-release-path
+.PHONY: all ascend-device-plugin tidy test lint clean enpu-runtime docker-enpu update-chart-docs verify-helm-chart verify-helm-release-path verify-chart-version-bump test-chart-version-bump
