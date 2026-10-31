@@ -245,7 +245,6 @@ deviceConfig: |- # @schema required:true
     - chipName: Ascend950DT
       commonWord: Ascend950DT
       resourceName: huawei.com/Ascend950DT
-      resourceMemoryName: huawei.com/Ascend950DT-memory
       memoryAllocatable: 98304
       memoryCapacity: 98304
       aiCore: 32

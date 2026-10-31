@@ -17,6 +17,7 @@
 package manager
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +25,7 @@ import (
 
 	"ascend-common/devmanager"
 	"ascend-common/devmanager/common"
+	"ascend-common/devmanager/dcmi"
 
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
 )
@@ -433,4 +435,90 @@ func TestDeviceCoreScaling(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestListVirtualDevicesCleanupFilter(t *testing.T) {
+	uuidErr := errors.New("UUID query is unavailable")
+	for _, tc := range []struct {
+		name          string
+		nodeConfig    *internal.NodeConfig
+		uuid          string
+		uuidErr       error
+		wantIgnored   bool
+		wantUUIDCalls int
+	}{
+		{name: "no node filter", uuidErr: uuidErr},
+		{name: "empty filter", nodeConfig: &internal.NodeConfig{}, uuidErr: uuidErr},
+		{
+			name:       "unmatched index does not depend on UUID query",
+			nodeConfig: &internal.NodeConfig{FilterDevices: internal.FilterDevices{Index: []int32{8}}},
+			uuidErr:    uuidErr,
+		},
+		{
+			name:        "matched index does not depend on UUID query",
+			nodeConfig:  &internal.NodeConfig{FilterDevices: internal.FilterDevices{Index: []int32{7}}},
+			uuidErr:     uuidErr,
+			wantIgnored: true,
+		},
+		{
+			name:          "unmatched UUID is queried once for all vNPUs",
+			nodeConfig:    &internal.NodeConfig{FilterDevices: internal.FilterDevices{UUID: []string{"other-uuid"}}},
+			uuid:          "card-uuid",
+			wantUUIDCalls: 1,
+		},
+		{
+			name:          "matched UUID protects all vNPUs",
+			nodeConfig:    &internal.NodeConfig{FilterDevices: internal.FilterDevices{UUID: []string{"card-uuid"}}},
+			uuid:          "card-uuid",
+			wantIgnored:   true,
+			wantUUIDCalls: 1,
+		},
+		{
+			name:          "required UUID query failure protects all vNPUs",
+			nodeConfig:    &internal.NodeConfig{FilterDevices: internal.FilterDevices{UUID: []string{"card-uuid"}}},
+			uuidErr:       uuidErr,
+			wantIgnored:   true,
+			wantUUIDCalls: 1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			driver := &cleanupFilterDeviceManager{uuid: tc.uuid, uuidErr: tc.uuidErr}
+			am := &AscendManager{mgr: driver, nodeConfig: tc.nodeConfig}
+			devices, err := am.ListVirtualDevices(3)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(devices) != 2 {
+				t.Fatalf("ListVirtualDevices() returned %d vNPUs, want 2", len(devices))
+			}
+			for _, device := range devices {
+				if device.Ignored != tc.wantIgnored {
+					t.Errorf("vNPU %d Ignored = %v, want %v", device.VDevID, device.Ignored, tc.wantIgnored)
+				}
+			}
+			if driver.uuidCalls != tc.wantUUIDCalls {
+				t.Errorf("GetDieID() called %d times, want %d", driver.uuidCalls, tc.wantUUIDCalls)
+			}
+		})
+	}
+}
+
+type cleanupFilterDeviceManager struct {
+	*devmanager.DeviceManagerMock
+	uuid      string
+	uuidErr   error
+	uuidCalls int
+}
+
+func (d *cleanupFilterDeviceManager) GetCardIDDeviceID(int32) (int32, int32, error) {
+	return 7, 0, nil
+}
+
+func (d *cleanupFilterDeviceManager) GetVirtualDeviceInfo(int32) (common.VirtualDevInfo, error) {
+	return common.VirtualDevInfo{VDevInfo: []common.CgoVDevQueryStru{{VDevID: 100}, {VDevID: 101}}}, nil
+}
+
+func (d *cleanupFilterDeviceManager) GetDieID(int32, dcmi.DieType) (string, error) {
+	d.uuidCalls++
+	return d.uuid, d.uuidErr
 }

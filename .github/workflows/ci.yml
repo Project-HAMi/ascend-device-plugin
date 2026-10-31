@@ -10,6 +10,7 @@ on:
     - v[0-9]+.[0-9]+.[0-9]+.[0-9]+
     - v[0-9]+.[0-9]+.[0-9]+
     - v[0-9]+.[0-9]+
+  workflow_dispatch:
   pull_request:
     branches: [ "main" ]
 
@@ -104,57 +105,44 @@ jobs:
         if-no-files-found: error
         path: ./artifacts/*
 
-  build-enpu:
-    runs-on: ubuntu-22.04-arm
-    steps:
-    - uses: actions/checkout@v4
-    - name: Build official ENPU release assets
-      run: make enpu-runtime
-    - name: Upload ENPU artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: enpu-runtime-artifacts
-        if-no-files-found: error
-        path: |
-          enpu-runtime-assets/libvruntime.so
-          enpu-runtime-assets/enpu-monitor
-          enpu-runtime-assets/ld.so.preload
-          enpu-runtime-assets/build-info.json
-          enpu-runtime-assets/SHA256SUMS
-
-  build:
+  build-images:
     env:
       IMAGE_NAME: ${{ secrets.IMAGE_NAME || 'projecthami/ascend-device-plugin' }}
-    runs-on: ubuntu-latest
-    needs: [ "build-vnpu", "build-enpu", "test" ]
+      DOCKER_BUILD_RECORD_UPLOAD: false
+    needs: [ "build-vnpu", "test" ]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+            machine: x86_64
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            machine: aarch64
+    runs-on: ${{ matrix.runner }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
-        ref: ${{ github.event.pull_request.head.sha }}
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
         submodules: true
 
-    - name: Get branch names.
-      id: branch-names
-      uses: tj-actions/branch-names@v8
+    - name: Verify native architecture
+      env:
+        EXPECTED_MACHINE: ${{ matrix.machine }}
+      run: test "$(uname -m)" = "$EXPECTED_MACHINE"
 
-    - name: Download Artifacts
+    - name: Download VNPU artifacts
       uses: actions/download-artifact@v4
       with:
         name: build-artifacts
         path: ./lib/hami-vnpu-core/
 
-    - name: Download ENPU artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: enpu-runtime-artifacts
-        path: ./enpu-runtime-assets/
-
-    - name: Verify ENPU artifacts
-      working-directory: ./enpu-runtime-assets
+    - name: Verify VNPU artifacts
+      working-directory: ./lib/hami-vnpu-core
       run: |
-        for asset in libvruntime.so enpu-monitor ld.so.preload build-info.json SHA256SUMS; do
-          test -s "$asset"
-        done
+        test -s libvnpu.so
+        test -s ld.so.preload
         sha256sum -c SHA256SUMS
 
     - name: Docker Login
@@ -164,31 +152,126 @@ jobs:
         username: ${{ secrets.DOCKERHUB_TOKEN }}
         password: ${{ secrets.DOCKERHUB_PASSWD }}
 
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
-
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Extract tag name
-      id: tag
+    - name: Verify release tag matches shipped manifests
+      if: ${{ startsWith(github.ref, 'refs/tags/') }}
+      shell: bash
       run: |
-        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
-          echo "VERSION=${TAG_NAME}" >> $GITHUB_OUTPUT
-          echo "Extracted version: ${VERSION}"
-        else
-          echo "VERSION=latest" >> $GITHUB_OUTPUT
+        set -euo pipefail
+
+        # Compare against the literal repository the manifest pins, not IMAGE_NAME: that may come from a secret
+        # (docker.io/ prefix, mirror) while the manifest is checked-in text; helm-lint.yaml uses the same literal.
+        tag_name="${GITHUB_REF#refs/tags/}"
+        app_version="$(awk '$1 == "appVersion:" { gsub(/"/, "", $2); print $2; exit }' charts/ascend-device-plugin/Chart.yaml)"
+        manifest_image="$(awk '$1 == "-" && $2 == "image:" { gsub(/"/, "", $3); print $3; exit }' ascend-device-plugin.yaml)"
+
+        if [[ "${app_version}" != "${tag_name}" || "${manifest_image}" != "projecthami/ascend-device-plugin:${tag_name}" ]]; then
+          echo "release tag ${tag_name} does not match Chart.yaml appVersion ${app_version} and ascend-device-plugin.yaml image ${manifest_image}" >&2
+          echo "bump the manifest and chart before tagging so users get the released image" >&2
+          exit 1
         fi
 
-    - name: Build and push
+    - name: Build single-platform image
+      id: image
       uses: docker/build-push-action@v6
       with:
         context: .
-        platforms: linux/amd64,linux/arm64
-        push: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
+        platforms: linux/${{ matrix.arch }}
+        cache-from: type=gha,scope=plugin-${{ matrix.arch }}
+        cache-to: type=gha,mode=max,scope=plugin-${{ matrix.arch }}
+        outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
         build-args: |
           BASE_IMAGE=ubuntu:20.04
           GO_VERSION=${{ env.GO_VERSION }}
-          VERSION=${{ steps.branch-names.outputs.current_branch || steps.branch-names.outputs.tag }}-${{ github.sha }}
-        tags: ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.VERSION }}
+          VERSION=${{ github.head_ref || github.ref_name }}-${{ github.sha }}
+
+    - name: Save image digest
+      if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
+      env:
+        DIGEST: ${{ steps.image.outputs.digest }}
+      run: |
+        [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+        mkdir -p "$RUNNER_TEMP/digests"
+        touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+    - name: Upload image digest
+      if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: image-digest-${{ matrix.arch }}
+        path: ${{ runner.temp }}/digests/*
+        if-no-files-found: error
+        retention-days: 30
+        overwrite: true
+
+  # Keep the existing build check name and fail if either architecture failed.
+  build:
+    if: ${{ always() }}
+    needs: [ "build-images" ]
+    runs-on: ubuntu-22.04
+    env:
+      IMAGE_NAME: ${{ secrets.IMAGE_NAME || 'projecthami/ascend-device-plugin' }}
+    steps:
+    - name: Require both native builds
+      env:
+        BUILD_RESULT: ${{ needs.build-images.result }}
+      run: test "$BUILD_RESULT" = success
+
+    - name: Download image digests
+      if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
+      uses: actions/download-artifact@v4
+      with:
+        pattern: image-digest-*
+        path: ${{ runner.temp }}/digests
+        merge-multiple: true
+
+    - name: Docker Login
+      if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
+      uses: docker/login-action@v3.6.0
+      with:
+        username: ${{ secrets.DOCKERHUB_TOKEN }}
+        password: ${{ secrets.DOCKERHUB_PASSWD }}
+
+    - name: Set up Docker Buildx
+      if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
+      uses: docker/setup-buildx-action@v3
+
+    - name: Publish and verify multi-platform manifest
+      if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
+      working-directory: ${{ runner.temp }}/digests
+      run: |
+        set -euo pipefail
+        tag=latest
+        if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          tag="${GITHUB_REF#refs/tags/}"
+        fi
+        digests=(*)
+        ((${#digests[@]} == 2))
+        sources=()
+        for digest in "${digests[@]}"; do
+          [[ "$digest" =~ ^[a-f0-9]{64}$ ]]
+          sources+=("${IMAGE_NAME}@sha256:${digest}")
+        done
+        docker buildx imagetools create --tag "${IMAGE_NAME}:${tag}" "${sources[@]}"
+        docker buildx imagetools inspect "${IMAGE_NAME}:${tag}" --raw > "$RUNNER_TEMP/image-index.json"
+        jq -e '[.manifests[].platform | select(.os == "linux") | .architecture] | sort == ["amd64", "arm64"]' "$RUNNER_TEMP/image-index.json"
+
+  cleanup-digests:
+    needs: build
+    if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: write
+    steps:
+    - name: Remove this run's temporary digest artifacts
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+          --jq ".artifacts[] | select(.name == \"image-digest-amd64\" or .name == \"image-digest-arm64\") | .id" \
+          | while read -r id; do
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"
+            done

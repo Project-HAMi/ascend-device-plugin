@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -42,6 +43,16 @@ var npuSmiCandidates = []string{
 	"/usr/local/bin/npu-smi",
 }
 
+// npuSmiTimeout bounds a single npu-smi invocation. runNpuSmi is called from
+// the watchAndRegister loop while chips wait for device-share, so a hung
+// npu-smi must not stall that loop, and with it the kubelet device updates and
+// the HAMi node registration. A variable so tests can shorten it.
+var npuSmiTimeout = 30 * time.Second
+
+// multiDiePolicyTimeout bounds the multi-die-policy probe, which runs before
+// the plugin serves anything.
+var multiDiePolicyTimeout = 10 * time.Second
+
 // runNpuSmi runs npu-smi and returns combined output. A package var so tests
 // can substitute a fake.
 //
@@ -53,20 +64,24 @@ var runNpuSmi = func(args ...string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(bin, args...)
+	timeout := npuSmiTimeout
 	if len(args) == 3 && args[0] == "info" && args[1] == "-t" && args[2] == "multi-die-policy" {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		cmd = exec.CommandContext(ctx, bin, args...)
-		cmd.WaitDelay = time.Second
-		out, err := cmd.CombinedOutput()
-		if ctx.Err() != nil {
-			return out, fmt.Errorf("multi-die-policy query timed out after 10s: %w", ctx.Err())
-		}
-		return out, err
+		// The multi-die-policy probe gates startup, so give it a shorter leash
+		// than the set commands the retry loop drives.
+		timeout = multiDiePolicyTimeout
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Stdin = strings.NewReader("Y\n")
-	return cmd.CombinedOutput()
+	// Do not wait forever on the output pipe if a killed npu-smi left a child
+	// holding it open.
+	cmd.WaitDelay = time.Second
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return out, fmt.Errorf("npu-smi %s: timed out after %s", strings.Join(args, " "), timeout)
+	}
+	return out, err
 }
 
 func resolveNpuSmi() (string, error) {
@@ -80,6 +95,14 @@ func resolveNpuSmi() (string, error) {
 		return p, nil
 	}
 	return "", fmt.Errorf("npu-smi not found in %v or PATH", npuSmiCandidates)
+}
+
+// shareTarget is a chip whose device-share still has to be enabled: the
+// npu-smi coordinates to set it plus the logic ID under which the driver
+// reports the processes running on it.
+type shareTarget struct {
+	chipKey
+	LogicID int32
 }
 
 // applyDeviceShare sets device-share on every chip unconditionally; npu-smi
@@ -102,32 +125,148 @@ func applyDeviceShare(chips []chipKey, enabled bool) error {
 			return fmt.Errorf("npu-smi set device-share -i %s -c %s -d %s: %w: %s",
 				card, chip, flag, err, strings.TrimSpace(string(out)))
 		}
-		klog.V(4).Infof("device-share card=%s chip=%s set to %s", card, chip, flag)
 	}
 	return nil
 }
 
-// enableNodeDeviceShare enables device sharing for hami-core or ENPU.
+// enableNodeDeviceShare enables device sharing for hami-core or ENPU: it turns
+// device-share on for every chip on the node when it runs with a runtime
+// soft-slice backend. Called once at startup and idempotent (npu-smi accepts
+// redundant set commands). On a node without such a backend it is a no-op and
+// never writes -d 0.
+//
+// The driver refuses to switch a chip that still runs a workload, and that
+// condition clears on its own once the workload finishes. Chips the driver
+// reports as in use (Manager.IsDeviceInUse, the DCMI process list) are
+// therefore skipped and queued in ps.pendingDeviceShare for
+// retryPendingDeviceShare, so that busy chips do not take every device on the
+// node offline, even when every chip is busy. Any other npu-smi failure
+// (binary missing, set refused on an idle chip) still aborts startup so
+// kubelet restarts and retries, as before.
 func (ps *PluginServer) enableNodeDeviceShare() error {
 	if !ps.mgr.IsHamiVnpuCore() && !managerUsesENPU(ps.mgr) {
 		klog.V(3).Infof("node %s has no runtime soft-slice backend, skipping device-share", ps.nodeName)
 		return nil
 	}
-	chipSet := map[chipKey]struct{}{}
+	seen := map[chipKey]bool{}
+	var chips []shareTarget
 	for _, d := range ps.mgr.GetDevices() {
-		chipSet[chipKey{Card: d.CardID, Chip: d.DeviceID}] = struct{}{}
+		key := chipKey{Card: d.CardID, Chip: d.DeviceID}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		chips = append(chips, shareTarget{chipKey: key, LogicID: d.LogicID})
 	}
-	if len(chipSet) == 0 {
+	if len(chips) == 0 {
 		klog.Warningf("node %s is hami-vnpu-core but no devices found for device-share", ps.nodeName)
 		return nil
 	}
-	chips := make([]chipKey, 0, len(chipSet))
-	for c := range chipSet {
-		chips = append(chips, c)
+	var pending []shareTarget
+	var errs []error
+	for _, c := range chips {
+		busy, err := ps.tryEnableDeviceShare(c)
+		switch {
+		case err != nil:
+			errs = append(errs, err)
+		case busy:
+			klog.Warningf("device-share not enabled on card %d chip %d of node %s yet: a workload still runs on it, will retry once it is free",
+				c.Card, c.Chip, ps.nodeName)
+			pending = append(pending, c)
+		}
 	}
-	if err := applyDeviceShare(chips, true); err != nil {
-		return fmt.Errorf("enable node device-share: %w", err)
+	if len(errs) > 0 {
+		return fmt.Errorf("enable node device-share: %w", errors.Join(errs...))
 	}
-	klog.Infof("device-share enabled on %d chip(s) of node %s", len(chips), ps.nodeName)
+	ps.setPendingDeviceShare(pending)
+	klog.Infof("device-share enabled on %d of %d chip(s) of node %s", len(chips)-len(pending), len(chips), ps.nodeName)
 	return nil
+}
+
+// tryEnableDeviceShare enables device-share on one chip unless the driver
+// reports a workload on it. busy=true means the chip has to be retried later;
+// a non-nil error means npu-smi failed for some other reason.
+//
+// The process list is read again after a refused set: a workload can start
+// between the check and the set, and the refusal then still only means "chip
+// in use", not a reason to abort startup. If the process list itself cannot
+// be read the set is attempted anyway and its result decides.
+func (ps *PluginServer) tryEnableDeviceShare(c shareTarget) (busy bool, err error) {
+	inUse, err := ps.mgr.IsDeviceInUse(c.LogicID)
+	if err != nil {
+		klog.Warningf("cannot tell whether card %d chip %d is in use, setting device-share anyway: %v", c.Card, c.Chip, err)
+	} else if inUse {
+		return true, nil
+	}
+	setErr := applyDeviceShare([]chipKey{c.chipKey}, true)
+	if setErr == nil {
+		return false, nil
+	}
+	if inUse, err := ps.mgr.IsDeviceInUse(c.LogicID); err == nil && inUse {
+		return true, nil
+	}
+	return false, setErr
+}
+
+// retryPendingDeviceShare re-drives the chips that were in use at startup and
+// drops the ones that switch. Called from watchAndRegister on every tick, so a
+// chip that is still in use is logged at V(3) only: it stays pending for as
+// long as the workload occupying it runs.
+func (ps *PluginServer) retryPendingDeviceShare() {
+	queued := ps.snapshotPendingDeviceShare()
+	if len(queued) == 0 {
+		return
+	}
+	var pending []shareTarget
+	for _, c := range queued {
+		busy, err := ps.tryEnableDeviceShare(c)
+		switch {
+		case err != nil:
+			klog.Warningf("device-share still not enabled on card %d chip %d, will retry: %v", c.Card, c.Chip, err)
+			pending = append(pending, c)
+		case busy:
+			klog.V(3).Infof("card %d chip %d still in use, device-share will be retried", c.Card, c.Chip)
+			pending = append(pending, c)
+		}
+	}
+	if switched := len(queued) - len(pending); switched > 0 {
+		klog.Infof("device-share enabled on %d more chip(s) of node %s, %d still pending", switched, ps.nodeName, len(pending))
+	}
+	ps.setPendingDeviceShare(pending)
+}
+
+// setPendingDeviceShare replaces the queue of chips waiting for device-share.
+func (ps *PluginServer) setPendingDeviceShare(pending []shareTarget) {
+	ps.pendingMu.Lock()
+	defer ps.pendingMu.Unlock()
+	ps.pendingDeviceShare = pending
+}
+
+// snapshotPendingDeviceShare copies the queue so the retry loop can drive
+// npu-smi without holding the lock.
+func (ps *PluginServer) snapshotPendingDeviceShare() []shareTarget {
+	ps.pendingMu.RLock()
+	defer ps.pendingMu.RUnlock()
+	if len(ps.pendingDeviceShare) == 0 {
+		return nil
+	}
+	return append([]shareTarget(nil), ps.pendingDeviceShare...)
+}
+
+// pendingShareChips is the set of chips that are not registered yet. A chip
+// whose device-share the driver refused is still running a workload under the
+// previous whole-chip layout, so advertising it would let the scheduler place
+// sliced workloads on a chip that cannot slice. It is withheld from both
+// kubelet and the HAMi node annotation until the switch succeeds.
+func (ps *PluginServer) pendingShareChips() map[chipKey]bool {
+	ps.pendingMu.RLock()
+	defer ps.pendingMu.RUnlock()
+	if len(ps.pendingDeviceShare) == 0 {
+		return nil
+	}
+	chips := make(map[chipKey]bool, len(ps.pendingDeviceShare))
+	for _, c := range ps.pendingDeviceShare {
+		chips[c.chipKey] = true
+	}
+	return chips
 }

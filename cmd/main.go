@@ -22,9 +22,11 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/cleanup"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/monitor"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/server"
@@ -41,7 +43,9 @@ var (
 	nodeConfigFile                = flag.String("node_config_file", "", "node specific config file path")
 	nodeName                      = flag.String("node_name", os.Getenv("NODE_NAME"), "node name")
 	checkIdleVNPUInterval         = flag.Int("check_idle_vnpu_interval", 60, "the interval (in seconds) to check idle vNPU and release them")
-	enablePeriodicIdleVNPUCleanup = flag.Bool("enable_periodic_idle_vnpu_cleanup", false, "whether to enable the periodic idle vNPU cleanup goroutine; when disabled, the one-shot cleanup on restart still runs (default false: periodic cleanup disabled)")
+	enablePeriodicIdleVNPUCleanup = flag.Bool("enable_periodic_idle_vnpu_cleanup", true, "whether to enable the periodic platform-side idle vNPU cleanup goroutine (default true; disable only as an emergency measure)")
+	idleVNPUCleanupGracePeriod    = flag.Duration("idle_vnpu_cleanup_grace_period", 10*time.Minute, "how long an idle vNPU card must remain without a protected Pod before cleanup")
+	idleVNPUCleanupConfirmations  = flag.Int("idle_vnpu_cleanup_confirmations", 3, "how many consecutive safe snapshots are required before destroying idle vNPUs")
 )
 
 func checkFlags() {
@@ -77,6 +81,7 @@ restart:
 		}
 	}
 	restarting = true
+	ps.ResetIdleVNPUCleanupState()
 	if err := ps.CleanupIdleVNPUs(); err != nil {
 		klog.Errorf("Failed to cleanup idle vNPUs: %v", err)
 	}
@@ -149,11 +154,21 @@ func main() {
 	if err = mgr.ValidateWholeCardMode(); err != nil {
 		klog.Fatalf("validate allocation mode failed: %v", err)
 	}
+	client.InitGlobalClient()
+	podSnapshot, err := cleanup.NewKubernetesPodSnapshot(client.GetClient(), *nodeName, mgr, cleanup.DefaultCheckpointPath)
+	if err != nil {
+		klog.Fatalf("init platform-side Pod allocation snapshot failed, error is %v", err)
+	}
+	defer podSnapshot.Stop()
+	idleReconciler := cleanup.NewReconciler(mgr, podSnapshot, cleanup.ReconcilerOptions{
+		GracePeriod:   *idleVNPUCleanupGracePeriod,
+		Confirmations: *idleVNPUCleanupConfirmations,
+	})
 	pluginServer, err := server.NewPluginServer(mgr, *nodeName, *checkIdleVNPUInterval, *enablePeriodicIdleVNPUCleanup)
 	if err != nil {
 		klog.Fatalf("init PluginServer failed, error is %v", err)
 	}
-	client.InitGlobalClient()
+	pluginServer.SetIdleVNPUReconciler(idleReconciler)
 
 	if mgr.IsHamiVnpuCore() || mgr.IsEnpu() {
 		go func() {

@@ -22,6 +22,7 @@ import (
 	"sort"
 
 	"ascend-common/devmanager/common"
+
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
 	"k8s.io/klog/v2"
 )

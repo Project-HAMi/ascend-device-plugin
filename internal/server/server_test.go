@@ -37,6 +37,7 @@ import (
 	"github.com/Project-HAMi/HAMi/pkg/util"
 	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/Project-HAMi/HAMi/pkg/util/nodelock"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/cleanup"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 )
 
@@ -439,7 +440,8 @@ func TestAllocate(t *testing.T) {
 // ============================================================================
 
 func TestNewPluginServer(t *testing.T) {
-	t.Parallel()
+	// The constructor writes HAMi's shared registration map, so these cases
+	// must run sequentially and restore their registrations.
 
 	type newPluginServerArgs struct {
 		commonWord string
@@ -533,7 +535,14 @@ func TestNewPluginServer(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+			original, existed := device.InRequestDevices[tc.args.commonWord]
+			t.Cleanup(func() {
+				if existed {
+					device.InRequestDevices[tc.args.commonWord] = original
+				} else {
+					delete(device.InRequestDevices, tc.args.commonWord)
+				}
+			})
 			mgr := &FakeManager{CommonWordFunc: func() string { return tc.args.commonWord }}
 			ps, err := NewPluginServer(mgr, tc.args.nodeName, 60, false)
 			if (err != nil) != tc.wantErr {
@@ -550,6 +559,45 @@ func TestNewPluginServer(t *testing.T) {
 			}
 			if ps.toAllocDeviceAnno != tc.want.toAllocAnno {
 				t.Errorf("toAllocDeviceAnno = %q, want %q", ps.toAllocDeviceAnno, tc.want.toAllocAnno)
+			}
+		})
+	}
+}
+
+func TestNewPluginServerCleanupInterval(t *testing.T) {
+	const commonWord = "TestCleanupInterval"
+	original, existed := device.InRequestDevices[commonWord]
+	t.Cleanup(func() {
+		if existed {
+			device.InRequestDevices[commonWord] = original
+		} else {
+			delete(device.InRequestDevices, commonWord)
+		}
+	})
+
+	for _, tc := range []struct {
+		name     string
+		interval int
+		enabled  bool
+		wantErr  bool
+	}{
+		{name: "enabled positive interval", interval: 60, enabled: true},
+		{name: "enabled zero interval", interval: 0, enabled: true, wantErr: true},
+		{name: "enabled negative interval", interval: -1, enabled: true, wantErr: true},
+		{name: "disabled zero interval", interval: 0},
+		{name: "disabled negative interval", interval: -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mgr := &FakeManager{CommonWordFunc: func() string { return commonWord }}
+			ps, err := NewPluginServer(mgr, "test-node", tc.interval, tc.enabled)
+			if tc.wantErr {
+				if err == nil || ps != nil {
+					t.Fatalf("NewPluginServer() = (%v, %v), want rejected cleanup interval", ps, err)
+				}
+				return
+			}
+			if err != nil || ps == nil {
+				t.Fatalf("NewPluginServer() = (%v, %v), want valid configuration", ps, err)
 			}
 		})
 	}
@@ -723,7 +771,7 @@ func TestApiDevices(t *testing.T) {
 
 func TestCleanupIdleVNPUs(t *testing.T) {
 	type cleanupIdleVNPUsArgs struct {
-		mgr *FakeManager
+		reconciler cleanup.IdleVNPUReconciler
 	}
 
 	tests := []struct {
@@ -732,33 +780,35 @@ func TestCleanupIdleVNPUs(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "DelegatesToManager",
+			name: "DelegatesToReconciler",
 			args: cleanupIdleVNPUsArgs{
-				mgr: &FakeManager{
-					CleanupIdleVNPUsFunc: func() error { return nil },
-				},
+				reconciler: cleanup.ReconcilerFunc(func(context.Context) (cleanup.ReconcileResult, error) {
+					return cleanup.ReconcileResult{}, nil
+				}),
 			},
 		},
 		{
-			name: "ReturnsManagerError",
+			name: "ReturnsReconcilerError",
 			args: cleanupIdleVNPUsArgs{
-				mgr: &FakeManager{
-					CleanupIdleVNPUsFunc: func() error { return fmt.Errorf("cleanup failed") },
-				},
+				reconciler: cleanup.ReconcilerFunc(func(context.Context) (cleanup.ReconcileResult, error) {
+					return cleanup.ReconcileResult{}, fmt.Errorf("cleanup failed")
+				}),
 			},
 			wantErr: true,
 		},
 		{
-			name: "NilFuncReturnsNil",
+			name: "ReconcilerReturnsNil",
 			args: cleanupIdleVNPUsArgs{
-				mgr: &FakeManager{},
+				reconciler: cleanup.ReconcilerFunc(func(context.Context) (cleanup.ReconcileResult, error) {
+					return cleanup.ReconcileResult{}, nil
+				}),
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ps := &PluginServer{mgr: tc.args.mgr}
+			ps := &PluginServer{idleVNPUReconciler: tc.args.reconciler}
 			err := ps.CleanupIdleVNPUs()
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("CleanupIdleVNPUs() error = %v, wantErr %v", err, tc.wantErr)
@@ -944,5 +994,42 @@ func TestGrpcServer_StopWaitForAllGoroutines(t *testing.T) {
 
 	if err := ps.Stop(); err != nil {
 		t.Fatalf("Stop() failed: %v", err)
+	}
+}
+
+// kubelet must not be offered a chip that is still laid out as a whole chip
+// because the driver refused to enable device-share on it.
+func TestApiDevices_PendingChipIsNotAdvertised(t *testing.T) {
+	t.Parallel()
+
+	devs := []*manager.Device{
+		{UUID: "uuid0", CardID: 0, DeviceID: 0, Health: true},
+		{UUID: "uuid1", CardID: 0, DeviceID: 1, Health: true},
+	}
+	ps := &PluginServer{
+		mgr: &FakeManager{
+			GetDevicesFunc:   func() []*manager.Device { return devs },
+			VDeviceCountFunc: func() int { return 2 },
+		},
+	}
+
+	if got := len(ps.apiDevices()); got != 4 {
+		t.Fatalf("with no chip pending, apiDevices returned %d devices, want 4", got)
+	}
+
+	ps.setPendingDeviceShare([]shareTarget{{chipKey: chipKey{Card: 0, Chip: 1}, LogicID: 1}})
+	got := ps.apiDevices()
+	if len(got) != 2 {
+		t.Fatalf("apiDevices returned %d devices, want 2 (uuid1 is waiting for device-share)", len(got))
+	}
+	for _, d := range got {
+		if strings.HasPrefix(d.ID, "uuid1-") {
+			t.Fatalf("apiDevices still advertises the withheld chip: %s", d.ID)
+		}
+	}
+
+	ps.setPendingDeviceShare(nil)
+	if got := len(ps.apiDevices()); got != 4 {
+		t.Fatalf("after the chip is switched, apiDevices returned %d devices, want 4", got)
 	}
 }

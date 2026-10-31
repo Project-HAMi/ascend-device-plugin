@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"ascend-common/devmanager/common"
+
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
 )
 
@@ -292,6 +293,21 @@ func TestAscend950DTDiscoveryFailurePreservesDevicesUntilRecovery(t *testing.T) 
 	recovered := am.GetDevices()
 	if len(recovered) != 2 || recovered[0].UUID != original[0].UUID || recovered[1].UUID != original[1].UUID || !recovered[0].Health || !recovered[1].Health {
 		t.Fatalf("recovered devices = %+v", recovered)
+	}
+}
+
+func TestAscend950DTVirtualDeviceOperationsAreSkipped(t *testing.T) {
+	am := newFake950DTManager(t, newFake950DTAPI())
+
+	devices, err := am.ListVirtualDevices(0)
+	if err != nil || len(devices) != 0 {
+		t.Fatalf("ListVirtualDevices() = (%+v, %v), want no virtual devices", devices, err)
+	}
+	if err := am.DestroyVirtualDevice(0, 1); err == nil {
+		t.Fatal("DestroyVirtualDevice() succeeded for whole-card-only Ascend950DT")
+	}
+	if inUse, err := am.IsDeviceInUse(0); err != nil || inUse {
+		t.Fatalf("IsDeviceInUse() = (%t, %v), want false, nil", inUse, err)
 	}
 }
 

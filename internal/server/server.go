@@ -35,6 +35,7 @@ import (
 	// "github.com/Project-HAMi/HAMi/pkg/device/ascend"
 	"github.com/Project-HAMi/HAMi/pkg/device"
 	"github.com/Project-HAMi/HAMi/pkg/util"
+	"github.com/Project-HAMi/ascend-device-plugin/internal/cleanup"
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 )
 
@@ -72,12 +73,21 @@ type PluginServer struct {
 	healthCh                      chan int32
 	checkIdleVNPUInterval         int
 	enablePeriodicIdleVNPUCleanup bool
+	idleVNPUReconciler            cleanup.IdleVNPUReconciler
 	wg                            sync.WaitGroup
 
 	// lastPublishedDevices fingerprints the device set most recently handed to
 	// kubelet through ListAndWatch, so watchAndRegister only pushes an update
 	// when the set actually changed.
 	lastPublishedDevices string
+
+	// pendingDeviceShare lists the chips whose device-share could not be
+	// enabled because the driver reported a workload still running on them.
+	// Written by Start and then by watchAndRegister on every tick, and read by
+	// ListAndWatch and registerHAMi, which leave these chips unregistered, so
+	// every access goes through pendingMu.
+	pendingDeviceShare []shareTarget
+	pendingMu          sync.RWMutex
 
 	// test hooks — injected by tests to avoid real socket/kubelet dependencies
 	dialFunc                 func(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error)
@@ -136,6 +146,9 @@ func podUsesENPU(pod *v1.Pod) bool {
 }
 
 func NewPluginServer(mgr manager.Manager, nodeName string, checkIdleVNPUInterval int, enablePeriodicIdleVNPUCleanup bool) (*PluginServer, error) {
+	if enablePeriodicIdleVNPUCleanup && checkIdleVNPUInterval <= 0 {
+		return nil, fmt.Errorf("check_idle_vnpu_interval must be greater than zero when periodic idle vNPU cleanup is enabled")
+	}
 	commonWord := mgr.CommonWord()
 	server := &PluginServer{
 		commonWord:                    commonWord,
@@ -154,6 +167,20 @@ func NewPluginServer(mgr manager.Manager, nodeName string, checkIdleVNPUInterval
 	// enable calling hami methods
 	device.InRequestDevices[commonWord] = server.toAllocDeviceAnno
 	return server, nil
+}
+
+// SetIdleVNPUReconciler wires the platform-side safety policy used by both
+// startup cleanup and the periodic cleanup loop. It is intentionally separate
+// from NewPluginServer to keep existing embedders and unit tests source
+// compatible while making production wiring explicit in cmd/main.go.
+func (ps *PluginServer) SetIdleVNPUReconciler(reconciler cleanup.IdleVNPUReconciler) {
+	ps.idleVNPUReconciler = reconciler
+}
+
+func (ps *PluginServer) ResetIdleVNPUCleanupState() {
+	if resettable, ok := ps.idleVNPUReconciler.(interface{ Reset() }); ok {
+		resettable.Reset()
+	}
 }
 
 // prepareHostResources wraps the package-level prepareHostResources() to
@@ -186,11 +213,13 @@ func (ps *PluginServer) Start() error {
 	if err != nil {
 		return err
 	}
-	// The device set below is what the first ListAndWatch response publishes.
-	ps.lastPublishedDevices = ps.deviceFingerprint()
 	if err := ps.enableNodeDeviceShare(); err != nil {
 		return err
 	}
+	// The device set below is what the first ListAndWatch response publishes.
+	// Taken after device-share so that chips withheld for a running workload
+	// are already excluded.
+	ps.lastPublishedDevices = ps.deviceFingerprint()
 	err = ps.serve()
 	if err != nil {
 		return err
@@ -247,7 +276,12 @@ func (ps *PluginServer) StopCh() <-chan any {
 }
 
 func (ps *PluginServer) CleanupIdleVNPUs() error {
-	return ps.mgr.CleanupIdleVNPUs()
+	if ps.idleVNPUReconciler == nil {
+		return fmt.Errorf("idle vNPU reconciler is not configured")
+	}
+	result, err := ps.idleVNPUReconciler.Reconcile(context.Background())
+	klog.Infof("idle vNPU reconcile: cards=%d protected=%d reclaimable=%d inspected=%d destroyed=%d skipped=%d ignored=%d unknown=%v destroyErrors=%d resets=%d", result.CardsInspected, result.CardsProtected, result.CardsReclaimable, result.VNPUsInspected, result.VNPUsDestroyed, result.VNPUsSkipped, result.VNPUsIgnored, result.UnknownSnapshot, result.DestroyErrors, result.ConfirmationResets)
+	return err
 }
 
 func (ps *PluginServer) serve() error {
@@ -307,7 +341,11 @@ func (ps *PluginServer) apiDevices() []*v1beta1.Device {
 	devs := ps.mgr.GetDevices()
 	devices := make([]*v1beta1.Device, 0, len(devs))
 	vCount := ps.mgr.VDeviceCount()
+	pending := ps.pendingShareChips()
 	for _, dev := range devs {
+		if pending[chipKey{Card: dev.CardID, Chip: dev.DeviceID}] {
+			continue
+		}
 		health := v1beta1.Unhealthy
 		if dev.Health {
 			health = v1beta1.Healthy
