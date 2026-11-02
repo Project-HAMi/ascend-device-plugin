@@ -46,6 +46,7 @@ const (
 	Ascend910Prefix            = "Ascend910"
 	Ascend910CType             = "Ascend910C"
 	VNPUModeAnnotation         = "huawei.com/vnpu-mode"
+	VNPUModeTemplate           = "template"
 	VNPUModeHamiCore           = "hami-core"
 	VNPUModeENPU               = "enpu"
 	VNPUNodeSelectorAnnotation = "hami-vnpu-core"
@@ -104,6 +105,15 @@ type RuntimeInfo struct {
 // enpuManager provides optional ENPU capability detection.
 type enpuManager interface {
 	IsEnpu() bool
+}
+
+type fullCardOnlyManager interface {
+	IsFullCardOnly() bool
+}
+
+func managerIsFullCardOnly(mgr manager.Manager) bool {
+	m, ok := mgr.(fullCardOnlyManager)
+	return ok && m.IsFullCardOnly()
 }
 
 type enpuPolicyManager interface {

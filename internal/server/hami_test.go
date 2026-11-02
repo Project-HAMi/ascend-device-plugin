@@ -43,6 +43,12 @@ func hamiTestServer(t *testing.T) (*PluginServer, map[string]*manager.Device) {
 	return &PluginServer{mgr: mgr, allocAnno: "huawei.com/Ascend910B3"}, devices
 }
 
+type fullCardOnlyTestManager struct {
+	*FakeManager
+}
+
+func (*fullCardOnlyTestManager) IsFullCardOnly() bool { return true }
+
 func hamiTestPod(uid string) *v1.Pod {
 	return &v1.Pod{ObjectMeta: metav1.ObjectMeta{
 		UID: types.UID(uid), Name: uid, Namespace: "test",
@@ -64,6 +70,50 @@ func hamiTestMount(t *testing.T, response *v1beta1.ContainerAllocateResponse, co
 		t.Fatalf("missing mount for %q: %+v", containerPath, response.Mounts)
 	}
 	return found
+}
+
+func TestFullCardOnlyAllocationGuard(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		mode     string
+		template string
+		wantErr  string
+	}{
+		{name: "empty mode accepted"},
+		{name: "template mode accepted", mode: VNPUModeTemplate},
+		{name: "hami-core mode rejected", mode: VNPUModeHamiCore, wantErr: `pod vnpu mode "hami-core"`},
+		{name: "enpu mode rejected", mode: VNPUModeENPU, wantErr: `pod vnpu mode "enpu"`},
+		{name: "non-empty template rejected", mode: VNPUModeTemplate, template: "vir01", wantErr: `vNPU template "vir01"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ps, _ := hamiTestServer(t)
+			fakeManager := ps.mgr.(*FakeManager)
+			fakeManager.IsHamiVnpuCoreFunc = func() bool { return false }
+			ps.mgr = &fullCardOnlyTestManager{FakeManager: fakeManager}
+
+			pod := hamiTestPod("full-card-pod")
+			if test.mode != "" {
+				pod.Annotations = map[string]string{VNPUModeAnnotation: test.mode}
+			}
+			lookup := map[string]RuntimeInfo{"card-seven": {Temp: test.template}}
+			response, err := ps.buildContainerAllocateResponse(pod, "worker", device.ContainerDevices{
+				{UUID: "card-seven"},
+			}, lookup)
+
+			if test.wantErr != "" {
+				if err == nil || response != nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("got response=%+v, err=%v; want no response and error containing %q", response, err, test.wantErr)
+				}
+				return
+			}
+			if err != nil || response == nil {
+				t.Fatalf("got response=%+v, err=%v; want successful allocation", response, err)
+			}
+			if got := response.Envs["ASCEND_VISIBLE_DEVICES"]; got != "7" {
+				t.Errorf("ASCEND_VISIBLE_DEVICES = %q, want %q", got, "7")
+			}
+		})
+	}
 }
 
 func TestHamiCoreAllocateCanonicalEnvironmentAndMounts(t *testing.T) {

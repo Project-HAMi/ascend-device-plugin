@@ -151,6 +151,9 @@ func main() {
 			klog.Fatalf("load node config failed: %v", err)
 		}
 	}
+	if err = mgr.ValidateWholeCardMode(); err != nil {
+		klog.Fatalf("validate allocation mode failed: %v", err)
+	}
 	client.InitGlobalClient()
 	podSnapshot, err := cleanup.NewKubernetesPodSnapshot(client.GetClient(), *nodeName, mgr, cleanup.DefaultCheckpointPath)
 	if err != nil {
