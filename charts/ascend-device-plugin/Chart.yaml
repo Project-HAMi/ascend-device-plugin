@@ -3,5 +3,5 @@ name: ascend-device-plugin
 description: HAMi Ascend device plugin
 type: application
 version: 0.2.2
-appVersion: v1.5.1
+appVersion: v1.5.0
 kubeVersion: ">=1.20.0-0"
