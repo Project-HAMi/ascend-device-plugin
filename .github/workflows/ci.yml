@@ -82,15 +82,33 @@ jobs:
         verbose: true
 
   build-vnpu:
-    runs-on: ubuntu-22.04-arm
+    name: Build VNPU (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+            machine: x86_64
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            machine: aarch64
+    runs-on: ${{ matrix.runner }}
     steps:
     - uses: actions/checkout@v4
       with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
         submodules: recursive
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+    - name: Verify native architecture
+      env:
+        EXPECTED_MACHINE: ${{ matrix.machine }}
+      run: test "$(uname -m)" = "$EXPECTED_MACHINE"
+    - name: Test VNPU artifact verification
+      run: python3 -m unittest discover -s scripts/tests -p test_verify_vnpu_artifacts.py
     - name: Build with the core's official CANN 8.5.2 Dockerfile
-      run: make build-in-docker PLATFORM=linux/arm64 OUT_DIR=../artifacts
+      run: make build-in-docker PLATFORM=linux/${{ matrix.arch }} OUT_DIR=../artifacts
       working-directory: ./libvnpu
     - name: Prepare artifacts for upload
       run: |
@@ -98,10 +116,12 @@ jobs:
         test -s ./artifacts/build-info.json
         (cd ./artifacts && sha256sum -c SHA256SUMS)
         echo "/hami-vnpu-core/libvnpu.so" > ./artifacts/ld.so.preload
+        python3 scripts/verify-vnpu-artifacts.py --arch "${{ matrix.arch }}" \
+          --directory ./artifacts --source-commit "$(git -C libvnpu rev-parse HEAD)"
     - name: upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: build-artifacts
+        name: vnpu-artifacts-${{ matrix.arch }}
         if-no-files-found: error
         path: ./artifacts/*
 
@@ -135,15 +155,14 @@ jobs:
     - name: Download VNPU artifacts
       uses: actions/download-artifact@v4
       with:
-        name: build-artifacts
+        name: vnpu-artifacts-${{ matrix.arch }}
         path: ./lib/hami-vnpu-core/
 
     - name: Verify VNPU artifacts
-      working-directory: ./lib/hami-vnpu-core
       run: |
-        test -s libvnpu.so
-        test -s ld.so.preload
-        sha256sum -c SHA256SUMS
+        (cd ./lib/hami-vnpu-core && sha256sum -c SHA256SUMS)
+        python3 scripts/verify-vnpu-artifacts.py --arch "${{ matrix.arch }}" \
+          --directory ./lib/hami-vnpu-core --source-commit "$(git -C libvnpu rev-parse HEAD)"
 
     - name: Docker Login
       if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}

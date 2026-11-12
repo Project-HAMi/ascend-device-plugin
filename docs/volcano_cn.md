@@ -17,7 +17,7 @@
 
   若宿主机的 `npu-smi` 在 `/usr/local/bin/npu-smi`，需要在 `ascend-device-plugin.yaml` 中为其增加 hostPath 挂载。
 
-**注意：** `hami-core` 软切分目前仅支持 ARM 平台；基于模板的硬切分没有此限制。
+**注意：** CI 分别编译 Linux AMD64 和 ARM64 的 `hami-vnpu-core` 动态库，插件镜像使用对应架构的产物。ENPU 运行时产物仍仅支持 ARM64。
 
 ## 部署
 
