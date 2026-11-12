@@ -150,6 +150,14 @@ Deploy the updated plugin and its pinned hami-vnpu-core `9f7be4c` library togeth
 
 CI builds the core with the pinned submodule's official CANN 8.5.2 Dockerfile. To build for an x86 node, use `PLATFORM=linux/amd64`; for an ARM node, use `PLATFORM=linux/arm64`. For example, run `make -C libvnpu build-in-docker PLATFORM=linux/arm64 OUT_DIR=../artifacts`. This exports `libvnpu.so`, `build-info.json`, and `SHA256SUMS` into `artifacts/`.
 
+To verify the built artifacts locally:
+
+```bash
+bash scripts/verify-vnpu-bundle.sh amd64 ./artifacts  # For x86 builds
+bash scripts/verify-vnpu-bundle.sh arm64 ./artifacts  # For ARM builds
+```
+
+
 Multi-card allocations require the same memory and compute quotas on every selected card; unequal quotas are rejected. Both `NPU_MEMORY_LIMIT_MB` and `NPU_COMPUTE_LIMIT` apply independently to each card. In the example above, four cards each receive 20 GiB and 50% compute: the plugin sets `NPU_MEMORY_LIMIT_MB=20480` and `NPU_COMPUTE_LIMIT=50`. Request `-memory: "20480"`, not `"81920"`.
 
 The plugin passes neutral base paths, `NPU_GLOBAL_SHM_PATH=/hami-shared-region/global_registry` and `NPU_LOCAL_SHM_PATH=/hami-vnpu-shmem/vnpu_local_shmem`. When an application first uses a card, the core appends `.device-<physicalID>` to both paths and initializes that card's domain. Local accounting is per container and physical card; global scheduling domains use the same shared base across containers. Neither base path selects the first card. Applications use the Ascend runtime's container-local logical device IDs, even when HAMi selects different host physical cards.

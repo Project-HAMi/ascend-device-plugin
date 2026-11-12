@@ -148,6 +148,14 @@ metadata:
 
 CI 直接使用锁定子模块中的官方 CANN 8.5.2 Dockerfile 编译 core。本地复用相同构建方式：`make -C libvnpu build-in-docker PLATFORM=linux/arm64 OUT_DIR=../artifacts`（x86 节点改用 `PLATFORM=linux/amd64`），产物 `libvnpu.so`、`build-info.json` 和 `SHA256SUMS` 导出到 `artifacts/`。
 
+本地验证构建产物：
+
+```bash
+bash scripts/verify-vnpu-bundle.sh amd64 ./artifacts  # x86 构建
+bash scripts/verify-vnpu-bundle.sh arm64 ./artifacts  # ARM 构建
+```
+
+
 多卡分配要求每张卡的显存和算力配额分别相同，不同配额会被拒绝。`NPU_MEMORY_LIMIT_MB` 和 `NPU_COMPUTE_LIMIT` 都对每张卡独立生效。上例申请 4 张卡，每张卡 20 GiB 显存、50% 算力，插件注入 `NPU_MEMORY_LIMIT_MB=20480` 和 `NPU_COMPUTE_LIMIT=50`。`-memory` 应填写 `"20480"`，不要填写 `"81920"`。
 
 插件传入不绑定首卡的基础路径：`NPU_GLOBAL_SHM_PATH=/hami-shared-region/global_registry` 和 `NPU_LOCAL_SHM_PATH=/hami-vnpu-shmem/vnpu_local_shmem`。应用首次使用某张卡时，core 在两个路径后追加 `.device-<physicalID>`，初始化该物理卡对应的域。本地记账按容器、物理卡分别隔离；跨容器的全局调度域使用相同的共享基础路径。业务仍使用 Ascend 运行时在容器内的逻辑设备号，不能把 HAMi 选中的宿主机物理卡号直接当作逻辑设备号。

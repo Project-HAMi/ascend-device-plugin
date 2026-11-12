@@ -21,15 +21,32 @@ def verify(directory, arch, source_commit):
     library = (directory / "libvnpu.so").read_bytes()
     if len(library) < 64 or library[:6] != b"\x7fELF\x02\x01":
         raise ValueError("libvnpu.so must be a 64-bit little-endian ELF")
-    if struct.unpack_from("<H", library, 18)[0] != machine:
-        raise ValueError("libvnpu.so ELF machine does not match " + arch)
+    actual_machine = struct.unpack_from("<H", library, 18)[0]
+    if actual_machine != machine:
+        raise ValueError(
+            f"libvnpu.so ELF machine {actual_machine} does not match "
+            f"expected {arch} (machine {machine})"
+        )
     info = json.loads((directory / "build-info.json").read_text())
-    if info.get("architecture") != reported_arch:
-        raise ValueError("build-info.json architecture does not match " + arch)
-    if info.get("source_commit") != source_commit:
-        raise ValueError("build-info.json source does not match the pinned core")
-    if info.get("library", {}).get("sha256") != hashlib.sha256(library).hexdigest():
-        raise ValueError("build-info.json library SHA256 does not match libvnpu.so")
+    actual_arch = info.get("architecture")
+    if actual_arch != reported_arch:
+        raise ValueError(
+            f"build-info.json architecture '{actual_arch}' does not match "
+            f"expected '{reported_arch}' for {arch}"
+        )
+    actual_commit = info.get("source_commit")
+    if actual_commit != source_commit:
+        raise ValueError(
+            f"build-info.json source commit '{actual_commit}' does not match "
+            f"the pinned core '{source_commit}'"
+        )
+    actual_hash = hashlib.sha256(library).hexdigest()
+    expected_hash = info.get("library", {}).get("sha256")
+    if expected_hash != actual_hash:
+        raise ValueError(
+            f"build-info.json library SHA256 '{expected_hash}' does not match "
+            f"libvnpu.so '{actual_hash}'"
+        )
 
 
 def main():
