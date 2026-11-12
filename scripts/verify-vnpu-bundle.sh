@@ -12,7 +12,11 @@ if [ -z "$ARCH" ] || [ -z "$DIRECTORY" ]; then
 fi
 
 # Verify checksums
-(cd "$DIRECTORY" && sha256sum -c SHA256SUMS)
+if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$DIRECTORY" && sha256sum -c SHA256SUMS)
+else
+    (cd "$DIRECTORY" && shasum -a 256 -c SHA256SUMS)
+fi
 
 # Verify architecture and provenance
 SOURCE_COMMIT=$(git -C libvnpu rev-parse HEAD)

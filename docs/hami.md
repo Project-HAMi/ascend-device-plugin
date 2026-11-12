@@ -148,15 +148,14 @@ metadata:
 
 Deploy the updated plugin and its pinned hami-vnpu-core `9f7be4c` library together. Older libraries do not provide this per-card accounting behavior. The library rejects `NPU_MEM_QUOTA`, `NPU_PRIORITY`, and `NPU_FIXED_SHARE_RATIO`. Stop hami-core workloads before replacing the node library. When upgrading or changing policy, start new processes with fresh per-container local SHM files. Processes sharing one local SHM domain must use the same policy, quotas, and PID namespace. Spatial bypasses time scheduling while keeping shared HBM accounting and process cleanup.
 
-CI builds the core with the pinned submodule's official CANN 8.5.2 Dockerfile. To build for an x86 node, use `PLATFORM=linux/amd64`; for an ARM node, use `PLATFORM=linux/arm64`. For example, run `make -C libvnpu build-in-docker PLATFORM=linux/arm64 OUT_DIR=../artifacts`. This exports `libvnpu.so`, `build-info.json`, and `SHA256SUMS` into `artifacts/`.
-
-To verify the built artifacts locally:
+CI builds the core with the pinned submodule's official CANN 8.5.2 Dockerfile. To build and verify locally, select the target node architecture and prepare the preload file alongside the core's exported library, build report and checksum manifest:
 
 ```bash
-bash scripts/verify-vnpu-bundle.sh amd64 ./artifacts  # For x86 builds
-bash scripts/verify-vnpu-bundle.sh arm64 ./artifacts  # For ARM builds
+arch=amd64  # Use arm64 for ARM nodes.
+make -C libvnpu build-in-docker PLATFORM="linux/${arch}" OUT_DIR=../artifacts
+printf '%s\n' '/hami-vnpu-core/libvnpu.so' > artifacts/ld.so.preload
+bash scripts/verify-vnpu-bundle.sh "$arch" ./artifacts
 ```
-
 
 Multi-card allocations require the same memory and compute quotas on every selected card; unequal quotas are rejected. Both `NPU_MEMORY_LIMIT_MB` and `NPU_COMPUTE_LIMIT` apply independently to each card. In the example above, four cards each receive 20 GiB and 50% compute: the plugin sets `NPU_MEMORY_LIMIT_MB=20480` and `NPU_COMPUTE_LIMIT=50`. Request `-memory: "20480"`, not `"81920"`.
 

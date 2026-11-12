@@ -146,15 +146,14 @@ metadata:
 
 应同时部署更新后的插件及其锁定的 hami-vnpu-core `9f7be4c` 运行库。旧运行库不提供本次逐卡独立记账语义。运行库会拒绝 `NPU_MEM_QUOTA`、`NPU_PRIORITY` 和 `NPU_FIXED_SHARE_RATIO`。替换节点运行库前先停止 hami-core 业务。升级或切换策略时，使用新进程及新的容器级本地 SHM 文件；共享同一本地 SHM 域的进程必须使用相同策略、配额和 PID 命名空间。Spatial 绕过时间调度，同时保留共享 HBM 记账和进程清理。
 
-CI 直接使用锁定子模块中的官方 CANN 8.5.2 Dockerfile 编译 core。本地复用相同构建方式：`make -C libvnpu build-in-docker PLATFORM=linux/arm64 OUT_DIR=../artifacts`（x86 节点改用 `PLATFORM=linux/amd64`），产物 `libvnpu.so`、`build-info.json` 和 `SHA256SUMS` 导出到 `artifacts/`。
-
-本地验证构建产物：
+CI 使用锁定子模块中的官方 CANN 8.5.2 Dockerfile 编译 core。本地构建验证时，先选择目标节点架构，再为 core 导出的动态库、构建信息和校验清单补齐 preload 文件：
 
 ```bash
-bash scripts/verify-vnpu-bundle.sh amd64 ./artifacts  # x86 构建
-bash scripts/verify-vnpu-bundle.sh arm64 ./artifacts  # ARM 构建
+arch=amd64  # ARM 节点改为 arm64。
+make -C libvnpu build-in-docker PLATFORM="linux/${arch}" OUT_DIR=../artifacts
+printf '%s\n' '/hami-vnpu-core/libvnpu.so' > artifacts/ld.so.preload
+bash scripts/verify-vnpu-bundle.sh "$arch" ./artifacts
 ```
-
 
 多卡分配要求每张卡的显存和算力配额分别相同，不同配额会被拒绝。`NPU_MEMORY_LIMIT_MB` 和 `NPU_COMPUTE_LIMIT` 都对每张卡独立生效。上例申请 4 张卡，每张卡 20 GiB 显存、50% 算力，插件注入 `NPU_MEMORY_LIMIT_MB=20480` 和 `NPU_COMPUTE_LIMIT=50`。`-memory` 应填写 `"20480"`，不要填写 `"81920"`。
 

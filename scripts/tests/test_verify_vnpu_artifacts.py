@@ -5,6 +5,8 @@ import importlib.util
 import json
 from pathlib import Path
 import struct
+import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -31,7 +33,40 @@ class ArtifactTests(unittest.TestCase):
                 "library": {"sha256": hashlib.sha256(elf).hexdigest()}}
         (self.directory / "build-info.json").write_text(json.dumps(info))
         (self.directory / "ld.so.preload").write_text("/hami-vnpu-core/libvnpu.so\n")
-        (self.directory / "SHA256SUMS").write_text("fixture\n")
+        self.write_manifest()
+
+    def write_manifest(self):
+        lines = []
+        for name in ("libvnpu.so", "build-info.json"):
+            digest = hashlib.sha256((self.directory / name).read_bytes()).hexdigest()
+            lines.append(f"{digest}  {name}\n")
+        (self.directory / "SHA256SUMS").write_text("".join(lines))
+
+    def test_bundle_entrypoint_checks_complete_local_output(self):
+        self.bundle("amd64")
+        core = self.directory / "libvnpu"
+        subprocess.run(["git", "init", str(core)], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(core), "-c", "user.name=Test",
+                        "-c", "user.email=test@example.invalid", "commit",
+                        "--allow-empty", "-m", "fixture"], check=True, capture_output=True)
+        commit = subprocess.check_output(["git", "-C", str(core), "rev-parse", "HEAD"],
+                                         text=True).strip()
+        info = self.directory / "build-info.json"
+        data = json.loads(info.read_text())
+        data["source_commit"] = commit
+        info.write_text(json.dumps(data))
+        self.write_manifest()
+        scripts = self.directory / "scripts"
+        scripts.mkdir()
+        for name in ("verify-vnpu-artifacts.py", "verify-vnpu-bundle.sh"):
+            shutil.copyfile(SCRIPT.parent / name, scripts / name)
+        argv = ["bash", "scripts/verify-vnpu-bundle.sh", "amd64", "."]
+        result = subprocess.run(argv, cwd=self.directory, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        (self.directory / "ld.so.preload").unlink()
+        result = subprocess.run(argv, cwd=self.directory, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing or empty artifact: ld.so.preload", result.stderr)
 
     def test_matching_architectures(self):
         for arch in verifier.ARCHITECTURES:
