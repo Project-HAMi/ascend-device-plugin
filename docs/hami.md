@@ -25,7 +25,7 @@ This guide covers deploying `ascend-device-plugin` for use with the [HAMi](https
 
   HAMi v2.9.0 moved the Ascend chip list from `vnpus` to `vnpus.configs` in the `hami-scheduler-device` ConfigMap. The plugin reads both layouts, and logs a warning when it falls back to the older one, so it can be upgraded ahead of HAMi.
 
-**Note:** `hami-vnpu-core` soft slicing currently only supports ARM platforms; template-based hard slicing has no such restriction.
+**Note:** CI builds `hami-vnpu-core` libraries separately for Linux AMD64 and ARM64. Each plugin image packages the matching architecture. ENPU runtime assets remain ARM64-only.
 
 ## Deployment
 
@@ -148,7 +148,14 @@ metadata:
 
 Deploy the updated plugin and its pinned hami-vnpu-core `9f7be4c` library together. Older libraries do not provide this per-card accounting behavior. The library rejects `NPU_MEM_QUOTA`, `NPU_PRIORITY`, and `NPU_FIXED_SHARE_RATIO`. Stop hami-core workloads before replacing the node library. When upgrading or changing policy, start new processes with fresh per-container local SHM files. Processes sharing one local SHM domain must use the same policy, quotas, and PID namespace. Spatial bypasses time scheduling while keeping shared HBM accounting and process cleanup.
 
-CI builds the core with the pinned submodule's official CANN 8.5.2 Dockerfile. To use the same build locally, run `make -C libvnpu build-in-docker PLATFORM=linux/arm64 OUT_DIR=../artifacts`. This exports `libvnpu.so`, `build-info.json`, and `SHA256SUMS` into `artifacts/`.
+CI builds the core with the pinned submodule's official CANN 8.5.2 Dockerfile. To build and verify locally, select the target node architecture and prepare the preload file alongside the core's exported library, build report and checksum manifest:
+
+```bash
+arch=amd64  # Use arm64 for ARM nodes.
+make -C libvnpu build-in-docker PLATFORM="linux/${arch}" OUT_DIR=../artifacts
+printf '%s\n' '/hami-vnpu-core/libvnpu.so' > artifacts/ld.so.preload
+(cd artifacts && shasum -a 256 -c SHA256SUMS)
+```
 
 Multi-card allocations require the same memory and compute quotas on every selected card; unequal quotas are rejected. Both `NPU_MEMORY_LIMIT_MB` and `NPU_COMPUTE_LIMIT` apply independently to each card. In the example above, four cards each receive 20 GiB and 50% compute: the plugin sets `NPU_MEMORY_LIMIT_MB=20480` and `NPU_COMPUTE_LIMIT=50`. Request `-memory: "20480"`, not `"81920"`.
 

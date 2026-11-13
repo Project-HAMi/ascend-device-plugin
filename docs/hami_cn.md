@@ -25,7 +25,7 @@
 
   HAMi v2.9.0 把 `hami-scheduler-device` ConfigMap 中的 Ascend 芯片列表从 `vnpus` 挪到了 `vnpus.configs`。插件两种格式都能读，回退到旧格式时会打一条告警日志，因此可以先于 HAMi 升级。
 
-**注意：** `hami-vnpu-core` 软切分目前仅支持 ARM 平台；基于模板的硬切分没有此限制。
+**注意：** CI 分别编译 Linux AMD64 和 ARM64 的 `hami-vnpu-core` 动态库，插件镜像使用对应架构的产物。ENPU 运行时产物仍仅支持 ARM64。
 
 ## 部署
 
@@ -146,7 +146,14 @@ metadata:
 
 应同时部署更新后的插件及其锁定的 hami-vnpu-core `9f7be4c` 运行库。旧运行库不提供本次逐卡独立记账语义。运行库会拒绝 `NPU_MEM_QUOTA`、`NPU_PRIORITY` 和 `NPU_FIXED_SHARE_RATIO`。替换节点运行库前先停止 hami-core 业务。升级或切换策略时，使用新进程及新的容器级本地 SHM 文件；共享同一本地 SHM 域的进程必须使用相同策略、配额和 PID 命名空间。Spatial 绕过时间调度，同时保留共享 HBM 记账和进程清理。
 
-CI 直接使用锁定子模块中的官方 CANN 8.5.2 Dockerfile 编译 core。本地复用相同构建方式：`make -C libvnpu build-in-docker PLATFORM=linux/arm64 OUT_DIR=../artifacts`，产物 `libvnpu.so`、`build-info.json` 和 `SHA256SUMS` 导出到 `artifacts/`。
+CI 使用锁定子模块中的官方 CANN 8.5.2 Dockerfile 编译 core。本地构建验证时，先选择目标节点架构，再为 core 导出的动态库、构建信息和校验清单补齐 preload 文件：
+
+```bash
+arch=amd64  # ARM 节点改为 arm64。
+make -C libvnpu build-in-docker PLATFORM="linux/${arch}" OUT_DIR=../artifacts
+printf '%s\n' '/hami-vnpu-core/libvnpu.so' > artifacts/ld.so.preload
+(cd artifacts && shasum -a 256 -c SHA256SUMS)
+```
 
 多卡分配要求每张卡的显存和算力配额分别相同，不同配额会被拒绝。`NPU_MEMORY_LIMIT_MB` 和 `NPU_COMPUTE_LIMIT` 都对每张卡独立生效。上例申请 4 张卡，每张卡 20 GiB 显存、50% 算力，插件注入 `NPU_MEMORY_LIMIT_MB=20480` 和 `NPU_COMPUTE_LIMIT=50`。`-memory` 应填写 `"20480"`，不要填写 `"81920"`。
 

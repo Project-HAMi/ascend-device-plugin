@@ -16,7 +16,7 @@ Memory slicing is supported based on virtualization template. For detailed infor
 
 The hami-core backend uses `libvnpu.so` for memory accounting and compute sharing. It defaults to cooperative CANN Cube/Vector budgets (`spatial`), with explicit `dynamic`, `fixed`, and `overdraft` time-scheduling policies available. See the [HAMi configuration guide](docs/hami.md#soft-slicing-configuration-hami-vnpu-core) and [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core).
 
-**Note:** `hami-vnpu-core` currently only supports ARM platforms.
+**Note:** CI builds architecture-matched `hami-vnpu-core` libraries for Linux AMD64 and ARM64. ENPU runtime assets remain ARM64-only.
 
 ### 3. Soft Slicing with ubs-virt-enpu (vCANN-RT)
 

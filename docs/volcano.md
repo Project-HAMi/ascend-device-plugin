@@ -17,7 +17,7 @@ This guide covers deploying `ascend-device-plugin` for use with the [Volcano](ht
 
   If `npu-smi` is located at `/usr/local/bin/npu-smi`, please add the path mount in `ascend-device-plugin.yaml`.
 
-**Note:** `hami-core` soft slicing currently only supports ARM platforms; template-based hard slicing has no such restriction.
+**Note:** CI builds `hami-vnpu-core` libraries separately for Linux AMD64 and ARM64. Each plugin image packages the matching architecture. ENPU runtime assets remain ARM64-only.
 
 ## Deployment
 
