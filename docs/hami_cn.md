@@ -152,7 +152,7 @@ CI 使用锁定子模块中的官方 CANN 8.5.2 Dockerfile 编译 core。本地�
 arch=amd64  # ARM 节点改为 arm64。
 make -C libvnpu build-in-docker PLATFORM="linux/${arch}" OUT_DIR=../artifacts
 printf '%s\n' '/hami-vnpu-core/libvnpu.so' > artifacts/ld.so.preload
-bash scripts/verify-vnpu-bundle.sh "$arch" ./artifacts
+(cd artifacts && shasum -a 256 -c SHA256SUMS)
 ```
 
 多卡分配要求每张卡的显存和算力配额分别相同，不同配额会被拒绝。`NPU_MEMORY_LIMIT_MB` 和 `NPU_COMPUTE_LIMIT` 都对每张卡独立生效。上例申请 4 张卡，每张卡 20 GiB 显存、50% 算力，插件注入 `NPU_MEMORY_LIMIT_MB=20480` 和 `NPU_COMPUTE_LIMIT=50`。`-memory` 应填写 `"20480"`，不要填写 `"81920"`。

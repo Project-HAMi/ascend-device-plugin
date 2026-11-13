@@ -105,8 +105,6 @@ jobs:
       env:
         EXPECTED_MACHINE: ${{ matrix.machine }}
       run: test "$(uname -m)" = "$EXPECTED_MACHINE"
-    - name: Test VNPU artifact verification
-      run: python3 -m unittest discover -s scripts/tests -p test_verify_vnpu_artifacts.py
     - name: Build with the core's official CANN 8.5.2 Dockerfile
       run: make build-in-docker PLATFORM=linux/${{ matrix.arch }} OUT_DIR=../artifacts
       working-directory: ./libvnpu
@@ -115,7 +113,7 @@ jobs:
         test -s ./artifacts/libvnpu.so
         test -s ./artifacts/build-info.json
         echo "/hami-vnpu-core/libvnpu.so" > ./artifacts/ld.so.preload
-        bash scripts/verify-vnpu-bundle.sh "${{ matrix.arch }}" ./artifacts
+        (cd ./artifacts && sha256sum -c SHA256SUMS)
     - name: upload artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -157,7 +155,23 @@ jobs:
         path: ./lib/hami-vnpu-core/
 
     - name: Verify VNPU artifacts
-      run: bash scripts/verify-vnpu-bundle.sh "${{ matrix.arch }}" ./lib/hami-vnpu-core
+      env:
+        EXPECTED_MACHINE: ${{ matrix.machine }}
+      run: |
+        set -euo pipefail
+        source_commit="$(git -C libvnpu rev-parse HEAD)"
+        cd ./lib/hami-vnpu-core
+        test -s libvnpu.so
+        test -s ld.so.preload
+        sha256sum -c SHA256SUMS
+        machine="$(readelf -h libvnpu.so | sed -n 's/.*Machine: *//p')"
+        case "$EXPECTED_MACHINE:$machine" in
+          x86_64:"Advanced Micro Devices X86-64"|aarch64:AArch64) ;;
+          *) echo "Unexpected VNPU ELF machine: $machine (expected $EXPECTED_MACHINE)" >&2; exit 1 ;;
+        esac
+        library_sha="$(sha256sum libvnpu.so | cut -d ' ' -f 1)"
+        jq -e --arg arch "$EXPECTED_MACHINE" --arg commit "$source_commit" --arg sha "$library_sha" \
+          '.architecture == $arch and .source_commit == $commit and .library.sha256 == $sha' build-info.json
 
     - name: Docker Login
       if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') }}

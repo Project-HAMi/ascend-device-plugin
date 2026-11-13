@@ -154,7 +154,7 @@ CI builds the core with the pinned submodule's official CANN 8.5.2 Dockerfile. T
 arch=amd64  # Use arm64 for ARM nodes.
 make -C libvnpu build-in-docker PLATFORM="linux/${arch}" OUT_DIR=../artifacts
 printf '%s\n' '/hami-vnpu-core/libvnpu.so' > artifacts/ld.so.preload
-bash scripts/verify-vnpu-bundle.sh "$arch" ./artifacts
+(cd artifacts && shasum -a 256 -c SHA256SUMS)
 ```
 
 Multi-card allocations require the same memory and compute quotas on every selected card; unequal quotas are rejected. Both `NPU_MEMORY_LIMIT_MB` and `NPU_COMPUTE_LIMIT` apply independently to each card. In the example above, four cards each receive 20 GiB and 50% compute: the plugin sets `NPU_MEMORY_LIMIT_MB=20480` and `NPU_COMPUTE_LIMIT=50`. Request `-memory: "20480"`, not `"81920"`.

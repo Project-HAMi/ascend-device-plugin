@@ -16,7 +16,7 @@ Ascend device plugin 是用来支持在 [HAMi](https://github.com/Project-HAMi/H
 
 hami-core 后端通过 `libvnpu.so` 实现显存记账和算力共享，默认使用协作式 CANN Cube/Vector 核数预算（`spatial`），也可显式选择 `dynamic`、`fixed`、`overdraft` 时间调度策略。配置见 [HAMi 使用说明](docs/hami_cn.md#软切分配置-hami-vnpu-core) 和 [hami-vnpu-core](https://github.com/Project-HAMi/hami-vnpu-core)。
 
-**注意：** `hami-vnpu-core` 目前只支持 ARM 平台。
+**注意：** CI 分别构建 Linux AMD64 和 ARM64 的 `hami-vnpu-core` 动态库，插件镜像使用对应架构的产物。ENPU 运行时产物仍仅支持 ARM64。
 
 ### 3. 基于 ubs-virt-enpu 的软切分 (vCANN-RT)
 
