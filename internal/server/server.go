@@ -51,6 +51,13 @@ const (
 	VNPUModeENPU               = "enpu"
 	VNPUNodeSelectorAnnotation = "hami-vnpu-core"
 	VNPUNodeENPUAnnotation     = "hami.io/enpu"
+	// SuperPodIDLabel is the node label key for the super pod ID,
+	// used by the HAMi scheduler for topology-aware scheduling.
+	SuperPodIDLabel = "hami.io/superpodid"
+	// RackIDLabel is the node label key for the rack ID inside a
+	// super pod (A5 1D/2D networks), used by the HAMi scheduler for
+	// rack-level topology-aware scheduling.
+	RackIDLabel = "hami.io/rackid"
 )
 
 var (

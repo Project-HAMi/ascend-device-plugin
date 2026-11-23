@@ -27,6 +27,8 @@ static int (*dcmiv2_get_dev_id_by_chip_phy_id_func)(int, unsigned int *);
 static int (*dcmiv2_get_slot_id_and_chip_id_by_dev_id_func)(int, unsigned int *, unsigned int *);
 static int (*dcmiv2_get_dev_id_by_slot_id_and_chip_id_func)(unsigned int, unsigned int, int *);
 static int (*dcmiv2_get_device_hbm_info_func)(int, struct dcmi_hbm_info *);
+static int (*dcmiv2_get_device_type_func)(int, enum dcmi_unit_type *);
+static int (*dcmiv2_get_device_info_func)(int, enum dcmi_main_cmd, unsigned int, void *, unsigned int *);
 
 #define LOAD_DCMI_V2(symbol, target) do { \
     target = dlsym(dcmi_v2_handle, #symbol); \
@@ -48,7 +50,9 @@ static int dcmi_v2_load(const char *path) {
     LOAD_DCMI_V2(dcmiv2_get_slot_id_and_chip_id_by_dev_id, dcmiv2_get_slot_id_and_chip_id_by_dev_id_func);
     LOAD_DCMI_V2(dcmiv2_get_dev_id_by_slot_id_and_chip_id, dcmiv2_get_dev_id_by_slot_id_and_chip_id_func);
     LOAD_DCMI_V2(dcmiv2_get_device_hbm_info, dcmiv2_get_device_hbm_info_func);
-    return 0;
+    LOAD_DCMI_V2(dcmiv2_get_device_type, dcmiv2_get_device_type_func);
+    LOAD_DCMI_V2(dcmiv2_get_device_info, dcmiv2_get_device_info_func);
+	return 0;
 }
 
 static int dcmi_v2_init_call(void) { return dcmiv2_init_func(); }
@@ -62,6 +66,14 @@ static int dcmi_v2_get_dev_id_by_phy_call(int phy, unsigned int *id) { return dc
 static int dcmi_v2_get_slot_chip_call(int id, unsigned int *slot, unsigned int *chip) { return dcmiv2_get_slot_id_and_chip_id_by_dev_id_func(id, slot, chip); }
 static int dcmi_v2_get_dev_id_by_slot_chip_call(unsigned int slot, unsigned int chip, int *id) { return dcmiv2_get_dev_id_by_slot_id_and_chip_id_func(slot, chip, id); }
 static int dcmi_v2_get_hbm_info_call(int id, struct dcmi_hbm_info *info) { return dcmiv2_get_device_hbm_info_func(id, info); }
+static int dcmi_v2_get_device_type_call(int id, enum dcmi_unit_type *type) { return dcmiv2_get_device_type_func(id, type); }
+// dcmi_v2_get_spod_info_call mirrors DcV2Manager.DcGetSuperPodInfo: main cmd
+// 12 (MainCmdChipInf), sub cmd 1 (CinfSubCmdGetSPodInfo), buffer struct
+// dcmi_spod_info. Only called after the device type check (NPU == 0).
+static int dcmi_v2_get_spod_info_call(int id, struct dcmi_spod_info *info) {
+    unsigned int size = sizeof(struct dcmi_spod_info);
+    return dcmiv2_get_device_info_func(id, (enum dcmi_main_cmd)12, 1, info, &size);
+}
 */
 import "C"
 
@@ -209,6 +221,31 @@ func (c *dcmiV2Client) deviceIDBySlotChipID(slot, chip int32) (int32, error) {
 		return -1, fmt.Errorf("dcmiv2_get_dev_id_by_slot_id_and_chip_id(%d,%d) returned %d", slot, chip, code)
 	}
 	return int32(id), nil
+}
+
+// superPodInfo queries the super pod topology info for a device via the
+// generic DCMI v2 device-info entry point, mirroring
+// mind-cluster DcV2Manager.DcGetSuperPodInfo.
+func (c *dcmiV2Client) superPodInfo(id int32) (common.CgoSuperPodInfo, error) {
+	var unitType C.enum_dcmi_unit_type
+	if code := int32(C.dcmi_v2_get_device_type_call(C.int(id), &unitType)); code != 0 {
+		return common.CgoSuperPodInfo{}, fmt.Errorf("dcmiv2_get_device_type(%d) returned %d", id, code)
+	}
+	if int32(unitType) != common.NpuType {
+		return common.CgoSuperPodInfo{}, fmt.Errorf("device %d is not an NPU (unit type %d)", id, int32(unitType))
+	}
+	var info C.struct_dcmi_spod_info
+	if code := int32(C.dcmi_v2_get_spod_info_call(C.int(id), &info)); code != 0 {
+		return common.CgoSuperPodInfo{}, fmt.Errorf("dcmiv2_get_device_info(%d, spod) returned %d", id, code)
+	}
+	return common.CgoSuperPodInfo{
+		SdId:         uint32(info.sdid),
+		ScaleType:    uint32(info.scale_type),
+		SuperPodId:   uint32(info.super_pod_id),
+		ServerId:     uint32(info.server_id),
+		RackId:       uint32(info.chassis_id),
+		SuperPodType: uint8(info.super_pod_type),
+	}, nil
 }
 
 func (c *dcmiV2Client) hbmInfo(id int32) (*common.HbmInfo, error) {

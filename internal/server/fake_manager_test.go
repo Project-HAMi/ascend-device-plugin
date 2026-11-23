@@ -17,6 +17,8 @@
 package server
 
 import (
+	"fmt"
+
 	"github.com/Project-HAMi/ascend-device-plugin/internal/manager"
 )
 
@@ -37,6 +39,8 @@ type FakeManager struct {
 	IsEnpuFunc               func() bool
 	DeviceCoreScalingFunc    func() float64
 	IsDeviceInUseFunc        func(logicID int32) (bool, error)
+	GetSuperPodIDFunc        func() (int32, error)
+	GetRackIDFunc            func() (int32, error)
 }
 
 func (f *FakeManager) CommonWord() string {
@@ -128,4 +132,17 @@ func (f *FakeManager) IsDeviceInUse(logicID int32) (bool, error) {
 		return f.IsDeviceInUseFunc(logicID)
 	}
 	return false, nil
+}
+
+func (f *FakeManager) GetSuperPodID() (int32, error) {
+	if f.GetSuperPodIDFunc != nil {
+		return f.GetSuperPodIDFunc()
+	}
+	return 0, fmt.Errorf("superpod ID not configured in test")
+}
+func (f *FakeManager) GetRackID() (int32, error) {
+	if f.GetRackIDFunc != nil {
+		return f.GetRackIDFunc()
+	}
+	return 0, fmt.Errorf("rack ID not configured in test")
 }

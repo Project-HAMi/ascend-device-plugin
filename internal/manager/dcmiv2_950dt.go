@@ -49,6 +49,7 @@ type dcmiV2API interface {
 	slotChipID(int32) (int32, int32, error)
 	deviceIDBySlotChipID(int32, int32) (int32, error)
 	hbmInfo(int32) (*common.HbmInfo, error)
+	superPodInfo(int32) (common.CgoSuperPodInfo, error)
 }
 
 type ascend950DTDeviceInfo struct {
@@ -198,6 +199,19 @@ func (m *ascend950DTManager) readDeviceInfo() ([]ascend950DTDeviceInfo, error) {
 	}
 	sort.Slice(devices, func(i, j int) bool { return devices[i].logicID < devices[j].logicID })
 	return devices, nil
+}
+
+// GetSuperPodInfo returns the super pod topology info of the given logic ID,
+// mirroring mind-cluster DeviceManagerV2.GetSuperPodInfo.
+func (m *ascend950DTManager) GetSuperPodInfo(logicID int32) (common.CgoSuperPodInfo, error) {
+	if logicID < 0 {
+		return common.CgoSuperPodInfo{}, fmt.Errorf("invalid logic ID %d", logicID)
+	}
+	return m.api.superPodInfo(logicID)
+}
+// DeviceIDs returns the discovered DCMI v2 logic IDs.
+func (m *ascend950DTManager) DeviceIDs() []int32 {
+	return m.deviceIDs
 }
 
 func (m *ascend950DTManager) validateConfig(config internal.VNPUConfig) error {

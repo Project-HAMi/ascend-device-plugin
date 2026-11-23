@@ -24,6 +24,8 @@ type fake950DTAPI struct {
 	phyReverse      map[int32]int32
 	slotReverse     map[[2]int32]int32
 	deviceListCalls int
+	spods           map[int32]common.CgoSuperPodInfo
+	spodErr         map[int32]error
 }
 
 func newFake950DTAPI() *fake950DTAPI {
@@ -38,6 +40,8 @@ func newFake950DTAPI() *fake950DTAPI {
 		hbm:         map[int32]*common.HbmInfo{},
 		phyReverse:  map[int32]int32{},
 		slotReverse: map[[2]int32]int32{},
+		spods:       map[int32]common.CgoSuperPodInfo{},
+		spodErr:     map[int32]error{},
 	}
 	for _, id := range f.ids {
 		f.chips[id] = common.ChipInfo{Type: "Ascend", Name: ascend950DTName, NpuName: ascend950DTNPUName, AICoreCnt: 32}
@@ -88,6 +92,16 @@ func (f *fake950DTAPI) deviceIDBySlotChipID(slot, chip int32) (int32, error) {
 		return id, nil
 	}
 	return 0, fmt.Errorf("unknown slot/chip %d/%d", slot, chip)
+}
+func (f *fake950DTAPI) superPodInfo(id int32) (common.CgoSuperPodInfo, error) {
+	if err := f.spodErr[id]; err != nil {
+		return common.CgoSuperPodInfo{}, err
+	}
+	info, ok := f.spods[id]
+	if !ok {
+		return common.CgoSuperPodInfo{}, fmt.Errorf("no super pod info for logic ID %d", id)
+	}
+	return info, nil
 }
 func (f *fake950DTAPI) hbmInfo(id int32) (*common.HbmInfo, error) {
 	info, ok := f.hbm[id]
@@ -337,6 +351,62 @@ func TestAscend950DTUpdateDeviceAppliesNodeFiltersBeforePublishing(t *testing.T)
 			}
 		})
 	}
+}
+
+func TestAscend950DTSuperPodAndRackIDFromV2Adapter(t *testing.T) {
+	newAPI := func() *fake950DTAPI {
+		api := newFake950DTAPI()
+		for _, id := range api.ids {
+			api.spods[id] = common.CgoSuperPodInfo{
+				SdId: 0x400001, ScaleType: 16, SuperPodId: 3,
+				ServerId: 1, RackId: 1, SuperPodType: ProductType1D,
+			}
+		}
+		return api
+	}
+	t.Run("super pod id and rack id", func(t *testing.T) {
+		am := newFake950DTManager(t, newAPI())
+		id, err := am.GetSuperPodID()
+		if err != nil || id != 3 {
+			t.Fatalf("GetSuperPodID() = (%d, %v), want (3, nil)", id, err)
+		}
+		rack, err := am.GetRackID()
+		if err != nil || rack != 1 {
+			t.Fatalf("GetRackID() = (%d, %v), want (1, nil)", rack, err)
+		}
+	})
+	t.Run("first failing device falls through to the next", func(t *testing.T) {
+		api := newAPI()
+		api.spodErr[0] = errors.New("query failed")
+		am := newFake950DTManager(t, api)
+		if id, err := am.GetSuperPodID(); err != nil || id != 3 {
+			t.Fatalf("GetSuperPodID() = (%d, %v), want (3, nil)", id, err)
+		}
+	})
+	t.Run("sentinel super pod id is rejected", func(t *testing.T) {
+		api := newAPI()
+		for _, id := range api.ids {
+			info := api.spods[id]
+			info.SuperPodId = 0xFFFFFFFF
+			api.spods[id] = info
+		}
+		am := newFake950DTManager(t, api)
+		if _, err := am.GetSuperPodID(); err == nil {
+			t.Fatal("GetSuperPodID() succeeded with sentinel super pod ID")
+		}
+	})
+	t.Run("non A5 1D/2D topology has no rack id", func(t *testing.T) {
+		api := newAPI()
+		for _, id := range api.ids {
+			info := api.spods[id]
+			info.SuperPodType = 3
+			api.spods[id] = info
+		}
+		am := newFake950DTManager(t, api)
+		if _, err := am.GetRackID(); err == nil {
+			t.Fatal("GetRackID() succeeded without a rack layer")
+		}
+	})
 }
 
 func TestAscend950DTNodeConfigRejectsSlicing(t *testing.T) {
