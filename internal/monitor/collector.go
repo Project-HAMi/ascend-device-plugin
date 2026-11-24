@@ -34,12 +34,6 @@ var (
 		[]string{"namespace", "pod", "container", "vdevice_index", "device_uuid"}, nil,
 	)
 
-	ctrDeviceUtilizationdesc = prometheus.NewDesc(
-		"hami_container_device_utilization_ratio",
-		"Container device SM utilization ratio",
-		[]string{"namespace", "pod", "container", "vdevice_index", "device_uuid"}, nil,
-	)
-
 	ctrDeviceMemoryContextDesc = prometheus.NewDesc(
 		"hami_vgpu_memory_context_bytes",
 		"Container device memory context size in bytes",
@@ -81,7 +75,6 @@ func (c *vNPUCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- hostGPUUtilizationdesc
 	ch <- ctrvGPUdesc
 	ch <- ctrvGPUlimitdesc
-	ch <- ctrDeviceUtilizationdesc
 	ch <- ctrDeviceMemoryContextDesc
 	ch <- ctrDeviceMemoryModuleDesc
 	ch <- ctrDeviceMemoryBufferDesc
@@ -126,11 +119,6 @@ func (c *vNPUCollector) collectPodMetrics(ch chan<- prometheus.Metric, devices [
 		return
 	}
 
-	utilByUUID := make(map[string]float64)
-	for _, d := range devices {
-		utilByUUID[d.UUID] = float64(d.AICorePct)
-	}
-
 	for _, e := range entries {
 		memoryContextSize := uint64(0)
 		memoryModuleSize := uint64(0)
@@ -147,7 +135,6 @@ func (c *vNPUCollector) collectPodMetrics(ch chan<- prometheus.Metric, devices [
 
 			ch <- prometheus.MustNewConstMetric(ctrvGPUdesc, prometheus.GaugeValue, float64(device.MemoryUsed), baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrvGPUlimitdesc, prometheus.GaugeValue, float64(device.MemoryLimit), baseLabels...)
-			ch <- prometheus.MustNewConstMetric(ctrDeviceUtilizationdesc, prometheus.GaugeValue, utilByUUID[device.UUID], baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrDeviceMemoryContextDesc, prometheus.GaugeValue, float64(memoryContextSize), baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrDeviceMemoryModuleDesc, prometheus.GaugeValue, float64(memoryModuleSize), baseLabels...)
 			ch <- prometheus.MustNewConstMetric(ctrDeviceMemoryBufferDesc, prometheus.GaugeValue, float64(memoryBufferSize), baseLabels...)

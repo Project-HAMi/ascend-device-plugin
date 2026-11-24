@@ -178,6 +178,5 @@ curl -s $POD_IP:9395/metrics | grep hami_
 | `hami_host_gpu_utilization_ratio` | `device_index`, `device_uuid`, `device_type` | 物理 NPU AICore 利用率(0–100) |
 | `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 该容器在该 NPU 上由 hook 记账的显存(字节) |
 | `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 该容器在该 NPU 上的显存上限(字节) |
-| `hami_container_device_utilization_ratio` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | 容器所在设备的 AICore 利用率(0–100) |
 
-对于逐卡 SHM 域，`vdevice_index` 为宿主机物理设备 ID，`device_uuid` 标识对应物理卡；旧版无后缀 SHM 保留注解/数组的顺序索引。仅导出已初始化的域。容器显存指标表示 hook 记账的分配量，宿主机显存指标保留 DCMI 上报的物理 HBM 使用量。容器利用率指标取所在整张卡的利用率，同卡容器共享这个数值。
+对于逐卡 SHM 域，`vdevice_index` 为宿主机物理设备 ID，`device_uuid` 标识对应物理卡；旧版无后缀 SHM 保留注解/数组的顺序索引。仅导出已初始化的域。容器显存指标表示 hook 记账的分配量，宿主机显存指标保留 DCMI 上报的物理 HBM 使用量。AICore 利用率仅通过 `hami_host_gpu_utilization_ratio` 按物理设备上报。
