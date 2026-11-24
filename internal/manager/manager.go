@@ -760,12 +760,12 @@ func (am *AscendManager) GetRackID() (int32, error) {
 }
 
 func (am *AscendManager) shouldIgnoreV2Device(logicID int32) bool {
-        uuid, cardID, ok := am.v2Mgr.deviceInfo(logicID)
-        if !ok {
-                klog.Warningf("logic ID %d not found in DCMI v2 discovery cache, skipping", logicID)
-                return true
-        }
-        return am.shouldIgnoreDevice(uuid, cardID)
+	uuid, cardID, ok := am.v2Mgr.deviceInfo(logicID)
+	if !ok {
+		klog.Warningf("logic ID %d not found in DCMI v2 discovery cache, skipping", logicID)
+		return true
+	}
+	return am.shouldIgnoreDevice(uuid, cardID)
 }
 
 // getSuperPodIDV2 queries the super pod ID over the DCMI v2 (Ascend950DT)

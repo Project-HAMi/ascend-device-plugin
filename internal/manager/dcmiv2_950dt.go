@@ -65,7 +65,7 @@ type ascend950DTManager struct {
 	api       dcmiV2API
 	chipInfo  common.ChipInfo
 	deviceIDs []int32
-	devices []ascend950DTDeviceInfo
+	devices   []ascend950DTDeviceInfo
 }
 
 func newAscend950DTManager() (*ascend950DTManager, error) {
