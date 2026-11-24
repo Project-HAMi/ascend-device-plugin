@@ -83,10 +83,10 @@ type Manager interface {
 }
 
 const (
-        // ProductType1D indicates an A5 1D superpod network (rack layer exists).
-        ProductType1D = 1
-        // ProductType2D indicates an A5 2D superpod network (rack layer exists).
-        ProductType2D = 2
+	// ProductType1D indicates an A5 1D superpod network (rack layer exists).
+	ProductType1D = 1
+	// ProductType2D indicates an A5 2D superpod network (rack layer exists).
+	ProductType2D = 2
 )
 
 type AscendManager struct {
@@ -100,31 +100,31 @@ type AscendManager struct {
 }
 
 func isAscend910A5DevType(devType string) bool {
-        return devType == api.Ascend910A5 || strings.HasPrefix(devType, api.Ascend910A5Prefix)
+	return devType == api.Ascend910A5 || strings.HasPrefix(devType, api.Ascend910A5Prefix)
 }
 
 func NewAscendManager() (*AscendManager, error) {
-        mgr, err := devmanager.AutoInit("", 30)
-        if err != nil {
-                klog.Warningf("devmanager init failed: %v, falling back to DCMI v2 adapter", err)
+	mgr, err := devmanager.AutoInit("", 30)
+	if err != nil {
+		klog.Warningf("devmanager init failed: %v, falling back to DCMI v2 adapter", err)
 		v2Mgr, v2Err := newAscend950DTManager()
 		if v2Err != nil {
 			return nil, fmt.Errorf("failed to auto-init device manager: %v; Ascend950DT DCMI v2 detection failed: %w", err, v2Err)
 		}
 		return &AscendManager{v2Mgr: v2Mgr, devs: []*Device{}}, nil
 	}
-        if isAscend910A5DevType(mgr.GetDevType()) {
-                klog.Infof("detected Ascend910A5 chip (devType %q), using DCMI v2 adapter", mgr.GetDevType())
-                v2Mgr, err := newAscend950DTManager()
-                if err != nil {
-                        return nil, fmt.Errorf("Ascend950DT DCMI v2 adapter init failed: %w", err)
-                }
-                return &AscendManager{v2Mgr: v2Mgr, devs: []*Device{}}, nil
-        }
-        return &AscendManager{
-                mgr:  mgr,
-                devs: []*Device{},
-        }, nil
+	if isAscend910A5DevType(mgr.GetDevType()) {
+		klog.Infof("detected Ascend910A5 chip (devType %q), using DCMI v2 adapter", mgr.GetDevType())
+		v2Mgr, err := newAscend950DTManager()
+		if err != nil {
+			return nil, fmt.Errorf("Ascend950DT DCMI v2 adapter init failed: %w", err)
+		}
+		return &AscendManager{v2Mgr: v2Mgr, devs: []*Device{}}, nil
+	}
+	return &AscendManager{
+		mgr:  mgr,
+		devs: []*Device{},
+	}, nil
 }
 
 func (am *AscendManager) LoadNodeConfig(nodePath string, nodeName string) error {
@@ -664,49 +664,49 @@ func (am *AscendManager) IsDeviceInUse(logicID int32) (bool, error) {
 // device whose GetSuperPodInfo call succeeds. If no device yields a valid
 // SuperPodId (> 0), an error is returned.
 func (am *AscendManager) GetSuperPodID() (int32, error) {
-        if am.v2Mgr != nil {
-                return am.getSuperPodIDV2()
-        }
-        _, IDs, err := am.mgr.GetDeviceList()
-        if err != nil {
-                return 0, fmt.Errorf("failed to get device list: %w", err)
-        }
-        if len(IDs) == 0 {
-                return 0, fmt.Errorf("no device found")
-        }
+	if am.v2Mgr != nil {
+		return am.getSuperPodIDV2()
+	}
+	_, IDs, err := am.mgr.GetDeviceList()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get device list: %w", err)
+	}
+	if len(IDs) == 0 {
+		return 0, fmt.Errorf("no device found")
+	}
 
-        for _, logicID := range IDs {
-                cardID, _, err := am.mgr.GetCardIDDeviceID(logicID)
-                if err != nil {
-                        klog.Warningf("failed to get card/device ID for logic ID %d: %v", logicID, err)
-                        continue
-                }
-                uuid := ""
-                if am.shouldCheckIgnored() && am.nodeConfig.FilterDevices.HasUUID() {
-                        uuid, err = am.mgr.GetDieID(logicID, dcmi.VDIE)
-                        if err != nil {
-                                klog.Warningf("failed to get uuid for logic ID %d: %v", logicID, err)
-                                continue
-                        }
-                }
-                if am.shouldIgnoreDevice(uuid, cardID) {
-                        continue
-                }
-                spInfo, err := am.mgr.GetSuperPodInfo(logicID)
-                if err != nil {
-                        klog.Warningf("failed to get super pod info for logic ID %d: %v", logicID, err)
-                        continue
-                }
-                klog.V(4).Infof("got super pod info: SdId=%d, ScaleType=%d, SuperPodId=%d, ServerId=%d, RackId=%d",
-                        spInfo.SdId, spInfo.ScaleType, spInfo.SuperPodId, spInfo.ServerId, spInfo.RackId)
-                // SuperPodId is uint32; 0 and 0xFFFFFFFF (4294967295) are sentinel
-                // values meaning "not configured" and must not be reported as a label.
-                if spInfo.SuperPodId > 0 && spInfo.SuperPodId != 0xFFFFFFFF {
-                        return int32(spInfo.SuperPodId), nil
-                }
-        }
+	for _, logicID := range IDs {
+		cardID, _, err := am.mgr.GetCardIDDeviceID(logicID)
+		if err != nil {
+			klog.Warningf("failed to get card/device ID for logic ID %d: %v", logicID, err)
+			continue
+		}
+		uuid := ""
+		if am.shouldCheckIgnored() && am.nodeConfig.FilterDevices.HasUUID() {
+			uuid, err = am.mgr.GetDieID(logicID, dcmi.VDIE)
+			if err != nil {
+				klog.Warningf("failed to get uuid for logic ID %d: %v", logicID, err)
+				continue
+			}
+		}
+		if am.shouldIgnoreDevice(uuid, cardID) {
+			continue
+		}
+		spInfo, err := am.mgr.GetSuperPodInfo(logicID)
+		if err != nil {
+			klog.Warningf("failed to get super pod info for logic ID %d: %v", logicID, err)
+			continue
+		}
+		klog.V(4).Infof("got super pod info: SdId=%d, ScaleType=%d, SuperPodId=%d, ServerId=%d, RackId=%d",
+			spInfo.SdId, spInfo.ScaleType, spInfo.SuperPodId, spInfo.ServerId, spInfo.RackId)
+		// SuperPodId is uint32; 0 and 0xFFFFFFFF (4294967295) are sentinel
+		// values meaning "not configured" and must not be reported as a label.
+		if spInfo.SuperPodId > 0 && spInfo.SuperPodId != 0xFFFFFFFF {
+			return int32(spInfo.SuperPodId), nil
+		}
+	}
 
-        return 0, fmt.Errorf("failed to get valid super pod ID from any device")
+	return 0, fmt.Errorf("failed to get valid super pod ID from any device")
 }
 
 // GetRackID queries the rack ID from the first available device via DCMI.
@@ -716,89 +716,89 @@ func (am *AscendManager) GetSuperPodID() (int32, error) {
 // superpod type without a rack layer) an error is returned and the caller
 // should skip writing the hami.io/rackid label.
 func (am *AscendManager) GetRackID() (int32, error) {
-        if am.v2Mgr != nil {
-                return am.getRackIDV2()
-        }
-        _, IDs, err := am.mgr.GetDeviceList()
-        if err != nil {
-                return 0, fmt.Errorf("failed to get device list: %w", err)
-        }
-        if len(IDs) == 0 {
-                return 0, fmt.Errorf("no device found")
-        }
+	if am.v2Mgr != nil {
+		return am.getRackIDV2()
+	}
+	_, IDs, err := am.mgr.GetDeviceList()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get device list: %w", err)
+	}
+	if len(IDs) == 0 {
+		return 0, fmt.Errorf("no device found")
+	}
 
-        for _, logicID := range IDs {
-                cardID, _, err := am.mgr.GetCardIDDeviceID(logicID)
-                if err != nil {
-                        klog.Warningf("failed to get card/device ID for logic ID %d: %v", logicID, err)
-                        continue
-                }
-                uuid := ""
-                if am.shouldCheckIgnored() && am.nodeConfig.FilterDevices.HasUUID() {
-                        uuid, err = am.mgr.GetDieID(logicID, dcmi.VDIE)
-                        if err != nil {
-                                klog.Warningf("failed to get uuid for logic ID %d: %v", logicID, err)
-                                continue
-                        }
-                }
-                if am.shouldIgnoreDevice(uuid, cardID) {
-                        continue
-                }
-                spInfo, err := am.mgr.GetSuperPodInfo(logicID)
-                if err != nil {
-                        klog.Warningf("failed to get super pod info for logic ID %d: %v", logicID, err)
-                        continue
-                }
-                superPodType := int(spInfo.SuperPodType)
-                if superPodType != ProductType1D && superPodType != ProductType2D {
-                        return 0, fmt.Errorf("superpod type %d has no rack layer, skip rack ID", superPodType)
-                }
-                if int32(spInfo.RackId) >= 0 {
-                        return int32(spInfo.RackId), nil
-                }
-        }
+	for _, logicID := range IDs {
+		cardID, _, err := am.mgr.GetCardIDDeviceID(logicID)
+		if err != nil {
+			klog.Warningf("failed to get card/device ID for logic ID %d: %v", logicID, err)
+			continue
+		}
+		uuid := ""
+		if am.shouldCheckIgnored() && am.nodeConfig.FilterDevices.HasUUID() {
+			uuid, err = am.mgr.GetDieID(logicID, dcmi.VDIE)
+			if err != nil {
+				klog.Warningf("failed to get uuid for logic ID %d: %v", logicID, err)
+				continue
+			}
+		}
+		if am.shouldIgnoreDevice(uuid, cardID) {
+			continue
+		}
+		spInfo, err := am.mgr.GetSuperPodInfo(logicID)
+		if err != nil {
+			klog.Warningf("failed to get super pod info for logic ID %d: %v", logicID, err)
+			continue
+		}
+		superPodType := int(spInfo.SuperPodType)
+		if superPodType != ProductType1D && superPodType != ProductType2D {
+			return 0, fmt.Errorf("superpod type %d has no rack layer, skip rack ID", superPodType)
+		}
+		if int32(spInfo.RackId) >= 0 {
+			return int32(spInfo.RackId), nil
+		}
+	}
 
-        return 0, fmt.Errorf("failed to get valid rack ID from any device")
+	return 0, fmt.Errorf("failed to get valid rack ID from any device")
 }
 
 // getSuperPodIDV2 queries the super pod ID over the DCMI v2 (Ascend950DT)
 // adapter, using the same dcmiv2_get_device_info(MainCmdChipInf,
 // CinfSubCmdGetSPodInfo) call as mind-cluster DeviceManagerV2.
 func (am *AscendManager) getSuperPodIDV2() (int32, error) {
-        for _, logicID := range am.v2Mgr.DeviceIDs() {
-                spInfo, err := am.v2Mgr.GetSuperPodInfo(logicID)
-                if err != nil {
-                        klog.Warningf("failed to get super pod info for logic ID %d: %v", logicID, err)
-                        continue
-                }
-                klog.V(4).Infof("got super pod info: SdId=%d, ScaleType=%d, SuperPodId=%d, ServerId=%d, RackId=%d",
-                        spInfo.SdId, spInfo.ScaleType, spInfo.SuperPodId, spInfo.ServerId, spInfo.RackId)
-                // SuperPodId is uint32; 0 and 0xFFFFFFFF (4294967295) are
-                // sentinel values meaning "not configured".
-                if spInfo.SuperPodId > 0 && spInfo.SuperPodId != 0xFFFFFFFF {
-                        return int32(spInfo.SuperPodId), nil
-                }
-        }
-        return 0, fmt.Errorf("failed to get valid super pod ID from any device")
+	for _, logicID := range am.v2Mgr.DeviceIDs() {
+		spInfo, err := am.v2Mgr.GetSuperPodInfo(logicID)
+		if err != nil {
+			klog.Warningf("failed to get super pod info for logic ID %d: %v", logicID, err)
+			continue
+		}
+		klog.V(4).Infof("got super pod info: SdId=%d, ScaleType=%d, SuperPodId=%d, ServerId=%d, RackId=%d",
+			spInfo.SdId, spInfo.ScaleType, spInfo.SuperPodId, spInfo.ServerId, spInfo.RackId)
+		// SuperPodId is uint32; 0 and 0xFFFFFFFF (4294967295) are
+		// sentinel values meaning "not configured".
+		if spInfo.SuperPodId > 0 && spInfo.SuperPodId != 0xFFFFFFFF {
+			return int32(spInfo.SuperPodId), nil
+		}
+	}
+	return 0, fmt.Errorf("failed to get valid super pod ID from any device")
 }
 
 // getRackIDV2 queries the rack ID over the DCMI v2 (Ascend950DT) adapter.
 // The rack layer only exists on A5 1D/2D topologies; other superpod types
 // yield an error and the caller skips writing the hami.io/rackid label.
 func (am *AscendManager) getRackIDV2() (int32, error) {
-        for _, logicID := range am.v2Mgr.DeviceIDs() {
-                spInfo, err := am.v2Mgr.GetSuperPodInfo(logicID)
-                if err != nil {
-                        klog.Warningf("failed to get super pod info for logic ID %d: %v", logicID, err)
-                        continue
-                }
-                superPodType := int(spInfo.SuperPodType)
-                if superPodType != ProductType1D && superPodType != ProductType2D {
-                        return 0, fmt.Errorf("superpod type %d has no rack layer, skip rack ID", superPodType)
-                }
-                if int32(spInfo.RackId) >= 0 {
-                        return int32(spInfo.RackId), nil
-                }
-        }
-        return 0, fmt.Errorf("failed to get valid rack ID from any device")
+	for _, logicID := range am.v2Mgr.DeviceIDs() {
+		spInfo, err := am.v2Mgr.GetSuperPodInfo(logicID)
+		if err != nil {
+			klog.Warningf("failed to get super pod info for logic ID %d: %v", logicID, err)
+			continue
+		}
+		superPodType := int(spInfo.SuperPodType)
+		if superPodType != ProductType1D && superPodType != ProductType2D {
+			return 0, fmt.Errorf("superpod type %d has no rack layer, skip rack ID", superPodType)
+		}
+		if int32(spInfo.RackId) >= 0 {
+			return int32(spInfo.RackId), nil
+		}
+	}
+	return 0, fmt.Errorf("failed to get valid rack ID from any device")
 }

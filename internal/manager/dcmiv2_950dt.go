@@ -209,6 +209,7 @@ func (m *ascend950DTManager) GetSuperPodInfo(logicID int32) (common.CgoSuperPodI
 	}
 	return m.api.superPodInfo(logicID)
 }
+
 // DeviceIDs returns the discovered DCMI v2 logic IDs.
 func (m *ascend950DTManager) DeviceIDs() []int32 {
 	return m.deviceIDs

@@ -185,7 +185,7 @@ func (ps *PluginServer) registerHAMi() error {
 	}
 
 	labels := make(map[string]string)
-	
+
 	// Write the super pod ID label so that the HAMi scheduler can perform
 	// topology-aware scheduling across multiple super pods.
 	superPodID, err := ps.mgr.GetSuperPodID()
@@ -218,7 +218,7 @@ func (ps *PluginServer) registerHAMi() error {
 		return fmt.Errorf("patch node %s annotations error: %w", ps.nodeName, err)
 	}
 	klog.V(5).Infof("patch node %s annotations: %v", ps.nodeName, annos)
-	
+
 	if len(labels) > 0 {
 		err = patchNodeLabels(node, labels)
 		if err != nil {
