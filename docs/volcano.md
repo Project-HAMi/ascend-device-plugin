@@ -179,4 +179,4 @@ curl -s $POD_IP:9395/metrics | grep hami_
 | `hami_vgpu_memory_used_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | Hook-accounted memory for this container on this NPU (bytes) |
 | `hami_vgpu_memory_limit_bytes` | `namespace`, `pod`, `container`, `vdevice_index`, `device_uuid` | This container's memory limit on this NPU (bytes) |
 
-For per-device SHM domains, `vdevice_index` is the host physical device ID and `device_uuid` identifies that card. Legacy unsuffixed SHM retains its annotation/array ordinal. Only initialized domains are exported. Container memory describes hook-accounted allocations; host memory remains physical HBM usage reported by DCMI. AICore utilization is reported only at host device scope via `hami_host_gpu_utilization_ratio`.
+For per-device SHM domains, `vdevice_index` is the host physical device ID and `device_uuid` identifies that card. Legacy unsuffixed SHM retains its annotation/array ordinal. Only initialized domains are exported. Container memory describes hook-accounted allocations; host memory remains physical HBM usage reported by DCMI. 
