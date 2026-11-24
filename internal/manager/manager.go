@@ -699,9 +699,7 @@ func (am *AscendManager) GetSuperPodID() (int32, error) {
 		}
 		klog.V(4).Infof("got super pod info: SdId=%d, ScaleType=%d, SuperPodId=%d, ServerId=%d, RackId=%d",
 			spInfo.SdId, spInfo.ScaleType, spInfo.SuperPodId, spInfo.ServerId, spInfo.RackId)
-		// SuperPodId is uint32; 0 and 0xFFFFFFFF (4294967295) are sentinel
-		// values meaning "not configured" and must not be reported as a label.
-		if spInfo.SuperPodId > 0 && spInfo.SuperPodId != 0xFFFFFFFF {
+		if int32(spInfo.SuperPodId) > 0 {
 			return int32(spInfo.SuperPodId), nil
 		}
 	}
@@ -761,11 +759,23 @@ func (am *AscendManager) GetRackID() (int32, error) {
 	return 0, fmt.Errorf("failed to get valid rack ID from any device")
 }
 
+func (am *AscendManager) shouldIgnoreV2Device(logicID int32) bool {
+        uuid, cardID, ok := am.v2Mgr.deviceInfo(logicID)
+        if !ok {
+                klog.Warningf("logic ID %d not found in DCMI v2 discovery cache, skipping", logicID)
+                return true
+        }
+        return am.shouldIgnoreDevice(uuid, cardID)
+}
+
 // getSuperPodIDV2 queries the super pod ID over the DCMI v2 (Ascend950DT)
 // adapter, using the same dcmiv2_get_device_info(MainCmdChipInf,
 // CinfSubCmdGetSPodInfo) call as mind-cluster DeviceManagerV2.
 func (am *AscendManager) getSuperPodIDV2() (int32, error) {
 	for _, logicID := range am.v2Mgr.DeviceIDs() {
+		if am.shouldIgnoreV2Device(logicID) {
+			continue
+		}
 		spInfo, err := am.v2Mgr.GetSuperPodInfo(logicID)
 		if err != nil {
 			klog.Warningf("failed to get super pod info for logic ID %d: %v", logicID, err)
@@ -787,6 +797,9 @@ func (am *AscendManager) getSuperPodIDV2() (int32, error) {
 // yield an error and the caller skips writing the hami.io/rackid label.
 func (am *AscendManager) getRackIDV2() (int32, error) {
 	for _, logicID := range am.v2Mgr.DeviceIDs() {
+		if am.shouldIgnoreV2Device(logicID) {
+			continue
+		}
 		spInfo, err := am.v2Mgr.GetSuperPodInfo(logicID)
 		if err != nil {
 			klog.Warningf("failed to get super pod info for logic ID %d: %v", logicID, err)
