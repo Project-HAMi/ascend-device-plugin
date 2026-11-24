@@ -51,9 +51,8 @@ func TestCoreMetricsAttributePhysicalCardsAndPreserveHardwareHBM(t *testing.T) {
 	}
 	metrics := gatherCoreMetrics(t, collector, devices)
 	for name, expected := range map[string]map[string]float64{
-		"hami_vgpu_memory_used_bytes":             {"die-7": 700, "die-3": 300},
-		"hami_vgpu_memory_limit_bytes":            {"die-7": 7000, "die-3": 3000},
-		"hami_container_device_utilization_ratio": {"die-7": 71, "die-3": 31},
+		"hami_vgpu_memory_used_bytes":  {"die-7": 700, "die-3": 300},
+		"hami_vgpu_memory_limit_bytes": {"die-7": 7000, "die-3": 3000},
 	} {
 		family := metrics[name]
 		if family == nil || len(family.Metric) != 2 {

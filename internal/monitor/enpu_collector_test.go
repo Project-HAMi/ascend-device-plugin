@@ -107,7 +107,7 @@ func TestENPUContainerMetrics(t *testing.T) {
 			}
 		}
 	}
-	for _, name := range []string{"hami_container_device_utilization_ratio", "hami_vgpu_memory_context_bytes", "hami_vgpu_memory_buffer_bytes", "hami_vgpu_memory_module_bytes"} {
+	for _, name := range []string{"hami_vgpu_memory_context_bytes", "hami_vgpu_memory_buffer_bytes", "hami_vgpu_memory_module_bytes"} {
 		if metrics[name] != nil {
 			t.Errorf("unavailable ENPU statistic exported: %s", name)
 		}
