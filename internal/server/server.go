@@ -51,6 +51,13 @@ const (
 	VNPUModeENPU               = "enpu"
 	VNPUNodeSelectorAnnotation = "hami-vnpu-core"
 	VNPUNodeENPUAnnotation     = "hami.io/enpu"
+	// SuperPodIDLabel is the node label key for the super pod ID,
+	// used by the HAMi scheduler for topology-aware scheduling.
+	SuperPodIDLabel = "hami.io/superpodid"
+	// RackIDLabel is the node label key for the rack ID inside a
+	// super pod (A5 1D/2D networks), used by the HAMi scheduler for
+	// rack-level topology-aware scheduling.
+	RackIDLabel = "hami.io/rackid"
 )
 
 var (
@@ -80,6 +87,7 @@ type PluginServer struct {
 	// kubelet through ListAndWatch, so watchAndRegister only pushes an update
 	// when the set actually changed.
 	lastPublishedDevices string
+	topologyLabels       map[string]any
 
 	// pendingDeviceShare lists the chips whose device-share could not be
 	// enabled because the driver reported a workload still running on them.
@@ -213,6 +221,7 @@ func (ps *PluginServer) Start() error {
 	if err != nil {
 		return err
 	}
+	ps.loadTopologyLabels()
 	if err := ps.enableNodeDeviceShare(); err != nil {
 		return err
 	}

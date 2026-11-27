@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -69,6 +70,88 @@ func TestRegisterHAMiENPUNodeAnnotation(t *testing.T) {
 			}
 			if _, exists := updated.Annotations["hami-enpu"]; exists {
 				t.Fatal("node registration wrote the unqualified ENPU annotation")
+			}
+		})
+	}
+}
+
+func TestRegisterHAMiCachesTopologyLabelsAndRemovesStaleValues(t *testing.T) {
+	tests := []struct {
+		name        string
+		superPodID  int32
+		rackID      int32
+		queryFailed bool
+		wantLabels  map[string]string
+	}{
+		{
+			name:       "successful topology queries",
+			superPodID: 7,
+			rackID:     2,
+			wantLabels: map[string]string{SuperPodIDLabel: "7", RackIDLabel: "2"},
+		},
+		{
+			name:        "failed topology queries remove stale labels",
+			queryFailed: true,
+			wantLabels:  map[string]string{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			node := &v1.Node{ObjectMeta: metav1.ObjectMeta{
+				Name: "topology-node",
+				Labels: map[string]string{
+					SuperPodIDLabel: "stale-superpod",
+					RackIDLabel:     "stale-rack",
+				},
+				Annotations: map[string]string{},
+			}}
+			t.Cleanup(setupFakeClient(nil, []*v1.Node{node}))
+
+			superPodQueries, rackQueries := 0, 0
+			mgr := &FakeManager{
+				GetSuperPodIDFunc: func() (int32, error) {
+					superPodQueries++
+					if tc.queryFailed {
+						return 0, fmt.Errorf("superpod query failed")
+					}
+					return tc.superPodID, nil
+				},
+				GetRackIDFunc: func() (int32, error) {
+					rackQueries++
+					if tc.queryFailed {
+						return 0, fmt.Errorf("rack query failed")
+					}
+					return tc.rackID, nil
+				},
+			}
+			ps := &PluginServer{
+				nodeName:      node.Name,
+				registerAnno:  "hami.io/node-register-test",
+				handshakeAnno: "hami.io/node-handshake-test",
+				mgr:           mgr,
+			}
+			ps.loadTopologyLabels()
+			for range 2 {
+				if err := ps.registerHAMi(); err != nil {
+					t.Fatalf("registerHAMi: %v", err)
+				}
+			}
+
+			if superPodQueries != 1 || rackQueries != 1 {
+				t.Fatalf("topology query counts = (%d, %d), want (1, 1)", superPodQueries, rackQueries)
+			}
+			updated, err := client.KubeClient.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
+			if err != nil {
+				t.Fatalf("get updated node: %v", err)
+			}
+			if len(updated.Labels) != len(tc.wantLabels) {
+				t.Fatalf("node labels = %v, want %v", updated.Labels, tc.wantLabels)
+			}
+			for key, want := range tc.wantLabels {
+				if got := updated.Labels[key]; got != want {
+					t.Errorf("node label %s = %q, want %q", key, got, want)
+				}
 			}
 		})
 	}

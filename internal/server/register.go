@@ -28,11 +28,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 
 	"github.com/Project-HAMi/HAMi/pkg/device"
 	"github.com/Project-HAMi/HAMi/pkg/util"
+	"github.com/Project-HAMi/HAMi/pkg/util/client"
 	"github.com/Project-HAMi/ascend-device-plugin/internal"
 )
 
@@ -114,6 +118,34 @@ func (ps *PluginServer) deviceFingerprint() string {
 	return sb.String()
 }
 
+func (ps *PluginServer) loadTopologyLabels() {
+	ps.topologyLabels = make(map[string]any, 2)
+	// Write the super pod ID label so that the HAMi scheduler can perform
+	// topology-aware scheduling across multiple super pods.
+	superPodID, err := ps.mgr.GetSuperPodID()
+	if err != nil {
+		klog.Warningf("failed to get super pod ID for node %s: %v", ps.nodeName, err)
+		ps.topologyLabels[SuperPodIDLabel] = nil
+	} else {
+		ps.topologyLabels[SuperPodIDLabel] = fmt.Sprintf("%d", superPodID)
+		klog.V(4).Infof("Node %s super pod ID: %d, patching label %s", ps.nodeName, superPodID, SuperPodIDLabel)
+	}
+
+	// Write the rack ID label so that the HAMi scheduler can perform
+	// rack-level topology-aware scheduling inside a super pod. The rack ID
+	// only exists on A5 1D/2D networks (SuperPod → Rack → Server three-layer
+	// topology); on other topologies (e.g. A3 single-layer superpod)
+	// GetRackID returns an error and the label is simply not written.
+	rackID, err := ps.mgr.GetRackID()
+	if err != nil {
+		klog.V(4).Infof("node %s has no rack ID (non A5 1D/2D topology or query failed): %v", ps.nodeName, err)
+		ps.topologyLabels[RackIDLabel] = nil
+	} else {
+		ps.topologyLabels[RackIDLabel] = fmt.Sprintf("%d", rackID)
+		klog.V(4).Infof("Node %s rack ID: %d, patching label %s", ps.nodeName, rackID, RackIDLabel)
+	}
+}
+
 func (ps *PluginServer) registerHAMi() error {
 	devs := ps.mgr.GetDevices()
 	apiDevices := make([]*device.DeviceInfo, 0, len(devs))
@@ -189,6 +221,37 @@ func (ps *PluginServer) registerHAMi() error {
 		return fmt.Errorf("patch node %s annotations error: %w", ps.nodeName, err)
 	}
 	klog.V(5).Infof("patch node %s annotations: %v", ps.nodeName, annos)
+
+	if len(ps.topologyLabels) > 0 {
+		err = patchNodeLabels(node, ps.topologyLabels)
+		if err != nil {
+			return fmt.Errorf("patch node %s labels error: %w", ps.nodeName, err)
+		}
+		klog.V(5).Infof("patch node %s labels: %v", ps.nodeName, ps.topologyLabels)
+	}
+	return nil
+}
+
+// patchNodeLabels patches the given labels onto the node using a strategic
+// merge patch so that only the specified labels are updated.
+func patchNodeLabels(node *v1.Node, labels map[string]any) error {
+	if node == nil || len(labels) == 0 {
+		return nil
+	}
+	patch := map[string]any{
+		"metadata": map[string]any{
+			"labels": labels,
+		},
+	}
+	data, err := json.Marshal(patch)
+	if err != nil {
+		return fmt.Errorf("marshal node labels patch error: %w", err)
+	}
+	_, err = client.KubeClient.CoreV1().Nodes().Patch(context.Background(),
+		node.Name, types.StrategicMergePatchType, data, metav1.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("patch node labels error: %w", err)
+	}
 	return nil
 }
 
