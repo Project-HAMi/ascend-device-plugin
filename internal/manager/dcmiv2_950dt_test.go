@@ -395,6 +395,22 @@ func TestAscend950DTSuperPodAndRackIDFromV2Adapter(t *testing.T) {
 			t.Fatal("GetSuperPodID() succeeded with sentinel super pod ID")
 		}
 	})
+	t.Run("zero super pod and rack ids are valid", func(t *testing.T) {
+		api := newAPI()
+		for _, id := range api.ids {
+			info := api.spods[id]
+			info.SuperPodId = 0
+			info.RackId = 0
+			api.spods[id] = info
+		}
+		am := newFake950DTManager(t, api)
+		if id, err := am.GetSuperPodID(); err != nil || id != 0 {
+			t.Fatalf("GetSuperPodID() = (%d, %v), want (0, nil)", id, err)
+		}
+		if id, err := am.GetRackID(); err != nil || id != 0 {
+			t.Fatalf("GetRackID() = (%d, %v), want (0, nil)", id, err)
+		}
+	})
 	t.Run("non A5 1D/2D topology has no rack id", func(t *testing.T) {
 		api := newAPI()
 		for _, id := range api.ids {

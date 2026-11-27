@@ -662,7 +662,7 @@ func (am *AscendManager) IsDeviceInUse(logicID int32) (bool, error) {
 // GetSuperPodID queries the super pod ID from the first available device via DCMI.
 // It iterates over the device list and returns the SuperPodId from the first
 // device whose GetSuperPodInfo call succeeds. If no device yields a valid
-// SuperPodId (> 0), an error is returned.
+// non-negative SuperPodId, an error is returned.
 func (am *AscendManager) GetSuperPodID() (int32, error) {
 	if am.v2Mgr != nil {
 		return am.getSuperPodIDV2()
@@ -783,8 +783,8 @@ func (am *AscendManager) getSuperPodIDV2() (int32, error) {
 		}
 		klog.V(4).Infof("got super pod info: SdId=%d, ScaleType=%d, SuperPodId=%d, ServerId=%d, RackId=%d",
 			spInfo.SdId, spInfo.ScaleType, spInfo.SuperPodId, spInfo.ServerId, spInfo.RackId)
-		// SuperPodId is uint32; 0 and 0xFFFFFFFF (4294967295) are
-		// sentinel values meaning "not configured".
+		// SuperPodId is uint32; 0xFFFFFFFF (4294967295) is the
+		// sentinel value meaning "not configured". Zero is a valid ID.
 		if int32(spInfo.SuperPodId) >= 0 {
 			return int32(spInfo.SuperPodId), nil
 		}
