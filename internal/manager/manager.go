@@ -699,7 +699,7 @@ func (am *AscendManager) GetSuperPodID() (int32, error) {
 		}
 		klog.V(4).Infof("got super pod info: SdId=%d, ScaleType=%d, SuperPodId=%d, ServerId=%d, RackId=%d",
 			spInfo.SdId, spInfo.ScaleType, spInfo.SuperPodId, spInfo.ServerId, spInfo.RackId)
-		if int32(spInfo.SuperPodId) > 0 {
+		if int32(spInfo.SuperPodId) >= 0 {
 			return int32(spInfo.SuperPodId), nil
 		}
 	}
@@ -785,7 +785,7 @@ func (am *AscendManager) getSuperPodIDV2() (int32, error) {
 			spInfo.SdId, spInfo.ScaleType, spInfo.SuperPodId, spInfo.ServerId, spInfo.RackId)
 		// SuperPodId is uint32; 0 and 0xFFFFFFFF (4294967295) are
 		// sentinel values meaning "not configured".
-		if spInfo.SuperPodId > 0 && spInfo.SuperPodId != 0xFFFFFFFF {
+		if int32(spInfo.SuperPodId) >= 0 {
 			return int32(spInfo.SuperPodId), nil
 		}
 	}
