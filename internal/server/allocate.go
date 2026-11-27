@@ -159,8 +159,11 @@ func (ps *PluginServer) decodeDeviceAnnotations(pod *v1.Pod) (device.PodSingleDe
 	return pd, nil
 }
 
-// buildRuntimeInfoLookup builds a UUID-to-RuntimeInfo lookup from the pod's allocAnno annotation.
-func (ps *PluginServer) buildRuntimeInfoLookup(pod *v1.Pod) (map[string]RuntimeInfo, error) {
+type runtimeInfoLookup map[string][]RuntimeInfo
+
+// buildRuntimeInfoLookup groups the pod's runtime entries by physical UUID in
+// scheduler order. The same device can be assigned to multiple containers.
+func (ps *PluginServer) buildRuntimeInfoLookup(pod *v1.Pod) (runtimeInfoLookup, error) {
 	anno, ok := pod.Annotations[ps.allocAnno]
 	if !ok {
 		return nil, fmt.Errorf("annotation %s not set", ps.allocAnno)
@@ -169,13 +172,50 @@ func (ps *PluginServer) buildRuntimeInfoLookup(pod *v1.Pod) (map[string]RuntimeI
 	if err := json.Unmarshal([]byte(anno), &rtInfo); err != nil {
 		return nil, fmt.Errorf("annotation %s value %s invalid: %w", ps.allocAnno, anno, err)
 	}
-	lookup := make(map[string]RuntimeInfo, len(rtInfo))
+	lookup := make(runtimeInfoLookup, len(rtInfo))
 	for _, info := range rtInfo {
 		if info.UUID != "" {
-			lookup[info.UUID] = info
+			lookup[info.UUID] = append(lookup[info.UUID], info)
 		}
 	}
 	return lookup, nil
+}
+
+// skipAllocatedDevices drops each shared device's prefix of runtime entries
+// for containers consumed by earlier Allocate calls. The pending annotation
+// loses those containers in order, while the runtime annotation stays intact.
+func (lookup runtimeInfoLookup) skipAllocatedDevices(pending device.PodSingleDevice) error {
+	pendingShared := make(map[string]int)
+	for _, devices := range pending {
+		for _, dev := range devices {
+			if len(lookup[dev.UUID]) > 1 {
+				pendingShared[dev.UUID]++
+			}
+		}
+	}
+	for uuid, count := range pendingShared {
+		entries := lookup[uuid]
+		if count > len(entries) {
+			return fmt.Errorf("device %s has %d pending allocations but only %d runtime entries", uuid, count, len(entries))
+		}
+		lookup[uuid] = entries[len(entries)-count:]
+	}
+	return nil
+}
+
+func (lookup runtimeInfoLookup) forContainer(devices device.ContainerDevices) map[string]RuntimeInfo {
+	containerLookup := make(map[string]RuntimeInfo, len(devices))
+	for _, dev := range devices {
+		entries := lookup[dev.UUID]
+		if len(entries) == 0 {
+			continue
+		}
+		containerLookup[dev.UUID] = entries[0]
+		if len(entries) > 1 {
+			lookup[dev.UUID] = entries[1:]
+		}
+	}
+	return containerLookup
 }
 
 // patchErasedAnnotation patches the pod's device annotation with the given

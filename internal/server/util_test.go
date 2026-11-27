@@ -1004,8 +1004,8 @@ func TestBuildRuntimeInfoLookup(t *testing.T) {
 				if !ok {
 					t.Fatalf("expected UUID %q in lookup", uuid)
 				}
-				if gotInfo.Temp != wantInfo.Temp {
-					t.Fatalf("lookup[%q].Temp = %q, want %q", uuid, gotInfo.Temp, wantInfo.Temp)
+				if len(gotInfo) != 1 || gotInfo[0].Temp != wantInfo.Temp {
+					t.Fatalf("lookup[%q] = %+v, want one entry with template %q", uuid, gotInfo, wantInfo.Temp)
 				}
 			}
 		})

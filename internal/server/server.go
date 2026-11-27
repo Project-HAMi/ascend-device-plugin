@@ -414,6 +414,9 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 	if err != nil {
 		return nil, fmt.Errorf("decode device annotations: %w", err)
 	}
+	if err := rtInfoLookup.skipAllocatedDevices(podSingleDev); err != nil {
+		return nil, fmt.Errorf("match pending runtime entries: %w", err)
+	}
 
 	// kubelet may call Allocate multiple times for the same pod, each time with
 	// a subset of containers. Use pop semantics to match each request with its
@@ -430,7 +433,8 @@ func (ps *PluginServer) Allocate(ctx context.Context, reqs *v1beta1.AllocateRequ
 			return nil, fmt.Errorf("device number not matched: annotation has %d, request has %d", len(containerDevs), len(req.DevicesIds))
 		}
 
-		resp, err := ps.buildContainerAllocateResponse(pod, ctrName, containerDevs, rtInfoLookup)
+		containerInfo := rtInfoLookup.forContainer(containerDevs)
+		resp, err := ps.buildContainerAllocateResponse(pod, ctrName, containerDevs, containerInfo)
 		if err != nil {
 			return nil, fmt.Errorf("build container allocate response: %w", err)
 		}
